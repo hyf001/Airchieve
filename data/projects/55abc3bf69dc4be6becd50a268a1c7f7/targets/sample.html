@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目说明文档 - 自动生成</title>
+    <!-- Syntax Highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="hljs-dark" disabled>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" id="hljs-light">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --secondary-color: #f39c12;
+            --text-color: #2c3e50;
+            --bg-color: #f8f9fa;
+            --card-bg: #ffffff;
+            --border-color: #e9ecef;
+            --code-bg: #f1f2f6;
+            --quote-bg: #fdfefe;
+        }
+        [data-theme="dark"] {
+            --primary-color: #64b5f6;
+            --secondary-color: #ffb74d;
+            --text-color: #f8f9fa;
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --border-color: #333333;
+            --code-bg: #2d2d2d;
+            --quote-bg: #252525;
+        }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            line-height: 1.8;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        header {
+            background-color: var(--card-bg);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background-color 0.3s;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .theme-toggle {
+            background: none;
+            border: 1px solid var(--border-color);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            cursor: pointer;
+            color: var(--text-color);
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        .theme-toggle:hover {
+            background: var(--primary-color);
+            color: white;
+        }
+        main {
+            flex: 1;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .container {
+            background-color: var(--card-bg);
+            padding: 3rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            border: 1px solid var(--border-color);
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        h1 {
+            color: var(--primary-color);
+            font-size: 2.5rem;
+            margin-top: 0;
+            margin-bottom: 2rem;
+            font-weight: 700;
+            border-bottom: 3px solid var(--primary-color);
+            padding-bottom: 0.5rem;
+            display: inline-block;
+        }
+        h2 {
+            color: var(--secondary-color);
+            margin-top: 2.5rem;
+            margin-bottom: 1rem;
+            font-size: 1.8rem;
+            border-left: 5px solid var(--secondary-color);
+            padding-left: 1rem;
+        }
+        p {
+            margin-bottom: 1.5rem;
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        ol, ul {
+            margin-bottom: 1.5rem;
+            padding-left: 1.5rem;
+        }
+        li {
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+        }
+        code {
+            background: var(--code-bg);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.95rem;
+        }
+        blockquote {
+            background: var(--quote-bg);
+            border-left: 4px solid var(--primary-color);
+            margin: 2rem 0;
+            padding: 1.5rem 2rem;
+            font-style: italic;
+            color: var(--text-color);
+            opacity: 0.8;
+            border-radius: 0 8px 8px 0;
+        }
+        hr {
+            border: none;
+            border-top: 1px solid var(--border-color);
+            margin: 3rem 0;
+        }
+        .footer {
+            padding: 2rem;
+            font-size: 0.9rem;
+            color: #95a5a6;
+            text-align: center;
+            border-top: 1px solid var(--border-color);
+            background: var(--card-bg);
+            transition: background-color 0.3s;
+        }
+        @media (max-width: 600px) {
+            .container {
+                padding: 1.5rem;
+            }
+            h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>Document Processing Agent</strong>
+        <button class="theme-toggle" id="themeBtn">切换深色模式</button>
+    </header>
+    <main>
+        <div class="container">
+            <h1>项目说明文档</h1>
+<p>欢迎使用文档处理系统。这是一个示例 Markdown 文件，用于展示 HTML 生成功能。</p>
+<h2>功能特点</h2>
+<ol>
+<li><strong>格式转换</strong>：支持多种文档格式互转。</li>
+<li><strong>样式增强</strong>：自动应用现代化的 CSS 样式。</li>
+<li><strong>响应式设计</strong>：完美适配手机、平板和桌面端。</li>
+<li><strong>交互体验</strong>：内置深色模式切换等功能。</li>
+</ol>
+<h2>使用说明</h2>
+<p>请将您的源文件放入 <code>assets/</code> 文件夹，系统将自动识别并处理。您可以指定输出目录和特定的样式偏好。</p>
+<blockquote>
+<p>“好的设计是使复杂的事物变得简单。” —— 文档处理助手</p>
+</blockquote>
+<hr />
+<p><em>生成时间：2025年1月25日</em></p>
+
+        </div>
+    </main>
+    <div class="footer">
+        &copy; 2025 Document Processing System
+    </div>
+    <script>
+        const btn = document.getElementById('themeBtn');
+        const body = document.documentElement;
+        const hljsDark = document.getElementById('hljs-dark');
+        const hljsLight = document.getElementById('hljs-light');
+
+        function updateSyntaxTheme(isDark) {
+            if (isDark) {
+                hljsDark.disabled = false;
+                hljsLight.disabled = true;
+            } else {
+                hljsDark.disabled = true;
+                hljsLight.disabled = false;
+            }
+        }
+
+        if (localStorage.getItem('theme') === 'dark') {
+            body.setAttribute('data-theme', 'dark');
+            btn.textContent = '切换浅色模式';
+            updateSyntaxTheme(true);
+        }
+
+        btn.addEventListener('click', () => {
+            const isDark = body.getAttribute('data-theme') !== 'dark';
+            if (!isDark) {
+                body.removeAttribute('data-theme');
+                btn.textContent = '切换深色模式';
+                localStorage.setItem('theme', 'light');
+                updateSyntaxTheme(false);
+            } else {
+                body.setAttribute('data-theme', 'dark');
+                btn.textContent = '切换浅色模式';
+                localStorage.setItem('theme', 'dark');
+                updateSyntaxTheme(true);
+            }
+        });
+
+        hljs.highlightAll();
+    </script>
+</body>
+</html>

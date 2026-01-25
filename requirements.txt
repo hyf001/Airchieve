@@ -1,0 +1,35 @@
+# Web Framework
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+
+# Data Validation
+pydantic>=2.10.0
+pydantic-settings>=2.6.0
+
+# Database
+SQLAlchemy>=2.0.36
+greenlet>=3.1.0        # SQLAlchemy 异步支持
+aiosqlite>=0.20.0      # SQLite 异步驱动 (开发环境)
+aiomysql>=0.2.0        # MySQL 异步驱动 (生产环境)
+
+# HTTP Client
+httpx>=0.28.0
+requests>=2.32.0
+
+# Environment
+python-dotenv>=1.0.0
+
+# Security
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+claude-agent-sdk>=0.1.4
+
+# Templating
+jinja2>=3.1.0
+
+# Terminal UI
+rich>=13.0.0
+
+# Image Processing & Thumbnails
+Pillow>=10.0.0
+PyMuPDF>=1.24.0  # PDF thumbnail generation

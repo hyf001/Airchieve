@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>世界时钟 - 实时观测</title>
+    <!-- Syntax Highlighting (for consistency) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="hljs-dark" disabled>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" id="hljs-light">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --secondary-color: #f39c12;
+            --text-color: #2c3e50;
+            --bg-color: #f8f9fa;
+            --card-bg: rgba(255, 255, 255, 0.7);
+            --border-color: rgba(233, 236, 239, 0.5);
+            --accent-glow: rgba(74, 144, 226, 0.3);
+        }
+        [data-theme="dark"] {
+            --primary-color: #64b5f6;
+            --secondary-color: #ffb74d;
+            --text-color: #f8f9fa;
+            --bg-color: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --border-color: rgba(51, 65, 85, 0.5);
+            --accent-glow: rgba(100, 181, 246, 0.2);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            color: var(--text-color);
+            background: var(--bg-color);
+            transition: background-color 0.5s, color 0.5s;
+            overflow-x: hidden;
+        }
+
+        /* Animated Background Gradient */
+        .bg-glow {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            background: linear-gradient(45deg, #1e3a8a, #581c87, #0f172a);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+            opacity: 0.1;
+        }
+        [data-theme="dark"] .bg-glow {
+            opacity: 0.4;
+        }
+
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        header {
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo {
+            font-weight: 700;
+            font-size: 1.2rem;
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+
+        .theme-toggle {
+            background: none;
+            border: 1px solid var(--border-color);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            cursor: pointer;
+            color: var(--text-color);
+            font-size: 0.85rem;
+            transition: all 0.3s;
+        }
+        .theme-toggle:hover {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        main {
+            flex: 1;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .hero {
+            text-align: center;
+            margin-bottom: 4rem;
+            padding: 3rem;
+            background: var(--card-bg);
+            border-radius: 24px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.1);
+        }
+
+        .greeting {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            opacity: 0.8;
+        }
+
+        .main-clock {
+            font-size: 5rem;
+            font-weight: 800;
+            margin: 1rem 0;
+            letter-spacing: -2px;
+            color: var(--primary-color);
+            text-shadow: 0 0 30px var(--accent-glow);
+        }
+
+        .main-date {
+            font-size: 1.2rem;
+            opacity: 0.7;
+        }
+
+        .clock-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+        }
+
+        .clock-card {
+            background: var(--card-bg);
+            padding: 2rem;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--border-color);
+            transition: transform 0.3s, box-shadow 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+        .clock-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.15);
+        }
+        .clock-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--primary-color);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .clock-card:hover::before {
+            opacity: 1;
+        }
+
+        .city-name {
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 0.2rem;
+        }
+        .country-name {
+            font-size: 0.9rem;
+            opacity: 0.6;
+            margin-bottom: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .city-time {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+        .city-date {
+            font-size: 0.95rem;
+            opacity: 0.7;
+        }
+
+        .footer {
+            padding: 3rem;
+            text-align: center;
+            opacity: 0.5;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .main-clock { font-size: 3.5rem; }
+            .hero { padding: 2rem 1rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-glow"></div>
+    <header>
+        <a href="index.html" class="logo">← 返回文档</a>
+        <button class="theme-toggle" id="themeBtn">切换模式</button>
+    </header>
+
+    <main>
+        <section class="hero">
+            <div class="greeting" id="greeting">加载中...</div>
+            <div class="main-clock" id="localClock">00:00:00</div>
+            <div class="main-date" id="localDate">----年--月--日</div>
+        </section>
+
+        <div class="clock-grid" id="worldClocks">
+            <!-- World clocks will be injected here -->
+        </div>
+    </main>
+
+    <footer class="footer">
+        &copy; 2025 AIrchieve 世界时钟系统 | 由 AI 引擎驱动
+    </footer>
+
+    <script>
+        const cities = [
+            { name: "北京", country: "中国", zone: "Asia/Shanghai" },
+            { name: "纽约", country: "美国", zone: "America/New_York" },
+            { name: "伦敦", country: "英国", zone: "Europe/London" },
+            { name: "东京", country: "日本", zone: "Asia/Tokyo" },
+            { name: "迪拜", country: "阿联酋", zone: "Asia/Dubai" },
+            { name: "巴黎", country: "法国", zone: "Europe/Paris" }
+        ];
+
+        function updateClocks() {
+            const now = new Date();
+
+            // Update Local Clock
+            document.getElementById('localClock').textContent = now.toLocaleTimeString('zh-CN', { hour12: false });
+            document.getElementById('localDate').textContent = now.toLocaleDateString('zh-CN', {
+                year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'
+            });
+
+            // Update Greeting
+            const hour = now.getHours();
+            let g = "你好";
+            if (hour < 6) g = "午夜好，还没休息吗？";
+            else if (hour < 9) g = "早上好，新的一天开始了";
+            else if (hour < 12) g = "上午好";
+            else if (hour < 14) g = "中午好";
+            else if (hour < 18) g = "下午好";
+            else g = "晚上好";
+            document.getElementById('greeting').textContent = g;
+
+            // Update World Clocks
+            const grid = document.getElementById('worldClocks');
+            if (grid.children.length === 0) {
+                cities.forEach((city, index) => {
+                    const card = document.createElement('div');
+                    card.className = 'clock-card';
+                    card.innerHTML = `
+                        <div class="city-name">${city.name}</div>
+                        <div class="country-name">${city.country}</div>
+                        <div class="city-time" id="city-time-${index}">00:00:00</div>
+                        <div class="city-date" id="city-date-${index}">----/--/--</div>
+                    `;
+                    grid.appendChild(card);
+                });
+            }
+
+            cities.forEach((city, index) => {
+                const timeEl = document.getElementById(`city-time-${index}`);
+                const dateEl = document.getElementById(`city-date-${index}`);
+
+                const cityTime = new Date(now.toLocaleString('en-US', { timeZone: city.zone }));
+                timeEl.textContent = cityTime.toLocaleTimeString('zh-CN', { hour12: false });
+                dateEl.textContent = cityTime.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+            });
+        }
+
+        // Theme Toggle Logic
+        const btn = document.getElementById('themeBtn');
+        const body = document.documentElement;
+
+        if (localStorage.getItem('theme') === 'dark') {
+            body.setAttribute('data-theme', 'dark');
+            btn.textContent = '浅色模式';
+        }
+
+        btn.addEventListener('click', () => {
+            const currentTheme = body.getAttribute('data-theme');
+            if (currentTheme === 'dark') {
+                body.removeAttribute('data-theme');
+                btn.textContent = '深色模式';
+                localStorage.setItem('theme', 'light');
+            } else {
+                body.setAttribute('data-theme', 'dark');
+                btn.textContent = '浅色模式';
+                localStorage.setItem('theme', 'dark');
+            }
+        });
+
+        // Start
+        setInterval(updateClocks, 1000);
+        updateClocks();
+    </script>
+</body>
+</html>
