@@ -7,13 +7,12 @@ import {
   editStorybook,
   editStorybookPage,
   deleteStorybook,
+  createStorybookStream,
+  StreamEvent,
+  CreateStorybookRequest,
   Storybook,
-  StorybookPage as StorybookPageType,
   StorybookListItem
 } from '../services/storybookService';
-
-// 别名类型用于内部使用
-type StoryPage = StorybookPageType;
 
 // 状态文本映射
 const statusTextMap: Record<string, string> = {
@@ -26,11 +25,19 @@ const statusTextMap: Record<string, string> = {
 
 interface EditorViewProps {
   storybookId?: number;
+  createParams?: CreateStorybookRequest | null;
   onBack: () => void;
   onCreateNew: () => void;
+  onStorybookCreated?: (storybookId: number) => void;
 }
 
-const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNew }) => {
+const EditorView: React.FC<EditorViewProps> = ({
+  storybookId,
+  createParams,
+  onBack,
+  onCreateNew,
+  onStorybookCreated
+}) => {
   const [currentStorybook, setCurrentStorybook] = useState<Storybook | null>(null);
   const [storybookList, setStorybookList] = useState<StorybookListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,6 +46,13 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
   const [editingPage, setEditingPage] = useState<number | null>(null);
   const [editPrompt, setEditPrompt] = useState('');
   const [isEditing, setIsEditing] = useState(false);
+  const [pageDirection, setPageDirection] = useState<'left' | 'right' | null>(null);
+  const [animatingPageIndex, setAnimatingPageIndex] = useState<number | null>(null);
+
+  // 是否正在创建绘本
+  const [isCreating, setIsCreating] = useState(false);
+  // 保存创建参数，用于出错时重新生成
+  const [savedCreateParams, setSavedCreateParams] = useState<CreateStorybookRequest | null>(null);
 
   // 加载绘本列表
   useEffect(() => {
@@ -60,28 +74,162 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
     try {
       const list = await listStorybooks({ limit: 20 });
       setStorybookList(list);
+
+      // 如果没有传入 storybookId 且列表不为空，自动加载第一个绘本
+      if (!storybookId && list.length > 0 && !currentStorybook) {
+        loadStorybook(list[0].id);
+      }
     } catch (err) {
       console.error('Failed to load storybook list:', err);
     }
   };
 
-  const loadStorybook = async (id: number) => {
+  const loadStorybook = useCallback(async (id: number) => {
     setLoading(true);
     setError(null);
     try {
       const book = await getStorybook(id);
       setCurrentStorybook(book);
       setCurrentSpreadIndex(0);
+
+      // 同时更新列表中的对应项
+      setStorybookList(prevList => {
+        const index = prevList.findIndex(item => item.id === id);
+        if (index !== -1) {
+          const newList = [...prevList];
+          newList[index] = {
+            ...newList[index],
+            status: book.status
+          };
+          return newList;
+        }
+        return prevList;
+      });
     } catch (err) {
       console.error('Failed to load storybook:', err);
       setError(err instanceof Error ? err.message : '加载绘本失败');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // 当有 createParams 时，创建绘本
+  useEffect(() => {
+    if (!createParams || isCreating) return;
+
+    // 立即设置 isCreating，防止重复执行
+    setIsCreating(true);
+
+    // 保存创建参数，用于出错时重新生成
+    setSavedCreateParams(createParams);
+
+    const createStorybook = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        let createdStorybookId: number | undefined;
+
+        await createStorybookStream(
+          createParams,
+          (event: StreamEvent) => {
+            console.log('Stream event:', event);
+
+            switch (event.type) {
+              case 'storybook_created':
+                // 收到 storybook_created 事件，保存 ID
+                createdStorybookId = event.data.id;
+                if (event.data.id && onStorybookCreated) {
+                  onStorybookCreated(event.data.id);
+                }
+                // 立即加载绘本详情
+                if (event.data.id) {
+                  loadStorybook(event.data.id);
+                }
+                break;
+              case 'generation_started':
+                // 更新状态为生成中
+                break;
+              case 'generation_completed':
+                // 生成完成，刷新绘本详情
+                if (createdStorybookId) {
+                  loadStorybook(createdStorybookId);
+                }
+                break;
+              case 'generation_error':
+              case 'error':
+                // 生成出错，刷新绘本详情和列表以获��错误状态
+                if (createdStorybookId) {
+                  loadStorybook(createdStorybookId);
+                }
+                break;
+            }
+          }
+        );
+      } catch (err) {
+        console.error('Failed to create storybook:', err);
+        setError(err instanceof Error ? err.message : '创建绘本失败');
+      } finally {
+        setIsCreating(false);
+      }
+    };
+
+    createStorybook();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createParams]);
 
   const handleStorybookSelect = (id: number) => {
     loadStorybook(id);
+  };
+
+  // 重新生成绘本
+  const handleRegenerate = async () => {
+    if (!savedCreateParams || isCreating) return;
+
+    setIsCreating(true);
+    setLoading(true);
+    setError(null);
+
+    try {
+      let createdStorybookId: number | undefined;
+
+      await createStorybookStream(
+        savedCreateParams,
+        (event: StreamEvent) => {
+          console.log('Stream event:', event);
+
+          switch (event.type) {
+            case 'storybook_created':
+              createdStorybookId = event.data.id;
+              if (event.data.id && onStorybookCreated) {
+                onStorybookCreated(event.data.id);
+              }
+              if (event.data.id) {
+                loadStorybook(event.data.id);
+              }
+              break;
+            case 'generation_started':
+              break;
+            case 'generation_completed':
+              if (createdStorybookId) {
+                loadStorybook(createdStorybookId);
+              }
+              break;
+            case 'generation_error':
+            case 'error':
+              if (createdStorybookId) {
+                loadStorybook(createdStorybookId);
+              }
+              break;
+          }
+        }
+      );
+    } catch (err) {
+      console.error('Failed to regenerate storybook:', err);
+      setError(err instanceof Error ? err.message : '重新生成失败');
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const handleDelete = async (id: number, e: React.MouseEvent) => {
@@ -142,13 +290,35 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
 
   const nextSpread = useCallback(() => {
     if (currentSpreadIndex < pages.length - 1) {
-      setCurrentSpreadIndex(prev => prev + 1);
+      const nextPageIndex = currentSpreadIndex + 1;
+      // First set direction and animating page, then update index in next tick
+      setPageDirection('right');
+      setAnimatingPageIndex(nextPageIndex);
+      setTimeout(() => {
+        setCurrentSpreadIndex(nextPageIndex);
+      }, 0);
+      // Reset direction after animation completes
+      setTimeout(() => {
+        setPageDirection(null);
+        setAnimatingPageIndex(null);
+      }, 700);
     }
   }, [currentSpreadIndex, pages.length]);
 
   const prevSpread = useCallback(() => {
     if (currentSpreadIndex > 0) {
-      setCurrentSpreadIndex(prev => prev - 1);
+      const prevPageIndex = currentSpreadIndex - 1;
+      // First set direction and animating page, then update index in next tick
+      setPageDirection('left');
+      setAnimatingPageIndex(prevPageIndex);
+      setTimeout(() => {
+        setCurrentSpreadIndex(prevPageIndex);
+      }, 0);
+      // Reset direction after animation completes
+      setTimeout(() => {
+        setPageDirection(null);
+        setAnimatingPageIndex(null);
+      }, 700);
     }
   }, [currentSpreadIndex]);
 
@@ -161,53 +331,6 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [nextSpread, prevSpread]);
-
-  // 渲染单页内容（16:9 横向布局，上图下文）
-  const renderPageContent = (page: StoryPage | undefined, pageIndex: number) => {
-    if (!page) {
-      return (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-indigo-50 to-purple-50">
-          <div className="text-center space-y-6">
-            <BookOpen size={64} className="mx-auto text-slate-200" />
-            <p className="text-slate-300 italic font-lexend text-lg">To be continued...</p>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="w-full h-full flex flex-col bg-white">
-        {/* 上半部分：图片 (16:9) */}
-        <div className="relative flex-1 bg-gradient-to-br from-indigo-100 to-purple-100">
-          <img
-            src={page.image_url}
-            alt={`Page ${pageIndex + 1}`}
-            className="w-full h-full object-cover"
-            style={{ aspectRatio: '16/9' }}
-          />
-          {/* 编辑按钮 */}
-          <button
-            onClick={() => setEditingPage(pageIndex)}
-            className="absolute top-4 right-4 p-2 bg-white/90 hover:bg-white backdrop-blur rounded-lg text-indigo-600 transition-all shadow-lg"
-            title="编辑此页"
-          >
-            <Edit2 size={18} />
-          </button>
-          {/* 页码 */}
-          <div className="absolute bottom-4 left-4 px-3 py-1 bg-black/50 backdrop-blur rounded-full">
-            <span className="text-white text-sm font-bold">{pageIndex + 1}</span>
-          </div>
-        </div>
-
-        {/* 下半部分：文字 */}
-        <div className="h-2/5 bg-gradient-to-br from-amber-50 to-orange-50 book-paper-texture relative p-8 md:p-12 flex flex-col justify-center">
-          <p className="text-lg md:text-xl lg:text-2xl text-slate-800 font-lexend leading-[1.8] text-center">
-            {page.text}
-          </p>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="flex-1 flex flex-col h-screen overflow-hidden bg-[#E2E8F0]">
@@ -388,16 +511,37 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                 <AlertCircle className="mx-auto text-red-500" size={64} />
                 <h3 className="text-xl font-lexend font-bold text-slate-800">生成失败</h3>
                 <p className="text-slate-400 text-sm leading-relaxed">抱歉，绘本生成过程中遇到了错误。请检查网络连接或稍后重试。</p>
-                <button
-                  onClick={() => {
-                    if (currentStorybook) {
-                      handleDelete(currentStorybook.id, { stopPropagation: () => {} } as React.MouseEvent);
-                    }
-                  }}
-                  className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all"
-                >
-                  返回首页
-                </button>
+                <div className="flex items-center justify-center gap-3">
+                  {savedCreateParams && (
+                    <button
+                      onClick={handleRegenerate}
+                      disabled={isCreating}
+                      className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      {isCreating ? (
+                        <>
+                          <Loader2 size={18} className="animate-spin" />
+                          重新生成中...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles size={18} />
+                          重新生成
+                        </>
+                      )}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      if (currentStorybook) {
+                        handleDelete(currentStorybook.id, { stopPropagation: () => {} } as React.MouseEvent);
+                      }
+                    }}
+                    className="px-6 py-3 bg-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-300 transition-all"
+                  >
+                    返回首页
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -421,24 +565,45 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                 <AlertCircle className="mx-auto text-amber-500" size={64} />
                 <h3 className="text-xl font-lexend font-bold text-slate-800">内容生成失败</h3>
                 <p className="text-slate-400 text-sm leading-relaxed">抱歉，绘本生成过程中遇到了问题，没有生成任何内容。请尝试重新创建或修改提示词。</p>
-                <button
-                  onClick={() => {
-                    if (currentStorybook) {
-                      handleDelete(currentStorybook.id, { stopPropagation: () => {} } as React.MouseEvent);
-                    }
-                  }}
-                  className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all"
-                >
-                  返回首页
-                </button>
+                <div className="flex items-center justify-center gap-3">
+                  {savedCreateParams && (
+                    <button
+                      onClick={handleRegenerate}
+                      disabled={isCreating}
+                      className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      {isCreating ? (
+                        <>
+                          <Loader2 size={18} className="animate-spin" />
+                          重新生成中...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles size={18} />
+                          重新生成
+                        </>
+                      )}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      if (currentStorybook) {
+                        handleDelete(currentStorybook.id, { stopPropagation: () => {} } as React.MouseEvent);
+                      }
+                    }}
+                    className="px-6 py-3 bg-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-300 transition-all"
+                  >
+                    返回首页
+                  </button>
+                </div>
               </div>
             </div>
           )}
 
           {!loading && currentStorybook && currentStorybook.status === 'finished' && pages.length > 0 && (
             <>
-              {/* Book Container - 单页模式 16:9 */}
-              <div className="relative w-full max-w-5xl aspect-video flex transition-all duration-500">
+              {/* 页面容器 - 图片+文字整体，比例16:11 */}
+              <div className="relative w-full max-w-5xl aspect-[16/11] transition-all duration-500">
                 {/* Navigation Left */}
                 <button
                   onClick={prevSpread}
@@ -448,20 +613,21 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                   <ChevronLeft size={32} />
                 </button>
 
-                {/* 3D Book Pages */}
-                <div className="w-full h-full relative bg-white rounded-xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.3)] overflow-hidden">
+                {/* 3D Book Pages - 整页（图片+文字） */}
+                <div className="w-full h-full relative rounded-xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.3)] overflow-hidden bg-white">
                   {pages.map((page, idx) => {
                     const isActive = idx === currentSpreadIndex;
-                    const isPrev = idx === currentSpreadIndex - 1;
-                    const isNext = idx === currentSpreadIndex + 1;
+                    const isAnimating = idx === animatingPageIndex;
 
                     let animationClass = '';
-                    if (isActive) {
-                      animationClass = 'z-10';
-                    } else if (isPrev) {
-                      animationClass = 'opacity-0 z-0 transform -translate-x-full -rotate-y-12 page-exit-left';
-                    } else if (isNext) {
-                      animationClass = 'opacity-0 z-0 transform translate-x-full rotate-y-12 page-enter-right';
+                    if (isAnimating && pageDirection === 'left') {
+                      // Previous page entering from left
+                      animationClass = 'opacity-100 z-20 page-enter-left';
+                    } else if (isAnimating && pageDirection === 'right') {
+                      // Next page entering from right
+                      animationClass = 'opacity-100 z-20 page-enter-right';
+                    } else if (isActive) {
+                      animationClass = 'z-10 opacity-100';
                     } else {
                       animationClass = 'opacity-0 z-0 pointer-events-none';
                     }
@@ -469,13 +635,43 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                     return (
                       <div
                         key={idx}
-                        className={`absolute inset-0 w-full h-full transition-all duration-700 ease-in-out ${animationClass}`}
+                        className={`absolute inset-0 w-full transition-all duration-700 ease-in-out ${animationClass}`}
                         style={{
                           transformStyle: 'preserve-3d',
                           backfaceVisibility: 'hidden',
                         }}
                       >
-                        {renderPageContent(page, idx)}
+                        {/* 整页内容：图片+文字 */}
+                        <div className="w-full h-full flex flex-col bg-white relative">
+                          {/* 图片区域 - 占9份（16:9） */}
+                          <div className="relative w-full flex-[9] bg-gradient-to-br from-indigo-100 to-purple-100 min-h-0">
+                            <img
+                              src={page.image_url}
+                              alt={`Page ${idx + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                            {/* 编辑按钮 */}
+                            <button
+                              onClick={() => setEditingPage(idx)}
+                              className="absolute top-4 right-4 p-2 bg-white/90 hover:bg-white backdrop-blur rounded-lg text-indigo-600 transition-all shadow-lg z-20"
+                              title="编辑此页"
+                            >
+                              <Edit2 size={18} />
+                            </button>
+                          </div>
+
+                          {/* 文字区域 - 占2份 */}
+                          <div className="flex-[2] bg-gradient-to-br from-amber-50 to-orange-50 book-paper-texture p-3 md:p-4 lg:p-5 flex flex-col justify-center">
+                            <p className="text-xs md:text-sm lg:text-base xl:text-lg text-slate-800 font-lexend leading-relaxed text-center">
+                              {page.text}
+                            </p>
+                          </div>
+
+                          {/* 页码 - 整页右下角 */}
+                          <div className="absolute bottom-4 right-4 px-3 py-1 bg-black/50 backdrop-blur rounded-full z-20">
+                            <span className="text-white text-sm font-bold">{idx + 1}</span>
+                          </div>
+                        </div>
                       </div>
                     );
                   })}

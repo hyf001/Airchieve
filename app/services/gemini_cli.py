@@ -44,22 +44,22 @@ class GeminiCli(LLMClientBase):
 
         # 构建请求内容
         prompt = (
-            f"Create a 5-page children's picture book based on this idea: \"{instruction}\"\n"
+            f"Create a 10-page picture book based on this idea: \"{instruction}\"\n"
             f"Style: {style_prefix}\n\n"
             f"Requirements:\n"
             f"1. For each page, provide:\n"
-            f"   - A short, child-friendly text (1-2 sentences)\n"
+            f"   - A short text (1-2 sentences)\n"
             f"   - An illustration image\n\n"
             f"2. Ensure visual consistency across all pages:\n"
             f"   - Keep the main character's appearance identical\n"
             f"   - Use consistent art style and color palette\n"
             f"   - Maintain similar background aesthetics\n\n"
             f"3. Format your response as:\n"
-            f"   Page 1: [text content]\n"
+            f"   [text content]\n"
             f"   [generate image]\n\n"
-            f"   Page 2: [text content]\n"
+            f"   [text content]\n"
             f"   [generate image]\n\n"
-            f"   And so on for all 5 pages."
+            f"   And so on for all 10 pages."
         )
 
         # 如果没有参考图片，直接使用字符串

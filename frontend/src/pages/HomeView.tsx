@@ -3,10 +3,10 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { StoryTemplate } from '../types';
 import { TEMPLATES } from '../constants';
 import { Sparkles, Upload, ArrowRight, X, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
-import { createStorybookStream, StreamEvent } from '../services/storybookService';
+import { CreateStorybookRequest } from '../services/storybookService';
 
 interface HomeViewProps {
-  onStart?: (storybookId: number) => void;
+  onStart?: (params: CreateStorybookRequest) => void;
   onShowMyWorks?: () => void;
 }
 
@@ -18,13 +18,13 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generationStatus, setGenerationStatus] = useState<string | null>(null);
-  const [hasNavigated, setHasNavigated] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const carouselSectionRef = useRef<HTMLDivElement>(null);
   const carouselRef = useRef<HTMLDivElement>(null);
   const [carouselPaused, setCarouselPaused] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   const expand = useCallback(() => setInputExpanded(true), []);
 
@@ -44,8 +44,12 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks }) => {
     ) {
       setSelectedTemplate(null);
     }
-    // Close user menu when clicking outside
-    if (userMenuOpen) {
+    // Close user menu when clicking outside the menu
+    if (
+      userMenuOpen &&
+      userMenuRef.current &&
+      !userMenuRef.current.contains(e.target as Node)
+    ) {
       setUserMenuOpen(false);
     }
   }, [prompt, uploadedImages.length, userMenuOpen]);
@@ -80,62 +84,28 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks }) => {
 
     setIsCreating(true);
     setError(null);
-    setGenerationStatus('正在创建绘本...');
-    setHasNavigated(false);
+    setGenerationStatus('正在跳转到编辑器...');
 
     try {
       const template = selectedTemplate ?? TEMPLATES[0];
 
-      // 使用流式 API 创建绘本
-      const storybookId = await createStorybookStream(
-        {
-          instruction: prompt,
-          style_prefix: template.name,
-          images: uploadedImages.length > 0 ? uploadedImages : undefined,
-          creator: 'user'
-        },
-        (event: StreamEvent) => {
-          // 处理流式事件
-          console.log('Stream event:', event);
+      // 不发起请求，直接跳转到 EditorView 并传递创建参数
+      const createParams = {
+        instruction: prompt,
+        style_prefix: template.name,
+        images: uploadedImages.length > 0 ? uploadedImages : undefined,
+        creator: 'user'
+      };
 
-          switch (event.type) {
-            case 'storybook_created':
-              setGenerationStatus(`绘本已创建 (ID: ${event.data.id})`);
-              // 收到 init 状态后立即跳转到 EditorView
-              if (onStart && event.data.id && !hasNavigated) {
-                setHasNavigated(true);
-                onStart(event.data.id);
-              }
-              break;
-            case 'generation_started':
-              setGenerationStatus(event.data.message || '开始生成内容...');
-              break;
-            case 'generation_completed':
-              setGenerationStatus(`生成完成！共 ${event.data.pages_count} 页`);
-              break;
-            case 'generation_error':
-            case 'error':
-              setError(event.data.error || '生成失败');
-              setGenerationStatus(null);
-              break;
-          }
-        }
-      );
-
-      // 如果没有在事件中跳转（兜底逻辑），在这里跳转
-      if (!hasNavigated && onStart && storybookId) {
-        onStart(storybookId);
+      if (onStart) {
+        onStart(createParams);
       }
     } catch (err) {
-      console.error('Failed to create storybook:', err);
-      setError(err instanceof Error ? err.message : '创建绘本失败，请重试');
+      console.error('Failed to navigate to editor:', err);
+      setError(err instanceof Error ? err.message : '跳转失败，请重试');
     } finally {
       setIsCreating(false);
-      // 延迟清除状态，让用户看到最后的进度
-      setTimeout(() => {
-        setGenerationStatus(null);
-        setHasNavigated(false);
-      }, 2000);
+      setGenerationStatus(null);
     }
   };
 
@@ -202,7 +172,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks }) => {
 
           {/* Dropdown Menu */}
           {userMenuOpen && (
-            <div className="absolute top-full mt-2 right-0 w-48 bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden animate-in slide-in-from-top-2 duration-200">
+            <div ref={userMenuRef} className="absolute top-full mt-2 right-0 w-48 bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden animate-in slide-in-from-top-2 duration-200">
               <button
                 onClick={() => {
                   onShowMyWorks?.();
@@ -368,7 +338,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks }) => {
             <textarea
               className="w-full p-3 rounded-xl
                          bg-white/50 border border-white/40 backdrop-blur-sm
-                         focus:border-indigo-300 focus:bg-white/70 focus:ring-0
+                         focus:bg-white/70 focus:ring-0 focus:outline-none
                          transition-all duration-300 text-sm text-slate-800
                          placeholder:text-slate-400 resize-none leading-relaxed"
               rows={3}
