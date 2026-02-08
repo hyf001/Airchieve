@@ -1,64 +1,77 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Toaster } from '@/components/ui/sonner';
-import { Layout } from '@/components/layout';
-import { AuthProvider } from '@/context/AuthContext';
-import { WorkspaceProvider } from '@/context/WorkspaceContext';
-import { AuthGlobalHandler } from '@/components/auth/AuthGlobalHandler';
-import {
-  HomePage,
-  LandingPage,
-  ProjectsPage,
-  ChatPage,
-  ChatListPage,
-  EvaluationPage,
-  EvaluationDetailPage,
-  UsersPage,
-  SettingsPage,
-  WorkspacePage,
-} from '@/pages';
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60 * 5, // 5 minutes
-      retry: 1,
-    },
-  },
-});
+import React, { useState, useCallback } from 'react';
+import { AppView, StoryPage, StoryTemplate, ChatMessage } from './types';
+import { TEMPLATES } from './constants';
+import HomeView from './pages/HomeView';
+import EditorView from './pages/EditorView';
+import { generateStoryStructure, generateImage } from './services/geminiService';
 
-function App() {
+const App: React.FC = () => {
+  const [view, setView] = useState<AppView>('home');
+  const [currentTemplate, setCurrentTemplate] = useState<StoryTemplate>(TEMPLATES[0]);
+  const [storyTitle, setStoryTitle] = useState('');
+  const [pages, setPages] = useState<StoryPage[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const startCreation = async (prompt: string, template: StoryTemplate, fileData?: string[]) => {
+    setIsGenerating(true);
+    setView('editor');
+    setCurrentTemplate(template);
+    setError(null);
+
+    try {
+      // 1. Generate story structure
+      const storyData = await generateStoryStructure(prompt, template.name);
+      setStoryTitle(storyData.title || 'Untitled Adventure');
+
+      const initialPages = storyData.pages.map((p: any, index: number) => ({
+        id: `page-${index}`,
+        text: p.text,
+        imageUrl: '',
+        loading: true,
+        imagePrompt: p.imagePrompt
+      }));
+      setPages(initialPages);
+
+      // 2. Generate images sequentially (to avoid rate limits and show progress)
+      for (let i = 0; i < initialPages.length; i++) {
+        const imageUrl = await generateImage(initialPages[i].imagePrompt, template.promptStyle);
+        setPages(prev => prev.map((p, idx) => idx === i ? { ...p, imageUrl, loading: false } : p));
+      }
+
+    } catch (err: any) {
+      console.error(err);
+      setError('Failed to generate story. Please try again.');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const resetToHome = () => {
+    setView('home');
+    setPages([]);
+    setStoryTitle('');
+    setError(null);
+  };
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <WorkspaceProvider>
-          <BrowserRouter>
-            <Routes>
-              {/* Landing Page */}
-              <Route path="/" element={<LandingPage />} />
-
-              {/* Workspace Route */}
-              <Route path="/workspace" element={<WorkspacePage />} />
-
-              {/* Legacy/Admin Routes */}
-              <Route path="/admin" element={<Layout />}>
-                <Route index element={<HomePage />} />
-                <Route path="projects" element={<ProjectsPage />} />
-                <Route path="chat" element={<ChatListPage />} />
-                <Route path="chat/:projectId" element={<ChatPage />} />
-                <Route path="evaluation" element={<EvaluationPage />} />
-                <Route path="evaluation/:projectId" element={<EvaluationDetailPage />} />
-                <Route path="users" element={<UsersPage />} />
-                <Route path="settings" element={<SettingsPage />} />
-              </Route>
-            </Routes>
-          </BrowserRouter>
-          <AuthGlobalHandler />
-          <Toaster />
-        </WorkspaceProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <div className="min-h-screen flex flex-col">
+      {view === 'home' ? (
+        <HomeView onStart={startCreation} />
+      ) : (
+        <EditorView
+          title={storyTitle}
+          pages={pages}
+          template={currentTemplate}
+          isGenerating={isGenerating}
+          error={error}
+          onBack={resetToHome}
+          onPagesUpdate={setPages}
+        />
+      )}
+    </div>
   );
-}
+};
 
 export default App;

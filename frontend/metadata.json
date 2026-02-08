@@ -1,0 +1,8 @@
+
+{
+  "name": "DreamWeave AI Storybook",
+  "description": "An AI-powered picture book creator that transforms your story ideas into fully illustrated digital books using Gemini GenAI.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
