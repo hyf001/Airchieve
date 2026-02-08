@@ -2,22 +2,29 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { StoryTemplate } from '../types';
 import { TEMPLATES } from '../constants';
-import { Sparkles, Upload, ArrowRight, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Sparkles, Upload, ArrowRight, X, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { createStorybookStream, StreamEvent } from '../services/storybookService';
 
 interface HomeViewProps {
-  onStart: (prompt: string, template: StoryTemplate, fileData?: string[]) => void;
+  onStart?: (storybookId: number) => void;
+  onShowMyWorks?: () => void;
 }
 
-const HomeView: React.FC<HomeViewProps> = ({ onStart }) => {
+const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks }) => {
   const [prompt, setPrompt] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<StoryTemplate | null>(null);
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [inputExpanded, setInputExpanded] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [generationStatus, setGenerationStatus] = useState<string | null>(null);
+  const [hasNavigated, setHasNavigated] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const carouselSectionRef = useRef<HTMLDivElement>(null);
   const carouselRef = useRef<HTMLDivElement>(null);
   const [carouselPaused, setCarouselPaused] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   const expand = useCallback(() => setInputExpanded(true), []);
 
@@ -37,7 +44,11 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart }) => {
     ) {
       setSelectedTemplate(null);
     }
-  }, [prompt, uploadedImages.length]);
+    // Close user menu when clicking outside
+    if (userMenuOpen) {
+      setUserMenuOpen(false);
+    }
+  }, [prompt, uploadedImages.length, userMenuOpen]);
 
   useEffect(() => {
     document.addEventListener('mousedown', handleClickOutside);
@@ -64,9 +75,68 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart }) => {
     setUploadedImages((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleStart = () => {
-    if (!prompt.trim()) return;
-    onStart(prompt, selectedTemplate ?? TEMPLATES[0], uploadedImages.length > 0 ? uploadedImages : undefined);
+  const handleStart = async () => {
+    if (!prompt.trim() || isCreating) return;
+
+    setIsCreating(true);
+    setError(null);
+    setGenerationStatus('正在创建绘本...');
+    setHasNavigated(false);
+
+    try {
+      const template = selectedTemplate ?? TEMPLATES[0];
+
+      // 使用流式 API 创建绘本
+      const storybookId = await createStorybookStream(
+        {
+          instruction: prompt,
+          style_prefix: template.name,
+          images: uploadedImages.length > 0 ? uploadedImages : undefined,
+          creator: 'user'
+        },
+        (event: StreamEvent) => {
+          // 处理流式事件
+          console.log('Stream event:', event);
+
+          switch (event.type) {
+            case 'storybook_created':
+              setGenerationStatus(`绘本已创建 (ID: ${event.data.id})`);
+              // 收到 init 状态后立即跳转到 EditorView
+              if (onStart && event.data.id && !hasNavigated) {
+                setHasNavigated(true);
+                onStart(event.data.id);
+              }
+              break;
+            case 'generation_started':
+              setGenerationStatus(event.data.message || '开始生成内容...');
+              break;
+            case 'generation_completed':
+              setGenerationStatus(`生成完成！共 ${event.data.pages_count} 页`);
+              break;
+            case 'generation_error':
+            case 'error':
+              setError(event.data.error || '生成失败');
+              setGenerationStatus(null);
+              break;
+          }
+        }
+      );
+
+      // 如果没有在事件中跳转（兜底逻辑），在这里跳转
+      if (!hasNavigated && onStart && storybookId) {
+        onStart(storybookId);
+      }
+    } catch (err) {
+      console.error('Failed to create storybook:', err);
+      setError(err instanceof Error ? err.message : '创建绘本失败，请重试');
+    } finally {
+      setIsCreating(false);
+      // 延迟清除状态，让用户看到最后的进度
+      setTimeout(() => {
+        setGenerationStatus(null);
+        setHasNavigated(false);
+      }, 2000);
+    }
   };
 
   const isOpen = inputExpanded || !!prompt.trim() || uploadedImages.length > 0;
@@ -102,7 +172,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart }) => {
       <header className="text-center mb-12">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 font-medium text-sm mb-4">
           <Sparkles size={14} />
-          <span>Powered by Gemini AI</span>
+          <span>Powered by AI</span>
         </div>
         <h1 className="text-5xl md:text-6xl font-bold font-lexend text-slate-900 mb-4 tracking-tight">
           Create Your <span className="text-indigo-600">Magic Story</span>
@@ -112,6 +182,41 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart }) => {
           Just describe your story and pick a style.
         </p>
       </header>
+
+      {/* User Avatar - Fixed Top Right */}
+      <div className="fixed top-6 right-6 z-50">
+        <div className="relative">
+          {/* Avatar Button */}
+          <button
+            onClick={() => setUserMenuOpen(!userMenuOpen)}
+            className="w-11 h-11 rounded-full bg-white border-2 border-slate-200 flex items-center justify-center hover:border-slate-300 hover:bg-slate-50 transition-all duration-300 hover:scale-105 active:scale-95 shadow-sm hover:shadow-md"
+          >
+            {/* Custom User Icon - 简洁现代风格 */}
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+              {/* Head */}
+              <circle cx="10" cy="7" r="3.5" stroke="#64748B" strokeWidth="1.5" fill="none"/>
+              {/* Shoulders/Body */}
+              <path d="M4.5 17C4.5 14.5 6.5 13 10 13C13.5 13 15.5 14.5 15.5 17" stroke="#64748B" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+            </svg>
+          </button>
+
+          {/* Dropdown Menu */}
+          {userMenuOpen && (
+            <div className="absolute top-full mt-2 right-0 w-48 bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden animate-in slide-in-from-top-2 duration-200">
+              <button
+                onClick={() => {
+                  onShowMyWorks?.();
+                  setUserMenuOpen(false);
+                }}
+                className="w-full px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors duration-200 flex items-center gap-2"
+              >
+                <Sparkles size={16} className="text-indigo-500" />
+                <span>我的作品</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Style Templates — Carousel */}
       <section className="w-full mb-16">
@@ -212,6 +317,23 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart }) => {
         >
           {/* Subtle shimmer overlay */}
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-60" />
+
+          {/* Error message */}
+          {error && (
+            <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200">
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          )}
+
+          {/* Generation status */}
+          {generationStatus && (
+            <div className="mb-3 p-3 rounded-lg bg-indigo-50 border border-indigo-200">
+              <div className="flex items-center gap-2">
+                <Loader2 size={16} className="text-indigo-600 animate-spin" />
+                <p className="text-sm text-indigo-600">{generationStatus}</p>
+              </div>
+            </div>
+          )}
 
           {/* Image thumbnails row */}
           {uploadedImages.length > 0 && (

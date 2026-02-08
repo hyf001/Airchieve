@@ -1,0 +1,55 @@
+"""
+Book Model
+绘本模型
+"""
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, TypedDict, Literal
+
+from sqlalchemy import Integer, String, DateTime, ForeignKey, JSON, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+
+
+__all__ = ["Storybook", "StorybookPage", "StorybookStatus"]
+
+
+# Storybook 状态字面量类型
+StorybookStatus = Literal["init", "creating", "updating", "finished", "error"]
+
+
+class StorybookPage(TypedDict):
+    text:str
+    image_url:str
+
+class Storybook(Base):
+    """绘本表"""
+    __tablename__ = "storybooks"
+
+    # 主键标识 - SQLite 自增配置
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        autoincrement=True
+    )
+
+    # 绘本信息
+    title: Mapped[str] = mapped_column(String(255), nullable=False)  # 绘本标题
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)  # 绘本描述
+    creator: Mapped[str] = mapped_column(String(128), nullable=False)  # 创建者名称
+
+    # 页面内容（JSON格式存储多个页面）
+    pages: Mapped[list[StorybookPage] | None] = mapped_column(JSON, nullable=True)  # 页面列表
+
+    # 绘本状态: init-初始化, creating-生成中, updating-更新中, finished-完成, error-错误
+    status: Mapped[StorybookStatus] = mapped_column(String(32), default="init", index=True)
+
+    # 时间戳
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True
+    )  # 创建时间
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False
+    )  # 更新时间
+
+

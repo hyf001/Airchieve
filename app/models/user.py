@@ -10,10 +10,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-if TYPE_CHECKING:
-    from app.models.projects import Project
-    from app.models.user_query import UserQuery
-
 
 class User(Base):
     """用户信息表"""
@@ -41,7 +37,3 @@ class User(Base):
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )  # 注册时间
     last_login_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # 最后登录时间
-
-    # 关联关系
-    projects: Mapped[List["Project"]] = relationship("Project", back_populates="user")  # 用户创建的项目
-    user_queries: Mapped[List["UserQuery"]] = relationship("UserQuery", back_populates="user")  # 用户的提问
