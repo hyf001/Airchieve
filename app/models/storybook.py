@@ -5,7 +5,7 @@ Book Model
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, TypedDict, Literal
 
-from sqlalchemy import Integer, String, DateTime, ForeignKey, JSON, Text
+from sqlalchemy import Integer, String, DateTime, ForeignKey, JSON, Text, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -37,6 +37,11 @@ class Storybook(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)  # 绘本标题
     description: Mapped[str | None] = mapped_column(Text, nullable=True)  # 绘本描述
     creator: Mapped[str] = mapped_column(String(128), nullable=False)  # 创建者名称
+
+    # 用户输入和模版
+    instruction: Mapped[str | None] = mapped_column(Text, nullable=True)  # 用户问句/指令
+    template_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 模版ID
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)  # 是否公开
 
     # 页面内容（JSON格式存储多个页面）
     pages: Mapped[list[StorybookPage] | None] = mapped_column(JSON, nullable=True)  # 页面列表

@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import HomeView from './pages/HomeView';
 import EditorView from './pages/EditorView';
+import TemplatesView from './pages/TemplatesView';
 
 // 创建绘本的参数类型
 interface CreateStorybookParams {
@@ -14,17 +15,20 @@ interface CreateStorybookParams {
 const App: React.FC = () => {
   const [currentStorybookId, setCurrentStorybookId] = useState<number | undefined>(undefined);
   const [showMyWorks, setShowMyWorks] = useState(false);
+  const [showMyTemplates, setShowMyTemplates] = useState(false);
   const [createParams, setCreateParams] = useState<CreateStorybookParams | null>(null);
 
   const handleStart = (params: CreateStorybookParams) => {
     setCreateParams(params);
     setShowMyWorks(false);
+    setShowMyTemplates(false);
   };
 
   const handleBack = () => {
     setCurrentStorybookId(undefined);
     setCreateParams(null);
     setShowMyWorks(false);
+    setShowMyTemplates(false);
   };
 
   const handleCreateNew = () => {
@@ -32,18 +36,35 @@ const App: React.FC = () => {
     setCurrentStorybookId(undefined);
     setCreateParams(null);
     setShowMyWorks(false);
+    setShowMyTemplates(false);
   };
 
   const handleShowMyWorks = () => {
     setShowMyWorks(true);
     setCurrentStorybookId(undefined);
     setCreateParams(null);
+    setShowMyTemplates(false);
   };
 
+  const handleShowMyTemplates = () => {
+    setShowMyTemplates(true);
+    setCurrentStorybookId(undefined);
+    setCreateParams(null);
+    setShowMyWorks(false);
+  };
+
+  const isHomeView = currentStorybookId === undefined && !showMyWorks && !showMyTemplates && !createParams;
+
   return (
-    <div className="min-h-screen flex flex-col">
-      {currentStorybookId === undefined && !showMyWorks && !createParams ? (
-        <HomeView onStart={handleStart} onShowMyWorks={handleShowMyWorks} />
+    <div className={`h-screen flex flex-col ${isHomeView ? 'overflow-auto' : 'overflow-hidden'}`}>
+      {showMyTemplates ? (
+        <TemplatesView onBack={handleBack} />
+      ) : isHomeView ? (
+        <HomeView
+          onStart={handleStart}
+          onShowMyWorks={handleShowMyWorks}
+          onShowMyTemplates={handleShowMyTemplates}
+        />
       ) : (
         <EditorView
           storybookId={currentStorybookId}

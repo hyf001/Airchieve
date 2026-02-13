@@ -15,17 +15,17 @@ class LLMClientBase(ABC):
     async def create_story(
         self,
         instruction: str,
-        style_prefix: str,
+        system_prompt: Optional[str] = None,
         images: Optional[List[str]] = None
     ) -> List[StorybookPage]:
         """
         创建故事
 
-        根据用户指令、风格和可选的参考图片，生成完整的绘本内容（包含文本和图片）。
+        根据用户指令、系统提示词和可选的参考图片，生成完整的绘本内容（包含文本和图片）。
 
         Args:
             instruction: 用户指令/故事描述，例如"一个关于小兔子找朋友的故事"
-            style_prefix: 绘本风格，例如"温馨的水彩画风格"、"可爱的卡通风格"等
+            system_prompt: 系统提示词（可选），用于指定绘本风格、约束条件等
             images: base64编码的参考图片列表（可选），用于参考风格或角色
 
         Returns:
@@ -45,7 +45,7 @@ class LLMClientBase(ABC):
         self,
         instruction: str,
         current_pages: List[StorybookPage],
-        style_prefix: str
+        system_prompt: Optional[str] = None
     ) -> List[StorybookPage]:
         """
         编辑故事
@@ -55,7 +55,7 @@ class LLMClientBase(ABC):
         Args:
             instruction: 编辑指令，例如"让故事更感人一些"、"在结尾加上一个反转"
             current_pages: 当前故事的所有页面
-            style_prefix: 绘本风格（保持原有风格）
+            system_prompt: 系统提示词（可选），用于指定绘本风格、约束条件等
 
         Returns:
             List[StorybookPage]: 编辑后的页面列表
@@ -71,7 +71,7 @@ class LLMClientBase(ABC):
         page_index: int,
         instruction: str,
         current_page: StorybookPage,
-        style_prefix: str
+        system_prompt: Optional[str] = None
     ) -> StorybookPage:
         """
         编辑故事页
@@ -82,7 +82,7 @@ class LLMClientBase(ABC):
             page_index: 页码索引（从0开始）
             instruction: 编辑指令，例如"把这只兔子画得更可爱一些"、"增加更多细节描述"
             current_page: 当前页的内容
-            style_prefix: 绘本风格（保持原有风格）
+            system_prompt: 系统提示词（可选），用于指定绘本风格、约束条件等
 
         Returns:
             StorybookPage: 编辑后的页面内容

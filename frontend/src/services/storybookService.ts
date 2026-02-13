@@ -23,18 +23,21 @@ export interface StorybookListItem {
   description: string | null;
   creator: string;
   status: StorybookStatus;
+  is_public: boolean;
   created_at: string;
+  pages: StorybookPage[] | null;
 }
 
 export interface CreateStorybookRequest {
   instruction: string;
-  style_prefix: string;
+  template_id?: number;
   images?: string[];
   creator?: string;
 }
 
 export interface EditStorybookRequest {
   instruction: string;
+  images?: string[];
 }
 
 export interface StreamEvent {
@@ -68,7 +71,7 @@ export const createStorybookStream = async (
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       instruction: req.instruction,
-      style_prefix: req.style_prefix,
+      template_id: req.template_id,
       images: req.images || [],
       creator: req.creator || "user",
     }),
@@ -139,6 +142,7 @@ export const listStorybooks = async (params?: {
   creator?: string;
   title?: string;
   status?: string;
+  is_public?: boolean;
   limit?: number;
   offset?: number;
 }): Promise<StorybookListItem[]> => {
@@ -146,6 +150,7 @@ export const listStorybooks = async (params?: {
   if (params?.creator) queryParams.append("creator", params.creator);
   if (params?.title) queryParams.append("title", params.title);
   if (params?.status) queryParams.append("status", params.status);
+  if (params?.is_public !== undefined) queryParams.append("is_public", params.is_public.toString());
   if (params?.limit) queryParams.append("limit", params.limit.toString());
   if (params?.offset) queryParams.append("offset", params.offset.toString());
 
@@ -168,24 +173,82 @@ export const getStorybook = async (storybookId: number): Promise<Storybook> => {
 };
 
 /**
- * 编辑绘本
+ * 流式编辑绘本（创建新版本）
+ * @param storybookId 原绘本ID
+ * @param req 编辑请求
+ * @param onEvent 事件回调函数
+ * @returns Promise，在流结束时 resolve，返回新创建的 storybook ID
  */
-export const editStorybook = async (
+export const editStorybookStream = async (
   storybookId: number,
-  req: EditStorybookRequest
-): Promise<Storybook> => {
-  const res = await fetch(`${API_BASE}/${storybookId}`, {
+  req: EditStorybookRequest,
+  onEvent: StreamEventHandler
+): Promise<number> => {
+  const res = await fetch(`${API_BASE}/${storybookId}/stream`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       instruction: req.instruction,
+      images: req.images || [],
     }),
   });
+
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: "Unknown error" }));
     throw new Error(error.detail || `Failed to edit storybook: ${res.status}`);
   }
-  return res.json() as Promise<Storybook>;
+
+  const reader = res.body?.getReader();
+  if (!reader) {
+    throw new Error("No response body");
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let storybookId_new: number | undefined;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // 处理 SSE 格式的数据
+      const lines = buffer.split("\n\n");
+      buffer = lines.pop() || ""; // 保留未完成的行
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+
+        // 解析 SSE 数据行
+        const dataLine = line.split("\n").find((l) => l.startsWith("data: "));
+        if (!dataLine) continue;
+
+        const data = dataLine.slice(6); // 移除 "data: " 前缀
+
+        if (data === "[DONE]") {
+          return storybookId_new!;
+        }
+
+        try {
+          const event: StreamEvent = JSON.parse(data);
+          onEvent(event);
+
+          // 提取新 storybook ID
+          if (event.type === "storybook_created" && event.data.id) {
+            storybookId_new = event.data.id;
+          }
+        } catch (e) {
+          console.error("Failed to parse SSE event:", e);
+        }
+      }
+    }
+
+    return storybookId_new!;
+  } finally {
+    reader.releaseLock();
+  }
 };
 
 /**
@@ -220,5 +283,23 @@ export const deleteStorybook = async (storybookId: number): Promise<void> => {
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: "Unknown error" }));
     throw new Error(error.detail || `Failed to delete storybook: ${res.status}`);
+  }
+};
+
+/**
+ * 更新绘本公开状态
+ */
+export const updateStorybookPublicStatus = async (
+  storybookId: number,
+  isPublic: boolean
+): Promise<void> => {
+  const res = await fetch(`${API_BASE}/${storybookId}/public`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ is_public: isPublic }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: "Unknown error" }));
+    throw new Error(error.detail || `Failed to update public status: ${res.status}`);
   }
 };

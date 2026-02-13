@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StoryPage, StoryTemplate, ChatMessage } from '../types';
 import { ChevronLeft, ChevronRight, Send, Sparkles, BookOpen, Download, RefreshCw, Palette, UserCircle, ShieldCheck, Anchor } from 'lucide-react';
-import { chatWithStoryteller } from '../services/geminiService';
+// Note: chatWithStoryteller function has been removed as chat functionality is no longer supported
 
 interface EditorViewProps {
   title: string;
@@ -42,8 +42,9 @@ const EditorView: React.FC<EditorViewProps> = ({
     setChatHistory(prev => [...prev, { role: 'user', content: msg }]);
     setIsTyping(true);
     try {
-      const res = await chatWithStoryteller([], msg);
-      setChatHistory(prev => [...prev, { role: 'model', content: res || "收到，我正在记录。" }]);
+      // Chat functionality has been removed
+      // The storybook editing is now handled through the storybook API endpoints
+      setChatHistory(prev => [...prev, { role: 'model', content: "对话功能已移除，请使用绘本编辑API进行故事修改。" }]);
     } catch {
       setChatHistory(prev => [...prev, { role: 'model', content: "抱歉，出错了。" }]);
     } finally {

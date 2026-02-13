@@ -1,49 +1,72 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { StoryTemplate } from '../types';
-import { TEMPLATES } from '../constants';
-import { Sparkles, Upload, ArrowRight, X, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
-import { CreateStorybookRequest } from '../services/storybookService';
+import { Sparkles, ChevronLeft, ChevronRight, Loader2, FileText } from 'lucide-react';
+import { CreateStorybookRequest, listStorybooks, StorybookListItem } from '../services/storybookService';
+import { listTemplates, TemplateListItem } from '../services/templateService';
+import StorybookPreview from '../components/StorybookPreview';
+import FloatingInputBox from '../components/FloatingInputBox';
 
 interface HomeViewProps {
   onStart?: (params: CreateStorybookRequest) => void;
   onShowMyWorks?: () => void;
+  onShowMyTemplates?: () => void;
 }
 
-const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks }) => {
-  const [prompt, setPrompt] = useState('');
-  const [selectedTemplate, setSelectedTemplate] = useState<StoryTemplate | null>(null);
+const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTemplates }) => {
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateListItem | null>(null);
+  const [templates, setTemplates] = useState<TemplateListItem[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(true);
+  const [publicStorybooks, setPublicStorybooks] = useState<StorybookListItem[]>([]);
+  const [loadingPublicBooks, setLoadingPublicBooks] = useState(true);
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
-  const [inputExpanded, setInputExpanded] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generationStatus, setGenerationStatus] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const barRef = useRef<HTMLDivElement>(null);
   const carouselSectionRef = useRef<HTMLDivElement>(null);
   const carouselRef = useRef<HTMLDivElement>(null);
   const [carouselPaused, setCarouselPaused] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const [needsCarousel, setNeedsCarousel] = useState(false);
 
-  const expand = useCallback(() => setInputExpanded(true), []);
+  // Load templates from API
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        setLoadingTemplates(true);
+        const data = await listTemplates({ is_active: true, limit: 50 });
+        setTemplates(data);
+      } catch (err) {
+        console.error('Failed to load templates:', err);
+        setError('无法加载模版列表');
+      } finally {
+        setLoadingTemplates(false);
+      }
+    };
+    fetchTemplates();
+  }, []);
+
+  // Load public storybooks for Community Creations
+  useEffect(() => {
+    const fetchPublicStorybooks = async () => {
+      try {
+        setLoadingPublicBooks(true);
+        const data = await listStorybooks({
+          is_public: true,
+          status: 'finished',
+          limit: 100
+        });
+        setPublicStorybooks(data);
+      } catch (err) {
+        console.error('Failed to load public storybooks:', err);
+      } finally {
+        setLoadingPublicBooks(false);
+      }
+    };
+    fetchPublicStorybooks();
+  }, []);
 
   const handleClickOutside = useCallback((e: MouseEvent) => {
-    if (
-      barRef.current &&
-      !barRef.current.contains(e.target as Node) &&
-      !prompt.trim() &&
-      uploadedImages.length === 0
-    ) {
-      setInputExpanded(false);
-    }
-    // Deselect template when clicking outside carousel
-    if (
-      carouselSectionRef.current &&
-      !carouselSectionRef.current.contains(e.target as Node)
-    ) {
-      setSelectedTemplate(null);
-    }
     // Close user menu when clicking outside the menu
     if (
       userMenuOpen &&
@@ -52,47 +75,25 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks }) => {
     ) {
       setUserMenuOpen(false);
     }
-  }, [prompt, uploadedImages.length, userMenuOpen]);
+  }, [userMenuOpen]);
 
   useEffect(() => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [handleClickOutside]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    Array.from(files).forEach((file) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setUploadedImages((prev) => [...prev, reader.result as string]);
-      };
-      reader.readAsDataURL(file);
-    });
-
-    // Reset so re-selecting the same file still triggers onChange
-    e.target.value = '';
-  };
-
-  const removeImage = (index: number) => {
-    setUploadedImages((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleStart = async () => {
-    if (!prompt.trim() || isCreating) return;
+  const handleStart = (instruction: string) => {
+    if (!instruction.trim() || isCreating) return;
 
     setIsCreating(true);
     setError(null);
     setGenerationStatus('正在跳转到编辑器...');
 
     try {
-      const template = selectedTemplate ?? TEMPLATES[0];
-
       // 不发起请求，直接跳转到 EditorView 并传递创建参数
-      const createParams = {
-        instruction: prompt,
-        style_prefix: template.name,
+      const createParams: CreateStorybookRequest = {
+        instruction,
+        template_id: selectedTemplate?.id,
         images: uploadedImages.length > 0 ? uploadedImages : undefined,
         creator: 'user'
       };
@@ -109,13 +110,25 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks }) => {
     }
   };
 
-  const isOpen = inputExpanded || !!prompt.trim() || uploadedImages.length > 0;
+  const handleImageAdd = (newImages: string[]) => {
+    setUploadedImages((prev) => [...prev, ...newImages]);
+  };
+
+  const handleImageRemove = (index: number) => {
+    setUploadedImages((prev) => prev.filter((_, i) => i !== index));
+  };
 
   // Carousel auto-scroll — smooth continuous motion via requestAnimationFrame
   useEffect(() => {
     if (carouselPaused || selectedTemplate) return;
     const el = carouselRef.current;
     if (!el) return;
+
+    // 只有当内容宽度超出容器宽度时才启动自动滚动
+    const isOverflowing = el.scrollWidth > el.clientWidth;
+    setNeedsCarousel(isOverflowing);
+    if (!isOverflowing) return;
+
     let animId: number;
     const speed = 0.5; // px per frame
     const step = () => {
@@ -128,7 +141,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks }) => {
     };
     animId = requestAnimationFrame(step);
     return () => cancelAnimationFrame(animId);
-  }, [carouselPaused, selectedTemplate]);
+  }, [carouselPaused, selectedTemplate, templates.length]);
 
   const scrollCarousel = (dir: number) => {
     const el = carouselRef.current;
@@ -137,7 +150,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks }) => {
   };
 
   return (
-    <div className="relative flex-1 flex flex-col items-center py-12 px-4 pb-40 max-w-6xl mx-auto w-full">
+    <div className="relative flex-1 flex flex-col items-center py-12 px-4 pb-32 max-w-6xl mx-auto w-full">
       {/* Hero Section */}
       <header className="text-center mb-12">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 font-medium text-sm mb-4">
@@ -183,6 +196,16 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks }) => {
                 <Sparkles size={16} className="text-indigo-500" />
                 <span>我的作品</span>
               </button>
+              <button
+                onClick={() => {
+                  onShowMyTemplates?.();
+                  setUserMenuOpen(false);
+                }}
+                className="w-full px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors duration-200 flex items-center gap-2 border-t border-slate-100"
+              >
+                <FileText size={16} className="text-indigo-500" />
+                <span>我的模版</span>
+              </button>
             </div>
           )}
         </div>
@@ -190,7 +213,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks }) => {
 
       {/* Style Templates — Carousel */}
       <section className="w-full mb-16">
-        <h2 className="text-2xl font-bold font-lexend text-slate-900 mb-8 text-center">Choose Your Art Style</h2>
+        <h2 className="text-2xl font-bold font-lexend text-slate-900 mb-8 text-center">选择你的艺术风格</h2>
         <div
           ref={carouselSectionRef}
           className="relative group/carousel"
@@ -215,29 +238,36 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks }) => {
             className="flex gap-5 overflow-x-auto px-8 pb-2
                        [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
           >
-            {[...TEMPLATES, ...TEMPLATES].map((tmpl, idx) => (
-              <button
-                key={`${tmpl.id}-${idx}`}
-                onClick={() => setSelectedTemplate(tmpl)}
-                className={`group shrink-0 w-60 flex flex-col text-left rounded-2xl overflow-hidden border-2 transition-all duration-300 ${
-                  selectedTemplate?.id === tmpl.id
-                  ? 'border-indigo-600 ring-4 ring-indigo-50 shadow-lg'
-                  : 'border-white bg-white hover:border-slate-200 shadow-sm'
-                }`}
-              >
-                <div className="h-40 overflow-hidden">
-                  <img
-                    src={tmpl.previewUrl}
-                    alt={tmpl.name}
-                    className="w-full h-full object-cover transition-transform group-hover:scale-110"
-                  />
-                </div>
-                <div className="p-4">
-                  <h3 className="font-bold text-slate-900 mb-1">{tmpl.name}</h3>
-                  <p className="text-xs text-slate-500 line-clamp-2">{tmpl.description}</p>
-                </div>
-              </button>
-            ))}
+            {loadingTemplates ? (
+              <div className="flex items-center justify-center w-full py-12">
+                <Loader2 size={32} className="text-indigo-600 animate-spin" />
+              </div>
+            ) : templates.length === 0 ? (
+              <div className="flex items-center justify-center w-full py-12 text-slate-500">
+                暂无可用模版
+              </div>
+            ) : (
+              // 只有在需要轮播时才复制模版，否则显示原始列表
+              (needsCarousel ? [...templates, ...templates] : templates).map((tmpl, idx) => (
+                <button
+                  key={`${tmpl.id}-${idx}`}
+                  onClick={() => setSelectedTemplate(tmpl)}
+                  className={`group shrink-0 w-60 flex flex-col text-left rounded-2xl overflow-hidden border-2 transition-all duration-300 ${
+                    selectedTemplate?.id === tmpl.id
+                    ? 'border-indigo-600 ring-4 ring-indigo-50 shadow-lg'
+                    : 'border-white bg-white hover:border-slate-200 shadow-sm'
+                  }`}
+                >
+                  <div className="h-40 overflow-hidden bg-slate-100 flex items-center justify-center">
+                    <span className="text-4xl">📚</span>
+                  </div>
+                  <div className="p-4">
+                    <h3 className="font-bold text-slate-900 mb-1">{tmpl.name}</h3>
+                    <p className="text-xs text-slate-500 line-clamp-2">{tmpl.description || '暂无描述'}</p>
+                  </div>
+                </button>
+              ))
+            )}
           </div>
 
           {/* Right arrow */}
@@ -255,166 +285,52 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks }) => {
       </section>
 
       {/* Showcase Area */}
-      <section className="w-full bg-slate-900 rounded-[3rem] py-16 px-8 text-center text-white">
+      <section className="w-full bg-slate-900 rounded-[3rem] py-16 px-8 text-center text-white my-16">
         <h2 className="text-3xl font-bold font-lexend mb-4">Community Creations</h2>
-        <p className="text-slate-400 mb-10">See what others have imagined with DreamWeave.</p>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          {[1,2,3,4,5].map(i => (
-            <div key={i} className="aspect-square bg-slate-800 rounded-2xl overflow-hidden hover:opacity-80 transition-opacity">
-              <img src={`https://picsum.photos/seed/creation-${i}/300/300`} alt="Creation" className="w-full h-full object-cover" />
-            </div>
-          ))}
-        </div>
+        <p className="text-slate-400 mb-10">See what others have imagined with AIrchieve.</p>
+
+        {loadingPublicBooks ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 size={32} className="text-indigo-400 animate-spin" />
+          </div>
+        ) : publicStorybooks.length === 0 ? (
+          <div className="py-12 text-slate-500">
+            <p className="text-lg">还没有公开的作品</p>
+            <p className="text-sm mt-2">成为第一个分享作品的人吧！</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            {publicStorybooks.slice(0, 10).map((book) => (
+              <StorybookPreview
+                key={book.id}
+                storybook={book}
+                onClick={(id) => {
+                  // TODO: 可以添加点击后查看详情的功能
+                  console.log('View storybook:', id);
+                }}
+              />
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Floating Input Bar */}
-      <div
-        ref={barRef}
-        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-2xl"
-        onMouseEnter={expand}
-      >
-        {/* Glassmorphism container */}
-        <div
-          className={`
-            relative overflow-hidden rounded-2xl
-            border border-white/30
-            bg-gradient-to-br from-white/70 via-white/60 to-indigo-50/50
-            backdrop-blur-xl
-            shadow-[0_8px_40px_rgba(99,102,241,0.12)]
-            transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]
-            ${isOpen ? 'p-5' : 'p-3'}
-          `}
-        >
-          {/* Subtle shimmer overlay */}
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-60" />
-
-          {/* Error message */}
-          {error && (
-            <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200">
-              <p className="text-sm text-red-600">{error}</p>
-            </div>
-          )}
-
-          {/* Generation status */}
-          {generationStatus && (
-            <div className="mb-3 p-3 rounded-lg bg-indigo-50 border border-indigo-200">
-              <div className="flex items-center gap-2">
-                <Loader2 size={16} className="text-indigo-600 animate-spin" />
-                <p className="text-sm text-indigo-600">{generationStatus}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Image thumbnails row */}
-          {uploadedImages.length > 0 && (
-            <div className="relative flex items-center gap-2 mb-3 overflow-x-auto pb-1">
-              {uploadedImages.map((src, i) => (
-                <div
-                  key={i}
-                  className="group/thumb relative shrink-0 w-12 h-12 rounded-lg overflow-hidden
-                             border border-white/40 shadow-sm"
-                >
-                  <img src={src} alt={`Upload ${i + 1}`} className="w-full h-full object-cover" />
-                  <button
-                    onClick={() => removeImage(i)}
-                    className="absolute inset-0 flex items-center justify-center
-                               bg-black/40 opacity-0 group-hover/thumb:opacity-100
-                               transition-opacity duration-200"
-                  >
-                    <X size={14} className="text-white" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Expanded textarea area */}
-          <div
-            className={`
-              transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] overflow-hidden
-              ${isOpen ? 'max-h-40 opacity-100 mb-3' : 'max-h-0 opacity-0 mb-0'}
-            `}
-          >
-            <textarea
-              className="w-full p-3 rounded-xl
-                         bg-white/50 border border-white/40 backdrop-blur-sm
-                         focus:bg-white/70 focus:ring-0 focus:outline-none
-                         transition-all duration-300 text-sm text-slate-800
-                         placeholder:text-slate-400 resize-none leading-relaxed"
-              rows={3}
-              placeholder="Describe your story idea... A little squirrel named Nutty discovers a secret door in an old oak tree..."
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onFocus={expand}
-            />
-          </div>
-
-          {/* Bottom action row */}
-          <div className="relative flex items-center gap-2">
-            {/* Upload button — slides in when expanded */}
-            <input
-              type="file"
-              className="hidden"
-              ref={fileInputRef}
-              accept="image/*"
-              multiple
-              onChange={handleFileChange}
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className={`
-                flex items-center justify-center shrink-0
-                rounded-xl border border-white/40 bg-white/40 backdrop-blur-sm
-                hover:bg-white/70 transition-all duration-500
-                ${isOpen
-                  ? 'w-10 h-10 opacity-100 scale-100'
-                  : 'w-0 h-10 opacity-0 scale-75 border-0 p-0 overflow-hidden'}
-              `}
-              title="Upload character references"
-            >
-              <Upload size={16} className="text-slate-500" />
-            </button>
-
-            {/* Collapsed: placeholder bar */}
-            {!isOpen && (
-              <div
-                className="flex-1 flex items-center gap-2 px-4 py-2.5 rounded-xl
-                           bg-white/40 border border-white/40 backdrop-blur-sm
-                           cursor-text text-slate-400 text-sm
-                           hover:bg-white/60 transition-all duration-300"
-                onClick={expand}
-              >
-                <Sparkles size={14} className="text-indigo-400 shrink-0" />
-                <span>What story will you create today?</span>
-              </div>
-            )}
-
-            {/* Expanded: selected style pill */}
-            {isOpen && (
-              <div className="flex-1 flex items-center gap-1.5 px-3 py-2 rounded-xl
-                              bg-white/30 border border-white/30 text-xs text-slate-500 truncate">
-                <span className={`w-2 h-2 rounded-full shrink-0 ${selectedTemplate ? 'bg-indigo-400' : 'bg-slate-300'}`} />
-                <span className="truncate">{selectedTemplate ? selectedTemplate.name : 'No style selected'}</span>
-              </div>
-            )}
-
-            {/* Send button */}
-            <button
-              disabled={!prompt.trim()}
-              onClick={handleStart}
-              className={`
-                shrink-0 flex items-center justify-center w-10 h-10
-                rounded-xl font-bold text-white
-                transition-all duration-500
-                ${prompt.trim()
-                  ? 'bg-gradient-to-r from-indigo-500 to-violet-500 shadow-lg shadow-indigo-200/50 hover:shadow-indigo-300/60 hover:scale-105 active:scale-95'
-                  : 'bg-slate-300/60 backdrop-blur-sm cursor-not-allowed'}
-              `}
-            >
-              <ArrowRight size={18} />
-            </button>
-          </div>
-        </div>
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-2xl">
+        <FloatingInputBox
+          placeholder="描述你的故事创意... 比如：一只名叫 Nutty 的小松鼠在一棵老橡树中发现了一扇神秘的门..."
+          collapsedPlaceholder="今天你想创作什么故事？"
+          onSubmit={handleStart}
+          isLoading={isCreating}
+          error={error}
+          loadingMessage={generationStatus || '处理中...'}
+          templates={templates}
+          selectedTemplate={selectedTemplate}
+          onTemplateSelect={setSelectedTemplate}
+          loadingTemplates={loadingTemplates}
+          uploadedImages={uploadedImages}
+          onImageAdd={handleImageAdd}
+          onImageRemove={handleImageRemove}
+        />
       </div>
     </div>
   );

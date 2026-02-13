@@ -1,13 +1,15 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, BookOpen, Edit2, Loader2, Trash2, Plus, Sparkles, AlertCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BookOpen, Loader2, Trash2, Plus, Sparkles, AlertCircle, Download, PenTool, Edit2, Lock, Globe } from 'lucide-react';
+import FloatingInputBox from '../components/FloatingInputBox';
 import {
   getStorybook,
   listStorybooks,
-  editStorybook,
+  editStorybookStream,
   editStorybookPage,
   deleteStorybook,
   createStorybookStream,
+  updateStorybookPublicStatus,
   StreamEvent,
   CreateStorybookRequest,
   Storybook,
@@ -44,15 +46,17 @@ const EditorView: React.FC<EditorViewProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [currentSpreadIndex, setCurrentSpreadIndex] = useState(0);
   const [editingPage, setEditingPage] = useState<number | null>(null);
-  const [editPrompt, setEditPrompt] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [pageDirection, setPageDirection] = useState<'left' | 'right' | null>(null);
   const [animatingPageIndex, setAnimatingPageIndex] = useState<number | null>(null);
+  const [showFloatingInput, setShowFloatingInput] = useState(false);
 
   // 是否正在创建绘本
   const [isCreating, setIsCreating] = useState(false);
   // 保存创建参数，用于出错时重新生成
   const [savedCreateParams, setSavedCreateParams] = useState<CreateStorybookRequest | null>(null);
+  // 使用 ref 追踪上一次的 createParams，防止 Strict Mode 双重调用
+  const prevCreateParamsRef = React.useRef<CreateStorybookRequest | null>(null);
 
   // 加载绘本列表
   useEffect(() => {
@@ -117,6 +121,11 @@ const EditorView: React.FC<EditorViewProps> = ({
   useEffect(() => {
     if (!createParams || isCreating) return;
 
+    // 使用 ref 防止 React Strict Mode 双重调用导致的重复请求
+    // 检查是否与上一次的 createParams 相同（通过引用比较）
+    if (prevCreateParamsRef.current === createParams) return;
+    prevCreateParamsRef.current = createParams;
+
     // 立即设置 isCreating，防止重复执行
     setIsCreating(true);
 
@@ -158,7 +167,7 @@ const EditorView: React.FC<EditorViewProps> = ({
                 break;
               case 'generation_error':
               case 'error':
-                // 生成出错，刷新绘本详情和列表以获��错误状态
+                // 生成出错，刷新绘本详情和列表以获取错误状态
                 if (createdStorybookId) {
                   loadStorybook(createdStorybookId);
                 }
@@ -248,34 +257,90 @@ const EditorView: React.FC<EditorViewProps> = ({
     }
   };
 
-  // 编辑绘本
-  const handleEditStorybook = async () => {
-    if (!currentStorybook || !editPrompt.trim() || isEditing) return;
+  const handleTogglePublic = async (id: number, currentIsPublic: boolean, e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    try {
+      await updateStorybookPublicStatus(id, !currentIsPublic);
+      // 更新列表中的状态
+      setStorybookList(prevList =>
+        prevList.map(book =>
+          book.id === id ? { ...book, is_public: !currentIsPublic } : book
+        )
+      );
+    } catch (err) {
+      console.error('Failed to toggle public status:', err);
+      alert('更新公开状态失败');
+    }
+  };
+
+  // 编辑绘本（流式版本）
+  const handleEditStorybook = async (instruction: string) => {
+    if (!currentStorybook || !instruction.trim() || isEditing) return;
 
     setIsEditing(true);
+    setLoading(true);
+    setError(null);
+
     try {
-      const updated = await editStorybook(currentStorybook.id, { instruction: editPrompt });
-      setCurrentStorybook(updated);
-      setEditPrompt('');
-      alert('绘本已更新！');
+      let newStorybookId: number | undefined;
+
+      await editStorybookStream(
+        currentStorybook.id,
+        { instruction },
+        (event: StreamEvent) => {
+          console.log('Edit stream event:', event);
+
+          switch (event.type) {
+            case 'storybook_created':
+              // 收到 storybook_created 事件，保存新绘本ID并立即跳转
+              newStorybookId = event.data.id;
+              if (event.data.id) {
+                // 立即加载新绘本详情
+                loadStorybook(event.data.id);
+                // 刷新绘本列表
+                loadStorybookList();
+              }
+              break;
+            case 'generation_started':
+              // 更新状态为生成中
+              break;
+            case 'generation_completed':
+              // 生成完成，刷新绘本详情
+              if (newStorybookId) {
+                loadStorybook(newStorybookId);
+              }
+              break;
+            case 'generation_error':
+            case 'error':
+              // 生成出错，刷新绘本详情和列表以获取错误状态
+              if (newStorybookId) {
+                loadStorybook(newStorybookId);
+              }
+              loadStorybookList();
+              break;
+          }
+        }
+      );
     } catch (err) {
       console.error('Failed to edit storybook:', err);
-      alert('编辑失败');
+      setError(err instanceof Error ? err.message : '编辑绘本失败');
     } finally {
       setIsEditing(false);
+      setLoading(false);
     }
   };
 
   // 编辑单页
-  const handleEditPage = async (pageIndex: number) => {
-    if (!currentStorybook || !editPrompt.trim() || isEditing) return;
+  const handleEditPage = async (instruction: string) => {
+    if (!currentStorybook || !instruction.trim() || isEditing || editingPage === null) return;
 
     setIsEditing(true);
-    setEditingPage(null);
     try {
-      const updated = await editStorybookPage(currentStorybook.id, pageIndex, { instruction: editPrompt });
+      const updated = await editStorybookPage(currentStorybook.id, editingPage, { instruction });
       setCurrentStorybook(updated);
-      setEditPrompt('');
+      setEditingPage(null);
+      setShowFloatingInput(false);
       alert('页面已更新！');
     } catch (err) {
       console.error('Failed to edit page:', err);
@@ -333,7 +398,7 @@ const EditorView: React.FC<EditorViewProps> = ({
   }, [nextSpread, prevSpread]);
 
   return (
-    <div className="flex-1 flex flex-col h-screen overflow-hidden bg-[#E2E8F0]">
+    <div className="flex-1 flex flex-col overflow-hidden bg-[#E2E8F0]">
       {/* Header */}
       <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-4 md:px-8 z-30 shrink-0">
         <div className="flex items-center gap-4">
@@ -355,17 +420,42 @@ const EditorView: React.FC<EditorViewProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {/* 编辑绘本按钮 */}
           <button
             onClick={() => {
-              if (editPrompt.trim()) {
-                handleEditStorybook();
-              }
+              setEditingPage(null);
+              setShowFloatingInput(true);
             }}
-            disabled={!editPrompt.trim() || isEditing}
-            className="hidden md:flex items-center gap-2 px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            disabled={!currentStorybook || currentStorybook.status !== 'finished'}
+            className="hidden md:flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl text-sm font-bold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-indigo-500/50 hover:-translate-y-0.5 active:translate-y-0 group relative overflow-hidden"
           >
-            <Edit2 size={16} />
-            {isEditing ? '编辑中...' : '编辑绘本'}
+            <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <PenTool size={16} className="relative z-10 group-hover:rotate-12 transition-transform duration-300" />
+            <span className="relative z-10">编辑绘本</span>
+          </button>
+
+          {/* 导出绘本按钮 */}
+          <button
+            onClick={() => {
+              // TODO: 实现导出功能
+              alert('导出功能开发中...');
+            }}
+            disabled={!currentStorybook || currentStorybook.status !== 'finished'}
+            className="hidden md:flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl text-sm font-bold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-emerald-500/50 hover:-translate-y-0.5 active:translate-y-0 group relative overflow-hidden"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-teal-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <Download size={16} className="relative z-10 group-hover:translate-y-0.5 transition-transform duration-300" />
+            <span className="relative z-10">导出绘本</span>
+          </button>
+
+          {/* 制作绘本按钮 */}
+          <button
+            onClick={onCreateNew}
+            className="hidden md:flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl text-sm font-bold transition-all duration-300 hover:shadow-lg hover:shadow-amber-500/50 hover:-translate-y-0.5 active:translate-y-0 group relative overflow-hidden"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-amber-600 to-orange-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <Sparkles size={16} className="relative z-10 group-hover:scale-110 group-hover:rotate-12 transition-transform duration-300" />
+            <span className="relative z-10">制作绘本</span>
           </button>
         </div>
       </header>
@@ -388,7 +478,7 @@ const EditorView: React.FC<EditorViewProps> = ({
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/30">
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/30 custom-scrollbar">
             {storybookList.length === 0 ? (
               <div className="text-center py-10 px-4">
                 <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -415,19 +505,43 @@ const EditorView: React.FC<EditorViewProps> = ({
                       <p className="text-xs text-slate-400 mt-1">
                         {new Date(book.created_at).toLocaleDateString()}
                       </p>
-                      <span className={`inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                        book.status === 'finished'
-                          ? 'bg-green-100 text-green-700'
-                          : book.status === 'init'
-                          ? 'bg-gray-100 text-gray-700'
-                          : book.status === 'creating' || book.status === 'updating'
-                          ? 'bg-blue-100 text-blue-700'
-                          : book.status === 'error'
-                          ? 'bg-red-100 text-red-700'
-                          : 'bg-gray-100 text-gray-700'
-                      }`}>
-                        {statusTextMap[book.status] || book.status}
-                      </span>
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          book.status === 'finished'
+                            ? 'bg-green-100 text-green-700'
+                            : book.status === 'init'
+                            ? 'bg-gray-100 text-gray-700'
+                            : book.status === 'creating' || book.status === 'updating'
+                            ? 'bg-blue-100 text-blue-700'
+                            : book.status === 'error'
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-gray-100 text-gray-700'
+                        }`}>
+                          {statusTextMap[book.status] || book.status}
+                        </span>
+                        {/* 公开/私密标识 */}
+                        <button
+                          onClick={(e) => handleTogglePublic(book.id, book.is_public, e)}
+                          className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all ${
+                            book.is_public
+                              ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                          title={book.is_public ? '点击设为私密' : '点击设为公开'}
+                        >
+                          {book.is_public ? (
+                            <>
+                              <Globe size={10} />
+                              <span>公开</span>
+                            </>
+                          ) : (
+                            <>
+                              <Lock size={10} />
+                              <span>私密</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
                     <button
                       onClick={(e) => handleDelete(book.id, e)}
@@ -440,54 +554,43 @@ const EditorView: React.FC<EditorViewProps> = ({
               ))
             )}
           </div>
-
-          {/* Edit Panel */}
-          {currentStorybook && editingPage === null && (
-            <div className="p-4 bg-white border-t border-slate-100">
-              <p className="text-xs font-bold text-slate-500 mb-2 uppercase">编辑绘本</p>
-              <textarea
-                placeholder="描述你想要的修改... (例如: 让故事更感人一些)"
-                className="w-full bg-slate-100 border-none rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-indigo-100 resize-none"
-                rows={3}
-                value={editPrompt}
-                onChange={(e) => setEditPrompt(e.target.value)}
-              />
-            </div>
-          )}
-
-          {/* Edit Page Panel */}
-          {editingPage !== null && (
-            <div className="p-4 bg-white border-t border-slate-100">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-bold text-slate-500 uppercase">编辑第 {editingPage + 1} 页</p>
-                <button
-                  onClick={() => setEditingPage(null)}
-                  className="text-xs text-slate-400 hover:text-slate-600"
-                >
-                  取消
-                </button>
-              </div>
-              <textarea
-                placeholder="描述你想要的修改... (例如: 把兔子画得更可爱一些)"
-                className="w-full bg-slate-100 border-none rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-indigo-100 resize-none mb-2"
-                rows={3}
-                value={editPrompt}
-                onChange={(e) => setEditPrompt(e.target.value)}
-              />
-              <button
-                onClick={() => handleEditPage(editingPage)}
-                disabled={!editPrompt.trim() || isEditing}
-                className="w-full py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all disabled:opacity-50"
-              >
-                {isEditing ? '编辑中...' : '应用修改'}
-              </button>
-            </div>
-          )}
         </aside>
 
         {/* Right: Book Workspace - Only show when storybook is selected */}
         {currentStorybook && (
           <main className="flex-1 relative flex flex-col items-center justify-center p-4 md:p-8 lg:p-12 overflow-hidden">
+            {/* Floating Input Box Overlay */}
+            {showFloatingInput && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm">
+                <FloatingInputBox
+                  visible={showFloatingInput}
+                  placeholder={
+                    editingPage !== null
+                      ? "描述你想要的修改... (例如: 把兔子画得更可爱一些)"
+                      : "描述你想要的修改... (例如: 让故事更感人一些)"
+                  }
+                  collapsedPlaceholder={editingPage !== null ? `编辑第 ${editingPage + 1} 页...` : "编辑绘本..."}
+                  onSubmit={(text) => {
+                    if (editingPage !== null) {
+                      handleEditPage(text);
+                    } else {
+                      handleEditStorybook(text);
+                    }
+                  }}
+                  onCancel={() => {
+                    setEditingPage(null);
+                    setShowFloatingInput(false);
+                  }}
+                  isLoading={isEditing}
+                  error={error}
+                  loadingMessage={editingPage !== null ? "编辑页面中..." : "编辑绘本中..."}
+                  mode={editingPage !== null ? `编辑第 ${editingPage + 1} 页` : "编辑绘本"}
+                  disabled={!currentStorybook || currentStorybook.status !== 'finished'}
+                  showCancelButton={true}
+                />
+              </div>
+            )}
+
             {error && (
               <div className="absolute top-8 bg-white text-slate-900 px-6 py-4 rounded-2xl border-l-4 border-amber-500 font-medium text-sm z-50 shadow-2xl flex items-center gap-4 animate-in slide-in-from-top-4 duration-500">
                 <AlertCircle className="text-amber-500 shrink-0" size={24} />
@@ -652,7 +755,10 @@ const EditorView: React.FC<EditorViewProps> = ({
                             />
                             {/* 编辑按钮 */}
                             <button
-                              onClick={() => setEditingPage(idx)}
+                              onClick={() => {
+                                setEditingPage(idx);
+                                setShowFloatingInput(true);
+                              }}
                               className="absolute top-4 right-4 p-2 bg-white/90 hover:bg-white backdrop-blur rounded-lg text-indigo-600 transition-all shadow-lg z-20"
                               title="编辑此页"
                             >
@@ -710,6 +816,52 @@ const EditorView: React.FC<EditorViewProps> = ({
       <style>{`
         .book-paper-texture {
           background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4' viewBox='0 0 4 4'%3E%3Cpath fill='%23000000' fill-opacity='0.02' d='M1 3h1v1H1V3zm2-2h1v1H3V1z'%3E%3C/path%3E%3C/svg%3E");
+        }
+
+        /* 按钮脉冲效果 */
+        @keyframes pulse-glow {
+          0%, 100% {
+            box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4);
+          }
+          50% {
+            box-shadow: 0 0 0 8px rgba(99, 102, 241, 0);
+          }
+        }
+
+        /* 添加微妙的呼吸动画 */
+        @keyframes breathe {
+          0%, 100% {
+            transform: scale(1);
+          }
+          50% {
+            transform: scale(1.02);
+          }
+        }
+
+        /* 自定义滚动条样式 */
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: #f1f5f9;
+          border-radius: 10px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #cbd5e1;
+          border-radius: 10px;
+          transition: background 0.2s;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #94a3b8;
+        }
+
+        /* Firefox 滚动条样式 */
+        .custom-scrollbar {
+          scrollbar-width: thin;
+          scrollbar-color: #cbd5e1 #f1f5f9;
         }
 
         /* 3D 翻页动画效果 */
