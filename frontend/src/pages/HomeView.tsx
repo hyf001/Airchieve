@@ -1,8 +1,8 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Sparkles, ChevronLeft, ChevronRight, Loader2, FileText } from 'lucide-react';
-import { CreateStorybookRequest, listStorybooks, StorybookListItem } from '../services/storybookService';
-import { listTemplates, TemplateListItem } from '../services/templateService';
+import { Sparkles, ChevronLeft, ChevronRight, Loader2, FileText, BookOpen } from 'lucide-react';
+import { CreateStorybookRequest, listStorybooks, getStorybook, StorybookListItem, Storybook } from '../services/storybookService';
+import { listTemplates, TemplateListItem, Template } from '../services/templateService';
 import StorybookPreview from '../components/StorybookPreview';
 import FloatingInputBox from '../components/FloatingInputBox';
 
@@ -16,6 +16,8 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateListItem | null>(null);
   const [templates, setTemplates] = useState<TemplateListItem[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
+  const [templateStorybooks, setTemplateStorybooks] = useState<Map<number, Storybook>>(new Map());
+  const [templateStorybookIds, setTemplateStorybookIds] = useState<Map<number, number>>(new Map());
   const [publicStorybooks, setPublicStorybooks] = useState<StorybookListItem[]>([]);
   const [loadingPublicBooks, setLoadingPublicBooks] = useState(true);
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
@@ -29,6 +31,57 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
   const userMenuRef = useRef<HTMLDivElement>(null);
   const [needsCarousel, setNeedsCarousel] = useState(false);
 
+  // Load storybooks associated with templates
+  const loadTemplateStorybooks = async (templateList: TemplateListItem[]) => {
+    try {
+      const storybookIds = new Set<number>();
+      const templateIdMap = new Map<number, number>();
+
+      // 获取每个模版的详细信息以获得 storybook_id
+      const templateDetails = await Promise.all(
+        templateList.map(async (t) => {
+          try {
+            const response = await fetch(`/api/v1/templates/${t.id}`);
+            if (response.ok) {
+              return await response.json() as Template;
+            }
+          } catch (err) {
+            console.error(`Failed to load template ${t.id} details:`, err);
+          }
+          return null;
+        })
+      );
+
+      // 收集所有 storybook_id 和建立映射
+      templateDetails.forEach(t => {
+        if (t?.storybook_id) {
+          storybookIds.add(t.storybook_id);
+          templateIdMap.set(t.id, t.storybook_id);
+        }
+      });
+
+      setTemplateStorybookIds(templateIdMap);
+
+      // 批量获取 storybooks
+      if (storybookIds.size > 0) {
+        const storybookMap = new Map<number, Storybook>();
+        await Promise.all(
+          Array.from(storybookIds).map(async (id) => {
+            try {
+              const storybook = await getStorybook(id);
+              storybookMap.set(id, storybook);
+            } catch (err) {
+              console.error(`Failed to load storybook ${id}:`, err);
+            }
+          })
+        );
+        setTemplateStorybooks(storybookMap);
+      }
+    } catch (err) {
+      console.error('Failed to load template storybooks:', err);
+    }
+  };
+
   // Load templates from API
   useEffect(() => {
     const fetchTemplates = async () => {
@@ -36,6 +89,8 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
         setLoadingTemplates(true);
         const data = await listTemplates({ is_active: true, limit: 50 });
         setTemplates(data);
+        // 加载关联的样本绘本
+        await loadTemplateStorybooks(data);
       } catch (err) {
         console.error('Failed to load templates:', err);
         setError('无法加载模版列表');
@@ -216,7 +271,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
         <h2 className="text-2xl font-bold font-lexend text-slate-900 mb-8 text-center">选择你的艺术风格</h2>
         <div
           ref={carouselSectionRef}
-          className="relative group/carousel"
+          className="relative group/carousel overflow-visible"
           onMouseEnter={() => setCarouselPaused(true)}
           onMouseLeave={() => setCarouselPaused(false)}
         >
@@ -232,12 +287,14 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
             <ChevronLeft size={18} className="text-slate-600" />
           </button>
 
-          {/* Scrollable track */}
-          <div
-            ref={carouselRef}
-            className="flex gap-5 overflow-x-auto px-8 pb-2
-                       [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-          >
+          {/* Scrollable track - wrapper without overflow */}
+          <div className="relative">
+            <div
+              ref={carouselRef}
+              className="flex gap-5 overflow-x-auto px-8 pb-2
+                         [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+              style={{ overflowY: 'visible' }}
+            >
             {loadingTemplates ? (
               <div className="flex items-center justify-center w-full py-12">
                 <Loader2 size={32} className="text-indigo-600 animate-spin" />
@@ -248,26 +305,54 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
               </div>
             ) : (
               // 只有在需要轮播时才复制模版，否则显示原始列表
-              (needsCarousel ? [...templates, ...templates] : templates).map((tmpl, idx) => (
-                <button
-                  key={`${tmpl.id}-${idx}`}
-                  onClick={() => setSelectedTemplate(tmpl)}
-                  className={`group shrink-0 w-60 flex flex-col text-left rounded-2xl overflow-hidden border-2 transition-all duration-300 ${
-                    selectedTemplate?.id === tmpl.id
-                    ? 'border-indigo-600 ring-4 ring-indigo-50 shadow-lg'
-                    : 'border-white bg-white hover:border-slate-200 shadow-sm'
-                  }`}
-                >
-                  <div className="h-40 overflow-hidden bg-slate-100 flex items-center justify-center">
-                    <span className="text-4xl">📚</span>
+              (needsCarousel ? [...templates, ...templates] : templates).map((tmpl, idx) => {
+                // 获取该模版关联的样本绘本
+                const storybookId = templateStorybookIds.get(tmpl.id);
+                const sampleStorybook = storybookId ? templateStorybooks.get(storybookId) : null;
+
+                return (
+                  <div
+                    key={`${tmpl.id}-${idx}`}
+                    className={`group shrink-0 w-60 flex flex-col text-left rounded-2xl transition-all duration-500 relative ${
+                      selectedTemplate?.id === tmpl.id
+                      ? 'shadow-[0_8px_30px_rgb(251,191,36,0.3),0_0_0_3px_rgb(251,191,36,0.4)] bg-gradient-to-br from-amber-50 via-white to-orange-50'
+                      : 'border-2 border-slate-200 bg-gradient-to-br from-slate-50 to-white hover:border-indigo-200 hover:from-indigo-50/30 hover:to-white shadow-sm hover:shadow-md'
+                    }`}
+                  >
+                    {/* 样本绘本预览 - 直接使用 StorybookPreview */}
+                    {sampleStorybook ? (
+                      <div className="rounded-t-2xl overflow-hidden">
+                        <StorybookPreview
+                          storybook={sampleStorybook as any}
+                          popupPosition="center"
+                          popupMaxWidth="80vw"
+                          popupScale={2.5}
+                        />
+                      </div>
+                    ) : (
+                      <div className="h-40 bg-slate-100 rounded-t-2xl flex items-center justify-center">
+                        <span className="text-4xl">📚</span>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => setSelectedTemplate(selectedTemplate?.id === tmpl.id ? null : tmpl)}
+                      className="p-4 text-left w-full hover:bg-slate-50/50 transition-colors rounded-b-2xl"
+                    >
+                      <h3 className="font-bold text-slate-900 mb-1">{tmpl.name}</h3>
+                      <p className="text-xs text-slate-500 line-clamp-2">{tmpl.description || '暂无描述'}</p>
+                      {sampleStorybook && (
+                        <div className="flex items-center gap-1 mt-2 text-xs text-indigo-600">
+                          <BookOpen size={12} />
+                          <span>样本绘本</span>
+                        </div>
+                      )}
+                    </button>
                   </div>
-                  <div className="p-4">
-                    <h3 className="font-bold text-slate-900 mb-1">{tmpl.name}</h3>
-                    <p className="text-xs text-slate-500 line-clamp-2">{tmpl.description || '暂无描述'}</p>
-                  </div>
-                </button>
-              ))
+                );
+              })
             )}
+          </div>
           </div>
 
           {/* Right arrow */}

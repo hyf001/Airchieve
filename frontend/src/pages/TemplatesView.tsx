@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Edit2, Trash2, Loader2, FileText, X, Save } from 'lucide-react';
+import { ArrowLeft, Plus, Edit2, Trash2, Loader2, FileText, X, Save, BookOpen } from 'lucide-react';
 import {
   listTemplates,
   createTemplate,
@@ -11,6 +11,8 @@ import {
   CreateTemplateRequest,
   UpdateTemplateRequest
 } from '../services/templateService';
+import { listStorybooks, getStorybook, StorybookListItem, Storybook } from '../services/storybookService';
+import StorybookPreview from '../components/StorybookPreview';
 
 interface TemplatesViewProps {
   onBack?: () => void;
@@ -21,13 +23,18 @@ interface TemplateFormData {
   description: string;
   instruction: string;
   systemprompt: string;
+  storybook_id: number | null;
   is_active: boolean;
   sort_order: number;
 }
 
 const TemplatesView: React.FC<TemplatesViewProps> = ({ onBack }) => {
   const [templates, setTemplates] = useState<TemplateListItem[]>([]);
+  const [templateStorybooks, setTemplateStorybooks] = useState<Map<number, Storybook>>(new Map());
+  const [templateStorybookIds, setTemplateStorybookIds] = useState<Map<number, number>>(new Map()); // template.id -> storybook_id
+  const [storybooks, setStorybooks] = useState<StorybookListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingStorybooks, setLoadingStorybooks] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
@@ -37,9 +44,64 @@ const TemplatesView: React.FC<TemplatesViewProps> = ({ onBack }) => {
     description: '',
     instruction: '',
     systemprompt: '',
+    storybook_id: null,
     is_active: true,
     sort_order: 0
   });
+
+  // Load storybooks associated with templates
+  const loadTemplateStorybooks = async (templateList: TemplateListItem[]) => {
+    try {
+      // 提取所有模版关联的 storybook_id（需要从详情API获取）
+      const storybookIds = new Set<number>();
+      const templateIdMap = new Map<number, number>(); // template.id -> storybook_id
+
+      // 获取每个模版的详细信息以获得 storybook_id
+      const templateDetails = await Promise.all(
+        templateList.map(async (t) => {
+          try {
+            const response = await fetch(`/api/v1/templates/${t.id}`);
+            if (response.ok) {
+              return await response.json() as Template;
+            }
+          } catch (err) {
+            console.error(`Failed to load template ${t.id} details:`, err);
+          }
+          return null;
+        })
+      );
+
+      // 收集所有 storybook_id 和建立映射
+      templateDetails.forEach(t => {
+        if (t?.storybook_id) {
+          storybookIds.add(t.storybook_id);
+          templateIdMap.set(t.id, t.storybook_id);
+        }
+      });
+
+      // 保存 template id 到 storybook_id 的映射
+      setTemplateStorybookIds(templateIdMap);
+
+      // 批量获取 storybooks
+      if (storybookIds.size > 0) {
+        const storybookMap = new Map<number, Storybook>();
+        await Promise.all(
+          Array.from(storybookIds).map(async (id) => {
+            try {
+              const storybook = await getStorybook(id);
+              console.log(`Loaded storybook ${id}:`, storybook);
+              storybookMap.set(id, storybook);
+            } catch (err) {
+              console.error(`Failed to load storybook ${id}:`, err);
+            }
+          })
+        );
+        setTemplateStorybooks(storybookMap);
+      }
+    } catch (err) {
+      console.error('Failed to load template storybooks:', err);
+    }
+  };
 
   // Load templates
   useEffect(() => {
@@ -53,6 +115,8 @@ const TemplatesView: React.FC<TemplatesViewProps> = ({ onBack }) => {
         const data = await listTemplates({ limit: 100 });
         if (isMounted) {
           setTemplates(data);
+          // 加载关联的 storybooks
+          await loadTemplateStorybooks(data);
         }
       } catch (err) {
         console.error('Failed to load templates:', err);
@@ -80,11 +144,30 @@ const TemplatesView: React.FC<TemplatesViewProps> = ({ onBack }) => {
       // 获取当前用户的模版，这里暂时不按用户筛选，可以后续添加用户认证
       const data = await listTemplates({ limit: 100 });
       setTemplates(data);
+      // 加载关联的 storybooks
+      await loadTemplateStorybooks(data);
     } catch (err) {
       console.error('Failed to load templates:', err);
       setError(err instanceof Error ? err.message : '加载模版失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Load storybooks for template selection
+  const loadStorybooks = async () => {
+    try {
+      setLoadingStorybooks(true);
+      const data = await listStorybooks({
+        status: 'finished',
+        is_public: true,
+        limit: 100
+      });
+      setStorybooks(data);
+    } catch (err) {
+      console.error('Failed to load storybooks:', err);
+    } finally {
+      setLoadingStorybooks(false);
     }
   };
 
@@ -95,10 +178,12 @@ const TemplatesView: React.FC<TemplatesViewProps> = ({ onBack }) => {
       description: '',
       instruction: '',
       systemprompt: '',
+      storybook_id: null,
       is_active: true,
       sort_order: 0
     });
     setShowDialog(true);
+    loadStorybooks();
   };
 
   const handleEdit = async (template: TemplateListItem) => {
@@ -114,10 +199,12 @@ const TemplatesView: React.FC<TemplatesViewProps> = ({ onBack }) => {
         description: fullTemplate.description || '',
         instruction: fullTemplate.instruction,
         systemprompt: fullTemplate.systemprompt || '',
+        storybook_id: fullTemplate.storybook_id,
         is_active: fullTemplate.is_active,
         sort_order: fullTemplate.sort_order
       });
       setShowDialog(true);
+      loadStorybooks();
     } catch (err) {
       console.error('Failed to load template details:', err);
       setError('获取模版详情失败');
@@ -157,6 +244,7 @@ const TemplatesView: React.FC<TemplatesViewProps> = ({ onBack }) => {
           description: formData.description || undefined,
           instruction: formData.instruction,
           systemprompt: formData.systemprompt || undefined,
+          storybook_id: formData.storybook_id || undefined,
           is_active: formData.is_active,
           sort_order: formData.sort_order,
           modifier: 'user' // TODO: 后续接入真实用户信息
@@ -170,6 +258,7 @@ const TemplatesView: React.FC<TemplatesViewProps> = ({ onBack }) => {
           creator: 'user', // TODO: 后续接入真实用户信息
           description: formData.description || undefined,
           systemprompt: formData.systemprompt || undefined,
+          storybook_id: formData.storybook_id || undefined,
           is_active: formData.is_active,
           sort_order: formData.sort_order
         };
@@ -250,50 +339,80 @@ const TemplatesView: React.FC<TemplatesViewProps> = ({ onBack }) => {
           ) : (
             /* Template grid */
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {templates.map((template) => (
-                <div
-                  key={template.id}
-                  className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow duration-200"
-                >
-                  <div className="p-6">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-bold text-slate-900 mb-1 line-clamp-1">
-                          {template.name}
-                        </h3>
-                        <p className="text-xs text-slate-500">
-                          创建于 {new Date(template.created_at).toLocaleDateString('zh-CN')}
-                        </p>
+              {templates.map((template) => {
+                // 获取该模版关联的样本绘本
+                const storybookId = templateStorybookIds.get(template.id);
+                const sampleStorybook = storybookId ? templateStorybooks.get(storybookId) : null;
+
+                // 调试日志
+                if (sampleStorybook) {
+                  console.log(`Template ${template.id} sample storybook:`, sampleStorybook);
+                  console.log(`Pages:`, sampleStorybook.pages);
+                }
+
+                return (
+                  <div
+                    key={template.id}
+                    className="bg-white rounded-xl border border-slate-200 hover:shadow-lg transition-shadow duration-200 flex flex-col"
+                  >
+                    {/* 样本绘本预览 */}
+                    {sampleStorybook && (
+                      <div className="p-4 pb-0">
+                        <div className="text-xs text-slate-500 mb-2 flex items-center gap-1">
+                          <BookOpen size={12} />
+                          <span>样本绘本</span>
+                        </div>
+                        <StorybookPreview
+                          storybook={sampleStorybook as any}
+                          className="w-full"
+                          popupPosition="center"
+                          popupMaxWidth="80vw"
+                          popupScale={2.5}
+                        />
                       </div>
-                      <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        template.is_active
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}>
-                        {template.is_active ? '启用' : '停用'}
+                    )}
+
+                    {/* 模版信息 */}
+                    <div className="p-6 flex-1 flex flex-col">
+                      <div className="flex items-start justify-between mb-3 overflow-hidden">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-lg font-bold text-slate-900 mb-1 truncate">
+                            {template.name}
+                          </h3>
+                          <p className="text-xs text-slate-500">
+                            创建于 {new Date(template.created_at).toLocaleDateString('zh-CN')}
+                          </p>
+                        </div>
+                        <div className={`px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 ml-2 ${
+                          template.is_active
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {template.is_active ? '启用' : '停用'}
+                        </div>
                       </div>
-                    </div>
-                    <p className="text-sm text-slate-600 line-clamp-2 mb-4 min-h-[2.5rem]">
-                      {template.description || '暂无描述'}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleEdit(template)}
-                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors duration-200"
-                      >
-                        <Edit2 size={16} />
-                        <span className="text-sm">编辑</span>
-                      </button>
-                      <button
-                        onClick={() => handleDelete(template.id, template.name)}
-                        className="flex items-center justify-center px-3 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors duration-200"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      <p className="text-sm text-slate-600 line-clamp-2 mb-4 min-h-[2.5rem] flex-1">
+                        {template.description || '暂无描述'}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleEdit(template)}
+                          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors duration-200"
+                        >
+                          <Edit2 size={16} />
+                          <span className="text-sm">编辑</span>
+                        </button>
+                        <button
+                          onClick={() => handleDelete(template.id, template.name)}
+                          className="flex items-center justify-center px-3 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors duration-200"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -375,6 +494,37 @@ const TemplatesView: React.FC<TemplatesViewProps> = ({ onBack }) => {
                     rows={4}
                     placeholder="定义AI生成内容时使用的系统级提示词"
                   />
+                </div>
+
+                {/* Sample Storybook */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    样本绘本
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={formData.storybook_id || ''}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        storybook_id: e.target.value ? parseInt(e.target.value) : null
+                      })}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent appearance-none pr-8"
+                      disabled={loadingStorybooks}
+                    >
+                      <option value="">选择一个绘本作为样本（可选）</option>
+                      {storybooks.map((storybook) => (
+                        <option key={storybook.id} value={storybook.id}>
+                          {storybook.title} {storybook.description ? `- ${storybook.description}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                      <BookOpen size={16} className="text-slate-400" />
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    选择一个已发布的绘本作为模版的参考样本，帮助AI理解期望的风格和内容
+                  </p>
                 </div>
 
                 {/* Settings Row */}
