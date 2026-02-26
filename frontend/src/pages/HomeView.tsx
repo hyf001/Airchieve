@@ -1,10 +1,11 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Sparkles, ChevronLeft, ChevronRight, Loader2, FileText, BookOpen } from 'lucide-react';
+import { Sparkles, ChevronLeft, ChevronRight, Loader2, FileText, BookOpen, LogOut, Coins, Crown } from 'lucide-react';
 import { CreateStorybookRequest, listStorybooks, getStorybook, StorybookListItem, Storybook } from '../services/storybookService';
 import { listTemplates, TemplateListItem, Template } from '../services/templateService';
 import StorybookPreview from '../components/StorybookPreview';
 import FloatingInputBox from '../components/FloatingInputBox';
+import { useAuth } from '../contexts/AuthContext';
 
 interface HomeViewProps {
   onStart?: (params: CreateStorybookRequest) => void;
@@ -12,7 +13,12 @@ interface HomeViewProps {
   onShowMyTemplates?: () => void;
 }
 
+const MEMBERSHIP_LABEL: Record<string, string> = {
+  free: '', lite: 'Lite', pro: 'Pro', max: 'Max',
+};
+
 const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTemplates }) => {
+  const { user, logout } = useAuth();
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateListItem | null>(null);
   const [templates, setTemplates] = useState<TemplateListItem[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
@@ -205,9 +211,9 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
   };
 
   return (
-    <div className="relative flex-1 flex flex-col items-center py-12 px-4 pb-32 max-w-6xl mx-auto w-full">
+    <div className="relative flex-1 flex flex-col items-center py-12 px-4 pb-20 max-w-6xl mx-auto w-full">
       {/* Hero Section */}
-      <header className="text-center mb-12">
+      <header className="text-center mb-8">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 font-medium text-sm mb-4">
           <Sparkles size={14} />
           <span>Powered by AI</span>
@@ -221,45 +227,85 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
         </p>
       </header>
 
+      {/* Input Box — sticky, inline below hero */}
+      <div className="sticky top-4 z-40 w-full max-w-2xl mx-auto mb-14">
+        <FloatingInputBox
+          placeholder="描述你的故事创意... 比如：一只名叫 Nutty 的小松鼠在一棵老橡树中发现了一扇神秘的门..."
+          collapsedPlaceholder="今天你想创作什么故事？"
+          onSubmit={handleStart}
+          isLoading={isCreating}
+          error={error}
+          loadingMessage={generationStatus || '处理中...'}
+          selectedTemplate={selectedTemplate}
+          onTemplateSelect={setSelectedTemplate}
+          uploadedImages={uploadedImages}
+          onImageAdd={handleImageAdd}
+          onImageRemove={handleImageRemove}
+        />
+      </div>
+
       {/* User Avatar - Fixed Top Right */}
       <div className="fixed top-6 right-6 z-50">
-        <div className="relative">
+        <div className="relative" ref={userMenuRef}>
           {/* Avatar Button */}
           <button
             onClick={() => setUserMenuOpen(!userMenuOpen)}
-            className="w-11 h-11 rounded-full bg-white border-2 border-slate-200 flex items-center justify-center hover:border-slate-300 hover:bg-slate-50 transition-all duration-300 hover:scale-105 active:scale-95 shadow-sm hover:shadow-md"
+            className="w-11 h-11 rounded-full bg-white border-2 border-slate-200 flex items-center justify-center hover:border-indigo-300 hover:bg-slate-50 transition-all duration-300 hover:scale-105 active:scale-95 shadow-sm hover:shadow-md overflow-hidden"
           >
-            {/* Custom User Icon - 简洁现代风格 */}
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-              {/* Head */}
-              <circle cx="10" cy="7" r="3.5" stroke="#64748B" strokeWidth="1.5" fill="none"/>
-              {/* Shoulders/Body */}
-              <path d="M4.5 17C4.5 14.5 6.5 13 10 13C13.5 13 15.5 14.5 15.5 17" stroke="#64748B" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
-            </svg>
+            {user?.avatar_url ? (
+              <img src={user.avatar_url} alt={user.nickname} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-sm font-bold text-indigo-600">
+                {user?.nickname?.[0]?.toUpperCase() ?? '?'}
+              </span>
+            )}
           </button>
 
           {/* Dropdown Menu */}
           {userMenuOpen && (
-            <div ref={userMenuRef} className="absolute top-full mt-2 right-0 w-48 bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden animate-in slide-in-from-top-2 duration-200">
+            <div className="absolute top-full mt-2 right-0 w-56 bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden animate-in slide-in-from-top-2 duration-200">
+              {/* User info header */}
+              <div className="px-4 py-3 border-b border-slate-100 bg-slate-50">
+                <p className="text-sm font-semibold text-slate-800 truncate">{user?.nickname}</p>
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="flex items-center gap-1 text-xs text-amber-600">
+                    <Coins size={12} />
+                    {user?.points_balance ?? 0} 积分
+                  </span>
+                  {user && user.membership_level !== 'free' && (
+                    <span className="flex items-center gap-1 text-xs text-indigo-600">
+                      <Crown size={12} />
+                      {MEMBERSHIP_LABEL[user.membership_level]}
+                    </span>
+                  )}
+                  {user && user.free_creation_remaining > 0 && (
+                    <span className="text-xs text-emerald-600">
+                      免费 ×{user.free_creation_remaining}
+                    </span>
+                  )}
+                </div>
+              </div>
+
               <button
-                onClick={() => {
-                  onShowMyWorks?.();
-                  setUserMenuOpen(false);
-                }}
-                className="w-full px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors duration-200 flex items-center gap-2"
+                onClick={() => { onShowMyWorks?.(); setUserMenuOpen(false); }}
+                className="w-full px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-2"
               >
                 <Sparkles size={16} className="text-indigo-500" />
                 <span>我的作品</span>
               </button>
               <button
-                onClick={() => {
-                  onShowMyTemplates?.();
-                  setUserMenuOpen(false);
-                }}
-                className="w-full px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors duration-200 flex items-center gap-2 border-t border-slate-100"
+                onClick={() => { onShowMyTemplates?.(); setUserMenuOpen(false); }}
+                className="w-full px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-2 border-t border-slate-100"
               >
                 <FileText size={16} className="text-indigo-500" />
                 <span>我的模版</span>
+              </button>
+              <button
+                onClick={() => { logout(); setUserMenuOpen(false); }}
+                className="w-full px-4 py-3 text-left text-sm text-red-500 hover:bg-red-50 transition-colors flex items-center gap-2 border-t border-slate-100"
+              >
+                <LogOut size={16} />
+                <span>退出登录</span>
               </button>
             </div>
           )}
@@ -319,6 +365,12 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
                       : 'border-2 border-slate-200 bg-gradient-to-br from-slate-50 to-white hover:border-indigo-200 hover:from-indigo-50/30 hover:to-white shadow-sm hover:shadow-md'
                     }`}
                   >
+                    {/* 已选中标记 */}
+                    {selectedTemplate?.id === tmpl.id && (
+                      <div className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-400 text-white text-[11px] font-bold shadow-sm">
+                        ✓ 已选择
+                      </div>
+                    )}
                     {/* 样本绘本预览 - 直接使用 StorybookPreview */}
                     {sampleStorybook ? (
                       <div className="rounded-t-2xl overflow-hidden">
@@ -399,24 +451,6 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
         )}
       </section>
 
-      {/* Floating Input Bar */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-2xl">
-        <FloatingInputBox
-          placeholder="描述你的故事创意... 比如：一只名叫 Nutty 的小松鼠在一棵老橡树中发现了一扇神秘的门..."
-          collapsedPlaceholder="今天你想创作什么故事？"
-          onSubmit={handleStart}
-          isLoading={isCreating}
-          error={error}
-          loadingMessage={generationStatus || '处理中...'}
-          templates={templates}
-          selectedTemplate={selectedTemplate}
-          onTemplateSelect={setSelectedTemplate}
-          loadingTemplates={loadingTemplates}
-          uploadedImages={uploadedImages}
-          onImageAdd={handleImageAdd}
-          onImageRemove={handleImageRemove}
-        />
-      </div>
     </div>
   );
 };

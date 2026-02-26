@@ -54,3 +54,6 @@ logs/
 
 # macOS
 .DS_Store
+
+# 数据目录
+data
