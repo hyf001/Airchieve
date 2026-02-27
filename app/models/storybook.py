@@ -2,13 +2,31 @@
 Book Model
 绘本模型
 """
+import json
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, TypedDict, Literal
 
-from sqlalchemy import Integer, String, DateTime, ForeignKey, JSON, Text, Boolean
+from sqlalchemy import Integer, String, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
 
 from app.db.base import Base
+
+
+class JsonText(TypeDecorator):
+    """以 Text 存储 JSON，兼容低版本 MariaDB"""
+    impl = Text
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is not None:
+            return json.dumps(value, ensure_ascii=False)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            return json.loads(value)
+        return value
 
 
 __all__ = ["Storybook", "StorybookPage", "StorybookStatus"]
@@ -44,7 +62,7 @@ class Storybook(Base):
     is_public: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)  # 是否公开
 
     # 页面内容（JSON格式存储多个页面）
-    pages: Mapped[list[StorybookPage] | None] = mapped_column(JSON, nullable=True)  # 页面列表
+    pages: Mapped[list[StorybookPage] | None] = mapped_column(JsonText, nullable=True)  # 页面列表
 
     # 绘本状态: init-初始化, creating-生成中, updating-更新中, finished-完成, error-错误
     status: Mapped[StorybookStatus] = mapped_column(String(32), default="init", index=True)
