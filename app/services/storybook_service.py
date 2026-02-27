@@ -6,9 +6,12 @@ from typing import Optional, List, AsyncGenerator
 import json
 from sqlalchemy import select
 
+from app.core.utils.logger import get_logger
 from app.db.session import async_session_maker
 from app.models.storybook import Storybook, StorybookPage, StorybookStatus
 from app.services.gemini_cli import GeminiCli
+
+logger = get_logger(__name__)
 
 
 async def _generate_storybook_content_stream(
@@ -33,6 +36,9 @@ async def _generate_storybook_content_stream(
     Yields:
         str: JSON格式的进度更新
     """
+    mode = "编辑" if is_edit else "创建"
+    logger.info("开始生成绘本内容 | storybook_id=%s mode=%s", storybook_id, mode)
+
     # 发送开始生成事件
     yield json.dumps({
         "type": "generation_started",
@@ -82,6 +88,8 @@ async def _generate_storybook_content_stream(
                 storybook.status = "finished"
                 await session.commit()
 
+        logger.info("绘本生成完成 | storybook_id=%s pages_count=%s", storybook_id, len(pages) if pages else 0)
+
         # 发送完成事件
         yield json.dumps({
             "type": "generation_completed",
@@ -93,6 +101,8 @@ async def _generate_storybook_content_stream(
         }, ensure_ascii=False)
 
     except Exception as e:
+        logger.exception("绘本生成失败 | storybook_id=%s error=%s", storybook_id, e)
+
         # 发送错误事件
         async with async_session_maker() as session:
             result = await session.execute(
@@ -167,6 +177,8 @@ async def create_storybook_stream(
 
         storybook_id = new_storybook.id
 
+    logger.info("绘本记录已创建 | storybook_id=%s title=%s", storybook_id, new_storybook.title)
+
     # 发送绘本创建成功事件
     yield json.dumps({
         "type": "storybook_created",
@@ -231,6 +243,7 @@ async def edit_storybook_stream(
         original_storybook = result.scalar_one_or_none()
 
         if not original_storybook or not original_storybook.pages:
+            logger.warning("编辑失败，原绘本不存在或无页面 | storybook_id=%s", storybook_id)
             yield json.dumps({
                 "type": "generation_error",
                 "data": {
@@ -268,6 +281,8 @@ async def edit_storybook_stream(
         await session.refresh(new_storybook)
 
         new_storybook_id = new_storybook.id
+
+    logger.info("编辑版绘本记录已创建 | original_id=%s new_id=%s", storybook_id, new_storybook_id)
 
     # 发送新绘本创建成功事件
     yield json.dumps({
@@ -312,12 +327,14 @@ async def update_storybook_pages(
         storybook = result.scalar_one_or_none()
 
         if not storybook:
+            logger.warning("更新页面失败，绘本不存在 | storybook_id=%s", storybook_id)
             return False
 
         storybook.pages = pages
         storybook.status = "finished"
         await session.commit()
 
+        logger.info("绘本页面更新成功 | storybook_id=%s pages_count=%s", storybook_id, len(pages))
         return True
 
 
@@ -344,9 +361,11 @@ async def edit_storybook_page(
         storybook = result.scalar_one_or_none()
 
         if not storybook or not storybook.pages:
+            logger.warning("编辑单页失败，绘本不存在或无页面 | storybook_id=%s", storybook_id)
             return False
 
         if page_index < 0 or page_index >= len(storybook.pages):
+            logger.warning("编辑单页失败，页码越界 | storybook_id=%s page_index=%s total=%s", storybook_id, page_index, len(storybook.pages))
             return False
 
         current_page = storybook.pages[page_index]
@@ -364,13 +383,18 @@ async def edit_storybook_page(
                 systemprompt = template.systemprompt
 
     # 使用 LLM CLI 编辑单页
+    logger.info("开始编辑单页 | storybook_id=%s page_index=%s", storybook_id, page_index)
     llm_client = GeminiCli()
-    new_page = await llm_client.edit_page(
-        page_index=page_index,
-        instruction=instruction,
-        current_page=current_page,
-        system_prompt=systemprompt
-    )
+    try:
+        new_page = await llm_client.edit_page(
+            page_index=page_index,
+            instruction=instruction,
+            current_page=current_page,
+            system_prompt=systemprompt
+        )
+    except Exception as e:
+        logger.exception("编辑单页失败 | storybook_id=%s page_index=%s error=%s", storybook_id, page_index, e)
+        raise
 
     # 更新绘本的该页内容
     async with async_session_maker() as session:
@@ -382,6 +406,7 @@ async def edit_storybook_page(
         if storybook and storybook.pages:
             storybook.pages[page_index] = new_page
             await session.commit()
+            logger.info("单页编辑完成 | storybook_id=%s page_index=%s", storybook_id, page_index)
 
         return True
 
