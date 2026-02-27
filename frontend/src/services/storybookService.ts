@@ -1,4 +1,15 @@
 const API_BASE = "/api/v1/storybooks";
+import { getAuthHeaders, triggerUnauthorized } from "./authService";
+
+// ============ 内部工具 ============
+const handleWriteError = async (res: Response, fallback: string): Promise<never> => {
+  if (res.status === 401) {
+    triggerUnauthorized();
+    throw new Error("请先登录");
+  }
+  const error = await res.json().catch(() => ({ detail: "Unknown error" }));
+  throw new Error(error.detail || fallback);
+};
 
 // ============ Types ============
 export type StorybookStatus = "init" | "creating" | "updating" | "finished" | "error";
@@ -32,7 +43,6 @@ export interface CreateStorybookRequest {
   instruction: string;
   template_id?: number;
   images?: string[];
-  creator?: string;
 }
 
 export interface EditStorybookRequest {
@@ -68,18 +78,16 @@ export const createStorybookStream = async (
 ): Promise<number> => {
   const res = await fetch(`${API_BASE}/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify({
       instruction: req.instruction,
       template_id: req.template_id,
       images: req.images || [],
-      creator: req.creator || "user",
     }),
   });
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: "Unknown error" }));
-    throw new Error(error.detail || `Failed to create storybook: ${res.status}`);
+    await handleWriteError(res, `Failed to create storybook: ${res.status}`);
   }
 
   const reader = res.body?.getReader();
@@ -186,7 +194,7 @@ export const editStorybookStream = async (
 ): Promise<number> => {
   const res = await fetch(`${API_BASE}/${storybookId}/stream`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify({
       instruction: req.instruction,
       images: req.images || [],
@@ -194,8 +202,7 @@ export const editStorybookStream = async (
   });
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: "Unknown error" }));
-    throw new Error(error.detail || `Failed to edit storybook: ${res.status}`);
+    await handleWriteError(res, `Failed to edit storybook: ${res.status}`);
   }
 
   const reader = res.body?.getReader();
@@ -261,14 +268,13 @@ export const editStorybookPage = async (
 ): Promise<Storybook> => {
   const res = await fetch(`${API_BASE}/${storybookId}/pages/${pageIndex}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify({
       instruction: req.instruction,
     }),
   });
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: "Unknown error" }));
-    throw new Error(error.detail || `Failed to edit page: ${res.status}`);
+    await handleWriteError(res, `Failed to edit page: ${res.status}`);
   }
   return res.json() as Promise<Storybook>;
 };
@@ -279,10 +285,10 @@ export const editStorybookPage = async (
 export const deleteStorybook = async (storybookId: number): Promise<void> => {
   const res = await fetch(`${API_BASE}/${storybookId}`, {
     method: "DELETE",
+    headers: { ...getAuthHeaders() },
   });
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: "Unknown error" }));
-    throw new Error(error.detail || `Failed to delete storybook: ${res.status}`);
+    await handleWriteError(res, `Failed to delete storybook: ${res.status}`);
   }
 };
 
@@ -295,11 +301,10 @@ export const updateStorybookPublicStatus = async (
 ): Promise<void> => {
   const res = await fetch(`${API_BASE}/${storybookId}/public`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify({ is_public: isPublic }),
   });
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: "Unknown error" }));
-    throw new Error(error.detail || `Failed to update public status: ${res.status}`);
+    await handleWriteError(res, `Failed to update public status: ${res.status}`);
   }
 };

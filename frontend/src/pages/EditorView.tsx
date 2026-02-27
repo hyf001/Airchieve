@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import { ChevronLeft, ChevronRight, BookOpen, Loader2, Trash2, Plus, Sparkles, AlertCircle, Download, PenTool, Edit2, Lock, Globe } from 'lucide-react';
 import FloatingInputBox from '../components/FloatingInputBox';
 import {
@@ -40,6 +41,7 @@ const EditorView: React.FC<EditorViewProps> = ({
   onCreateNew,
   onStorybookCreated
 }) => {
+  const { user } = useAuth();
   const [currentStorybook, setCurrentStorybook] = useState<Storybook | null>(null);
   const [storybookList, setStorybookList] = useState<StorybookListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,7 +78,7 @@ const EditorView: React.FC<EditorViewProps> = ({
 
   const loadStorybookList = async () => {
     try {
-      const list = await listStorybooks({ limit: 20 });
+      const list = await listStorybooks({ creator: user ? String(user.id) : undefined, limit: 20 });
       setStorybookList(list);
 
       // 如果没有传入 storybookId 且列表不为空，自动加载第一个绘本

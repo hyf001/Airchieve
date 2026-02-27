@@ -57,6 +57,20 @@ export const clearAuth = (): void => {
   localStorage.removeItem(USER_KEY);
 };
 
+/** 构造带 Bearer Token 的请求头，用于需要认证的写接口 */
+export const getAuthHeaders = (): Record<string, string> => {
+  const token = getStoredToken();
+  if (!token) return {};
+  return { 'Authorization': `Bearer ${token}` };
+};
+
+// ============ 401 全局处理 ============
+// service 层检测到 401 时调用，由 AuthContext 注册具体行为（弹登录框）
+
+let _onUnauthorized: (() => void) | null = null;
+export const setOnUnauthorized = (fn: () => void): void => { _onUnauthorized = fn; };
+export const triggerUnauthorized = (): void => { _onUnauthorized?.(); };
+
 // ============ Internal helpers ============
 
 /** 从 FastAPI 响应中提取可读错误信息

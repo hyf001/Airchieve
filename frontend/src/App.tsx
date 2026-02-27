@@ -10,7 +10,7 @@ import { Loader2 } from 'lucide-react';
 // ============ Inner App（需要 AuthProvider 上下文） ============
 
 const InnerApp: React.FC = () => {
-  const { isAuthenticated, isLoading, login } = useAuth();
+  const { isLoading, login, loginModalOpen, closeLoginModal } = useAuth();
 
   const [currentStorybookId, setCurrentStorybookId] = useState<number | undefined>(undefined);
   const [showMyWorks,     setShowMyWorks]     = useState(false);
@@ -37,9 +37,12 @@ const InnerApp: React.FC = () => {
 
   return (
     <div className={`h-screen flex flex-col ${isHomeView ? 'overflow-auto' : 'overflow-hidden'}`}>
-      {/* 未登录时覆盖登录弹窗，背景页面仍然渲染 */}
-      {!isAuthenticated && (
-        <LoginModal onSuccess={(res) => login(res.access_token, res.user)} />
+      {/* 按需弹出登录框（后端 401 时触发） */}
+      {loginModalOpen && (
+        <LoginModal
+          onSuccess={(res) => { login(res.access_token, res.user); closeLoginModal(); }}
+          onClose={closeLoginModal}
+        />
       )}
 
       {showMyTemplates ? (

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Loader2, QrCode, Eye, EyeOff, Sparkles } from 'lucide-react';
+import { Loader2, QrCode, Eye, EyeOff, Sparkles, X } from 'lucide-react';
 import {
   loginByPassword, loginBySms, register, sendSmsCode,
   type TokenResponse,
@@ -11,6 +11,7 @@ type TabId = 'password' | 'sms' | 'wechat';
 
 interface Props {
   onSuccess: (res: TokenResponse) => void;
+  onClose?: () => void;
 }
 
 // ============ Sub-components ============
@@ -303,17 +304,29 @@ const WechatTab: React.FC = () => (
 
 // ============ Modal ============
 
-const LoginModal: React.FC<Props> = ({ onSuccess }) => {
+const LoginModal: React.FC<Props> = ({ onSuccess, onClose }) => {
   const [tab, setTab] = useState<TabId>('password');
 
   return (
     /* 全屏蒙层 */
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm"
+      onClick={onClose}
+    >
       <div
         className="w-full max-w-sm mx-4 bg-white rounded-2xl shadow-2xl
-                   animate-in fade-in zoom-in-95 duration-200"
+                   animate-in fade-in zoom-in-95 duration-200 relative"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* 关闭按钮 */}
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+          >
+            <X size={16} />
+          </button>
+        )}
         {/* Header */}
         <div className="px-7 pt-7 pb-2 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full

@@ -1,4 +1,15 @@
 const API_BASE = "/api/v1/templates";
+import { getAuthHeaders, triggerUnauthorized } from "./authService";
+
+// ============ 内部工具 ============
+const handleWriteError = async (res: Response, fallback: string): Promise<never> => {
+  if (res.status === 401) {
+    triggerUnauthorized();
+    throw new Error("请先登录");
+  }
+  const error = await res.json().catch(() => ({ detail: "Unknown error" }));
+  throw new Error(error.detail || fallback);
+};
 
 // ============ Types ============
 export interface Template {
@@ -91,13 +102,10 @@ export const getTemplate = async (templateId: number): Promise<Template> => {
 export const createTemplate = async (req: CreateTemplateRequest): Promise<Template> => {
   const res = await fetch(API_BASE, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify(req),
   });
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: "Unknown error" }));
-    throw new Error(error.detail || `Failed to create template: ${res.status}`);
-  }
+  if (!res.ok) await handleWriteError(res, `Failed to create template: ${res.status}`);
   return res.json() as Promise<Template>;
 };
 
@@ -110,13 +118,10 @@ export const updateTemplate = async (
 ): Promise<Template> => {
   const res = await fetch(`${API_BASE}/${templateId}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify(req),
   });
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: "Unknown error" }));
-    throw new Error(error.detail || `Failed to update template: ${res.status}`);
-  }
+  if (!res.ok) await handleWriteError(res, `Failed to update template: ${res.status}`);
   return res.json() as Promise<Template>;
 };
 
@@ -126,9 +131,7 @@ export const updateTemplate = async (
 export const deleteTemplate = async (templateId: number): Promise<void> => {
   const res = await fetch(`${API_BASE}/${templateId}`, {
     method: "DELETE",
+    headers: { ...getAuthHeaders() },
   });
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: "Unknown error" }));
-    throw new Error(error.detail || `Failed to delete template: ${res.status}`);
-  }
+  if (!res.ok) await handleWriteError(res, `Failed to delete template: ${res.status}`);
 };

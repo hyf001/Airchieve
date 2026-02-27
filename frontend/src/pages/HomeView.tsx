@@ -18,7 +18,7 @@ const MEMBERSHIP_LABEL: Record<string, string> = {
 };
 
 const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTemplates }) => {
-  const { user, logout } = useAuth();
+  const { user, logout, openLoginModal } = useAuth();
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateListItem | null>(null);
   const [templates, setTemplates] = useState<TemplateListItem[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
@@ -36,6 +36,15 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const [needsCarousel, setNeedsCarousel] = useState(false);
+  const [pendingCreateParams, setPendingCreateParams] = useState<CreateStorybookRequest | null>(null);
+
+  // 登录后自动执行待处理的创作跳转
+  useEffect(() => {
+    if (user && pendingCreateParams) {
+      setPendingCreateParams(null);
+      onStart?.(pendingCreateParams);
+    }
+  }, [user, pendingCreateParams, onStart]);
 
   // Load storybooks associated with templates
   const loadTemplateStorybooks = async (templateList: TemplateListItem[]) => {
@@ -146,6 +155,18 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
   const handleStart = (instruction: string) => {
     if (!instruction.trim() || isCreating) return;
 
+    // 未登录时，先弹出登录框，登录完成后再跳转
+    if (!user) {
+      const createParams: CreateStorybookRequest = {
+        instruction,
+        template_id: selectedTemplate?.id,
+        images: uploadedImages.length > 0 ? uploadedImages : undefined,
+      };
+      setPendingCreateParams(createParams);
+      openLoginModal();
+      return;
+    }
+
     setIsCreating(true);
     setError(null);
     setGenerationStatus('正在跳转到编辑器...');
@@ -156,7 +177,6 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
         instruction,
         template_id: selectedTemplate?.id,
         images: uploadedImages.length > 0 ? uploadedImages : undefined,
-        creator: 'user'
       };
 
       if (onStart) {
@@ -246,6 +266,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
 
       {/* User Avatar - Fixed Top Right */}
       <div className="fixed top-6 right-6 z-50">
+        {user ? (
         <div className="relative" ref={userMenuRef}>
           {/* Avatar Button */}
           <button
@@ -310,6 +331,14 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
             </div>
           )}
         </div>
+        ) : (
+          <button
+            onClick={openLoginModal}
+            className="px-4 py-2 rounded-full bg-white border-2 border-slate-200 text-sm font-semibold text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-all shadow-sm"
+          >
+            登录
+          </button>
+        )}
       </div>
 
       {/* Style Templates — Carousel */}

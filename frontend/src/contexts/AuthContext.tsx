@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import {
-  clearAuth, getMe, getStoredToken, getStoredUser, saveAuth,
+  clearAuth, getMe, getStoredToken, getStoredUser, saveAuth, setOnUnauthorized,
   type UserOut,
 } from '../services/authService';
 
@@ -20,6 +20,12 @@ interface AuthContextValue extends AuthState {
   logout: () => void;
   /** 刷新当前用户信息（积分变化后调用） */
   refreshUser: () => Promise<void>;
+  /** 当前登录弹窗是否可见 */
+  loginModalOpen: boolean;
+  /** 打开登录弹窗 */
+  openLoginModal: () => void;
+  /** 关闭登录弹窗 */
+  closeLoginModal: () => void;
 }
 
 // ============ Context ============
@@ -32,6 +38,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser]       = useState<UserOut | null>(getStoredUser());
   const [token, setToken]     = useState<string | null>(getStoredToken());
   const [isLoading, setIsLoading] = useState(true);
+  const [loginModalOpen, setLoginModalOpen] = useState(false);
+
+  const openLoginModal  = useCallback(() => setLoginModalOpen(true),  []);
+  const closeLoginModal = useCallback(() => setLoginModalOpen(false), []);
+
+  // 注册全局 401 回调：service 层检测到 401 时自动弹登录框
+  useEffect(() => {
+    setOnUnauthorized(openLoginModal);
+  }, [openLoginModal]);
 
   // 启动时验证本地 token 是否仍然有效
   useEffect(() => {
@@ -89,6 +104,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         logout,
         refreshUser,
+        loginModalOpen,
+        openLoginModal,
+        closeLoginModal,
       }}
     >
       {children}
