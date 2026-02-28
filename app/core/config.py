@@ -50,6 +50,13 @@ class Settings(BaseSettings):
     ANTHROPIC_AUTH_TOKEN: str = ""
     ANTHROPIC_BASE_URL: str = ""
 
+    # Aliyun OSS
+    OSS_ACCESS_KEY_ID: str = ""
+    OSS_ACCESS_KEY_SECRET: str = ""
+    OSS_ENDPOINT: str = ""        # e.g. oss-cn-hangzhou.aliyuncs.com
+    OSS_BUCKET_NAME: str = ""
+    OSS_BASE_URL: str = ""        # 自定义域名，e.g. https://cdn.example.com（可选）
+
 
 @lru_cache
 def get_settings() -> Settings:

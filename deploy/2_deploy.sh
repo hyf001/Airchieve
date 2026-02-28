@@ -34,6 +34,16 @@ DOMAIN=$(grep '^DOMAIN=' "$APP_DIR/.env" | cut -d'=' -f2 | tr -d ' "')
 
 cd "$APP_DIR"
 
+# ── 0. 停止服务 ───────────────────────────────────────────────
+echo ""
+info "步骤 0/5: 停止服务..."
+if systemctl is-active --quiet "$SERVICE_NAME"; then
+    systemctl stop "$SERVICE_NAME"
+    log "后端服务已停止"
+else
+    warn "后端服务未运行，跳过停止"
+fi
+
 # ── 1. 安装/更新 Python 依赖 ─────────────────────────────────
 echo ""
 info "步骤 1/5: 安装 Python 依赖..."
@@ -79,13 +89,13 @@ Group=${APP_USER}
 WorkingDirectory=${APP_DIR}
 EnvironmentFile=${APP_DIR}/.env
 ExecStart=${VENV_DIR}/bin/gunicorn app.main:app \\
-    --workers 2 \\
+    --workers 1 \\
     --worker-class uvicorn.workers.UvicornWorker \\
     --bind 127.0.0.1:8000 \\
     --log-level info \\
     --access-logfile ${APP_DIR}/logs/access.log \\
     --error-logfile ${APP_DIR}/logs/error.log \\
-    --timeout 120
+    --timeout 300
 Restart=always
 RestartSec=5
 StandardOutput=journal

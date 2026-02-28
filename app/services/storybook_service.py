@@ -3,6 +3,7 @@ Storybook Service
 绘本服务
 """
 from typing import Optional, List, AsyncGenerator
+import asyncio
 import json
 import time
 from sqlalchemy import select
@@ -13,6 +14,34 @@ from app.models.storybook import Storybook, StorybookPage, StorybookStatus
 from app.services.gemini_cli import GeminiCli
 
 logger = get_logger(__name__)
+
+
+async def _upload_pages_images_to_oss(
+    storybook_id: int,
+    pages: List[StorybookPage]
+) -> List[StorybookPage]:
+    """将每页的 image_url 上传到 OSS，并替换为 OSS 公开访问 URL"""
+    from app.services import oss_service
+
+    async def _upload_one(i: int, page: StorybookPage) -> StorybookPage:
+        url = page.get("image_url", "")
+        if not url:
+            return page
+        # 根据 data URL 头或默认值决定扩展名
+        if url.startswith("data:image/png"):
+            ext = ".png"
+        else:
+            ext = ".jpg"
+        object_key = f"storybooks/{storybook_id}/page_{i}{ext}"
+        try:
+            oss_url = await oss_service.upload_from_url(url, object_key)
+            return {**page, "image_url": oss_url}
+        except Exception as e:
+            logger.warning("图片上传OSS失败，保留原URL | page=%s error=%s", i, e)
+            return page
+
+    results = await asyncio.gather(*[_upload_one(i, page) for i, page in enumerate(pages)])
+    return list(results)
 
 
 async def _generate_storybook_content_stream(
@@ -38,6 +67,7 @@ async def _generate_storybook_content_stream(
         str: JSON格式的进度更新
     """
     mode = "编辑" if is_edit else "创建"
+    start_time = time.time()
     logger.info("开始生成绘本内容 | storybook_id=%s mode=%s", storybook_id, mode)
 
     # 发送开始生成事件
@@ -77,6 +107,12 @@ async def _generate_storybook_content_stream(
                 images=images
             )
 
+        # 将图片转存到 OSS
+        if pages:
+            oss_start = time.time()
+            pages = await _upload_pages_images_to_oss(storybook_id, pages)
+            logger.info("图片转存OSS完成 | storybook_id=%s pages=%s elapsed=%.2fs", storybook_id, len(pages), time.time() - oss_start)
+
         # 更新绘本内容
         async with async_session_maker() as session:
             result = await session.execute(
@@ -89,7 +125,8 @@ async def _generate_storybook_content_stream(
                 storybook.status = "finished"
                 await session.commit()
 
-        logger.info("绘本生成完成 | storybook_id=%s pages_count=%s", storybook_id, len(pages) if pages else 0)
+        elapsed = time.time() - start_time
+        logger.info("绘本生成完成 | storybook_id=%s pages_count=%s elapsed=%.2fs", storybook_id, len(pages) if pages else 0, elapsed)
 
         # 发送完成事件
         yield json.dumps({
