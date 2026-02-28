@@ -9,8 +9,10 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.storybook import Storybook, StorybookPage
+from app.models.user import User
 from app.services.storybook_service import (
     create_storybook_stream,
     edit_storybook_stream,
@@ -29,7 +31,6 @@ class CreateStorybookRequest(BaseModel):
     instruction: str = Field(..., min_length=1, max_length=1000, description="用户指令/绘本描述")
     template_id: Optional[int] = Field(None, description="模版ID")
     images: Optional[List[str]] = Field(None, description="base64编码的参考图片列表")
-    creator: str = Field("user", max_length=128, description="创建者名称")
 
 
 class StorybookPageResponse(BaseModel):
@@ -86,7 +87,8 @@ class UpdatePublicStatusRequest(BaseModel):
 @router.post("/stream", status_code=status.HTTP_200_OK)
 async def create_storybook_stream_endpoint(
     req: CreateStorybookRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     创建绘本（流式版本）
@@ -100,7 +102,7 @@ async def create_storybook_stream_endpoint(
                 instruction=req.instruction,
                 template_id=req.template_id,
                 images=req.images,
-                creator=req.creator
+                creator=str(current_user.id)
             ):
                 # 使用 SSE 格式发送事件
                 yield f"data: {event}\n\n"
@@ -134,7 +136,8 @@ async def create_storybook_stream_endpoint(
 async def edit_storybook_stream_endpoint(
     storybook_id: int,
     req: EditStorybookRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     编辑绘本（流式版本，创建新版本）
@@ -263,7 +266,8 @@ async def edit_storybook_page_endpoint(
     storybook_id: int,
     page_index: int,
     req: EditStorybookPageRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     编辑绘本单页
@@ -314,7 +318,8 @@ async def edit_storybook_page_endpoint(
 @router.delete("/{storybook_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_storybook_endpoint(
     storybook_id: int,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     删除绘本
@@ -350,7 +355,8 @@ async def delete_storybook_endpoint(
 async def update_public_status_endpoint(
     storybook_id: int,
     req: UpdatePublicStatusRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     更新绘本公开状态

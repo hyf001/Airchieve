@@ -7,7 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.db.session import get_db
+from app.models.user import User
 from app.services.template_service import (
     create_template,
     get_template,
@@ -81,7 +83,8 @@ class TemplateListResponse(BaseModel):
 @router.post("", response_model=TemplateResponse, status_code=status.HTTP_201_CREATED)
 async def create_template_endpoint(
     req: CreateTemplateRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     创建模版
@@ -200,7 +203,8 @@ async def get_template_endpoint(
 async def update_template_endpoint(
     template_id: int,
     req: UpdateTemplateRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     更新模版
@@ -254,7 +258,8 @@ async def update_template_endpoint(
 @router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_template_endpoint(
     template_id: int,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     删除模版

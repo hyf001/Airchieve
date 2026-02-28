@@ -4,6 +4,7 @@ Storybook Service
 """
 from typing import Optional, List, AsyncGenerator
 import json
+import time
 from sqlalchemy import select
 
 from app.core.utils.logger import get_logger
@@ -142,6 +143,7 @@ async def create_storybook_stream(
         str: JSON格式的进度更新
     """
     # 查询模版（如果提供了 template_id）
+    start_time = time.time()
     style_prefix = ""
     systemprompt = None
 
@@ -177,7 +179,8 @@ async def create_storybook_stream(
 
         storybook_id = new_storybook.id
 
-    logger.info("绘本记录已创建 | storybook_id=%s title=%s", storybook_id, new_storybook.title)
+    elapsed = time.time() - start_time
+    logger.info("绘本记录已创建 | storybook_id=%s title=%s 耗时=%.2fs", storybook_id, new_storybook.title, elapsed)
 
     # 发送绘本创建成功事件
     yield json.dumps({
