@@ -21,8 +21,22 @@ from app.services.storybook_service import (
     edit_storybook_page,
     list_storybooks as list_storybooks_service,
 )
+from app.services.points_service import InsufficientPointsError
 
 router = APIRouter(prefix="/storybooks", tags=["storybooks"])
+
+INSUFFICIENT_POINTS_CODE = "INSUFFICIENT_POINTS"
+
+
+def _insufficient_points_sse(message: str) -> str:
+    """生成积分不足的 SSE 错误事件"""
+    return json.dumps({
+        "type": "error",
+        "data": {
+            "code": INSUFFICIENT_POINTS_CODE,
+            "error": message,
+        }
+    }, ensure_ascii=False)
 
 
 # ============ Schemas ============
@@ -102,21 +116,17 @@ async def create_storybook_stream_endpoint(
                 instruction=req.instruction,
                 template_id=req.template_id,
                 images=req.images,
-                creator=str(current_user.id)
+                user_id=current_user.id
             ):
-                # 使用 SSE 格式发送事件
                 yield f"data: {event}\n\n"
-
-            # 发送结束事件
+            yield "data: [DONE]\n\n"
+        except InsufficientPointsError as e:
+            yield f"data: {_insufficient_points_sse(str(e))}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
-            # 发送错误事件
-            import json
             error_event = json.dumps({
                 "type": "error",
-                "data": {
-                    "error": str(e)
-                }
+                "data": {"error": str(e)}
             }, ensure_ascii=False)
             yield f"data: {error_event}\n\n"
             yield "data: [DONE]\n\n"
@@ -169,21 +179,18 @@ async def edit_storybook_stream_endpoint(
             async for event in edit_storybook_stream(
                 storybook_id=storybook_id,
                 instruction=req.instruction,
-                images=req.images
+                images=req.images,
+                user_id=current_user.id
             ):
-                # 使用 SSE 格式发送事件
                 yield f"data: {event}\n\n"
-
-            # 发送结束事件
+            yield "data: [DONE]\n\n"
+        except InsufficientPointsError as e:
+            yield f"data: {_insufficient_points_sse(str(e))}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
-            # 发送错误事件
-            import json
             error_event = json.dumps({
                 "type": "error",
-                "data": {
-                    "error": str(e)
-                }
+                "data": {"error": str(e)}
             }, ensure_ascii=False)
             yield f"data: {error_event}\n\n"
             yield "data: [DONE]\n\n"
@@ -293,7 +300,8 @@ async def edit_storybook_page_endpoint(
         success = await edit_storybook_page(
             storybook_id=storybook_id,
             page_index=page_index,
-            instruction=req.instruction
+            instruction=req.instruction,
+            user_id=current_user.id
         )
 
         if not success:
@@ -308,6 +316,11 @@ async def edit_storybook_page_endpoint(
 
     except HTTPException:
         raise
+    except InsufficientPointsError as e:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={"code": INSUFFICIENT_POINTS_CODE, "message": str(e)}
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

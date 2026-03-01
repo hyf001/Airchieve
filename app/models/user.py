@@ -76,7 +76,7 @@ class User(Base):
 
     # 积分域缓存（points_service 负责写）
     points_balance:          Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    free_creation_remaining: Mapped[int] = mapped_column(Integer, default=2, nullable=False)
+    free_creation_remaining: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
     # 支付域缓存（payment_service 负责写）
     membership_level:     Mapped[str]          = mapped_column(SAEnum(MembershipLevel, name="membership_level"), default=MembershipLevel.free, nullable=False)

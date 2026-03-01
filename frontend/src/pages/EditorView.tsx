@@ -11,6 +11,7 @@ import {
   deleteStorybook,
   createStorybookStream,
   updateStorybookPublicStatus,
+  InsufficientPointsError,
   StreamEvent,
   CreateStorybookRequest,
   Storybook,
@@ -39,7 +40,7 @@ const EditorView: React.FC<EditorViewProps> = ({
   createParams,
   onBack,
   onCreateNew,
-  onStorybookCreated
+  onStorybookCreated,
 }) => {
   const { user } = useAuth();
   const [currentStorybook, setCurrentStorybook] = useState<Storybook | null>(null);
@@ -52,6 +53,7 @@ const EditorView: React.FC<EditorViewProps> = ({
   const [pageDirection, setPageDirection] = useState<'left' | 'right' | null>(null);
   const [animatingPageIndex, setAnimatingPageIndex] = useState<number | null>(null);
   const [showFloatingInput, setShowFloatingInput] = useState(false);
+  const [insufficientPointsMessage, setInsufficientPointsMessage] = useState<string | null>(null);
 
   // 是否正在创建绘本
   const [isCreating, setIsCreating] = useState(false);
@@ -119,73 +121,105 @@ const EditorView: React.FC<EditorViewProps> = ({
     }
   }, []);
 
+  // ---- 公共方法 ----
+
+  // 构建流式事件处理回调
+  // refreshList: 是否在收到事件时刷新绘本列表（编辑绘本需要，创建不需要）
+  // onIdReceived: 收到新绘本 ID 时的额外回调
+  const buildStreamEventHandler = (options: {
+    onIdReceived?: (id: number) => void;
+    refreshList?: boolean;
+  }) => {
+    let capturedId: number | undefined;
+    return (event: StreamEvent) => {
+      console.log('Stream event:', event);
+      switch (event.type) {
+        case 'storybook_created':
+          capturedId = event.data.id;
+          if (event.data.id) {
+            options.onIdReceived?.(event.data.id);
+            loadStorybook(event.data.id);
+            // 乐观更新：storybook_created 时立即将新项插入列表顶部，避免等待列表刷新
+            if (event.data.title) {
+              const newId = event.data.id;
+              const newTitle = event.data.title;
+              setStorybookList(prev => {
+                if (prev.find(item => item.id === newId)) return prev;
+                return [{
+                  id: newId,
+                  title: newTitle,
+                  description: null,
+                  creator: user ? String(user.id) : '',
+                  status: 'creating' as const,
+                  is_public: false,
+                  created_at: new Date().toISOString(),
+                  pages: null,
+                }, ...prev];
+              });
+            }
+            if (options.refreshList) loadStorybookList();
+          }
+          break;
+        case 'generation_completed':
+          if (capturedId) loadStorybook(capturedId);
+          // 完成后刷新列表以更新最终状态
+          if (options.refreshList) loadStorybookList();
+          break;
+        case 'generation_error':
+        case 'error':
+          if (event.data.code === 'INSUFFICIENT_POINTS') {
+            setInsufficientPointsMessage(event.data.error || '积分不足');
+          }
+          if (capturedId) loadStorybook(capturedId);
+          if (options.refreshList) loadStorybookList();
+          break;
+      }
+    };
+  };
+
+  // 处理流式操作的错误（catch 块公共逻辑）
+  const handleStreamError = (err: unknown, defaultMsg: string) => {
+    console.error('Stream error:', err);
+    if (err instanceof InsufficientPointsError) {
+      setInsufficientPointsMessage(err.message);
+    } else {
+      setError(err instanceof Error ? err.message : defaultMsg);
+    }
+  };
+
+  // 创建绘本流式操作（create 和 regenerate 的公共实现）
+  // 注意：调用者需在调用前同步设置 setIsCreating(true)
+  const doCreateStream = async (params: CreateStorybookRequest, errorMsg: string) => {
+    setLoading(true);
+    setError(null);
+    setInsufficientPointsMessage(null);
+    try {
+      await createStorybookStream(
+        params,
+        buildStreamEventHandler({
+          onIdReceived: (id) => { if (onStorybookCreated) onStorybookCreated(id); },
+          refreshList: true,
+        })
+      );
+    } catch (err) {
+      handleStreamError(err, errorMsg);
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
   // 当有 createParams 时，创建绘本
   useEffect(() => {
     if (!createParams || isCreating) return;
 
     // 使用 ref 防止 React Strict Mode 双重调用导致的重复请求
-    // 检查是否与上一次的 createParams 相同（通过引用比较）
     if (prevCreateParamsRef.current === createParams) return;
     prevCreateParamsRef.current = createParams;
 
-    // 立即设置 isCreating，防止重复执行
+    // 立即同步设置 isCreating，防止重复执行
     setIsCreating(true);
-
-    // 保存创建参数，用于出错时重新生成
     setSavedCreateParams(createParams);
-
-    const createStorybook = async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        let createdStorybookId: number | undefined;
-
-        await createStorybookStream(
-          createParams,
-          (event: StreamEvent) => {
-            console.log('Stream event:', event);
-
-            switch (event.type) {
-              case 'storybook_created':
-                // 收到 storybook_created 事件，保存 ID
-                createdStorybookId = event.data.id;
-                if (event.data.id && onStorybookCreated) {
-                  onStorybookCreated(event.data.id);
-                }
-                // 立即加载绘本详情
-                if (event.data.id) {
-                  loadStorybook(event.data.id);
-                }
-                break;
-              case 'generation_started':
-                // 更新状态为生成中
-                break;
-              case 'generation_completed':
-                // 生成完成，刷新绘本详情
-                if (createdStorybookId) {
-                  loadStorybook(createdStorybookId);
-                }
-                break;
-              case 'generation_error':
-              case 'error':
-                // 生成出错，刷新绘本详情和列表以获取错误状态
-                if (createdStorybookId) {
-                  loadStorybook(createdStorybookId);
-                }
-                break;
-            }
-          }
-        );
-      } catch (err) {
-        console.error('Failed to create storybook:', err);
-        setError(err instanceof Error ? err.message : '创建绘本失败');
-      } finally {
-        setIsCreating(false);
-      }
-    };
-
-    createStorybook();
+    doCreateStream(createParams, '创建绘本失败');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createParams]);
 
@@ -194,53 +228,10 @@ const EditorView: React.FC<EditorViewProps> = ({
   };
 
   // 重新生成绘本
-  const handleRegenerate = async () => {
+  const handleRegenerate = () => {
     if (!savedCreateParams || isCreating) return;
-
     setIsCreating(true);
-    setLoading(true);
-    setError(null);
-
-    try {
-      let createdStorybookId: number | undefined;
-
-      await createStorybookStream(
-        savedCreateParams,
-        (event: StreamEvent) => {
-          console.log('Stream event:', event);
-
-          switch (event.type) {
-            case 'storybook_created':
-              createdStorybookId = event.data.id;
-              if (event.data.id && onStorybookCreated) {
-                onStorybookCreated(event.data.id);
-              }
-              if (event.data.id) {
-                loadStorybook(event.data.id);
-              }
-              break;
-            case 'generation_started':
-              break;
-            case 'generation_completed':
-              if (createdStorybookId) {
-                loadStorybook(createdStorybookId);
-              }
-              break;
-            case 'generation_error':
-            case 'error':
-              if (createdStorybookId) {
-                loadStorybook(createdStorybookId);
-              }
-              break;
-          }
-        }
-      );
-    } catch (err) {
-      console.error('Failed to regenerate storybook:', err);
-      setError(err instanceof Error ? err.message : '重新生成失败');
-    } finally {
-      setIsCreating(false);
-    }
+    doCreateStream(savedCreateParams, '重新生成失败');
   };
 
   const handleDelete = async (id: number, e: React.MouseEvent) => {
@@ -283,50 +274,16 @@ const EditorView: React.FC<EditorViewProps> = ({
     setIsEditing(true);
     setLoading(true);
     setError(null);
+    setInsufficientPointsMessage(null);
 
     try {
-      let newStorybookId: number | undefined;
-
       await editStorybookStream(
         currentStorybook.id,
         { instruction },
-        (event: StreamEvent) => {
-          console.log('Edit stream event:', event);
-
-          switch (event.type) {
-            case 'storybook_created':
-              // 收到 storybook_created 事件，保存新绘本ID并立即跳转
-              newStorybookId = event.data.id;
-              if (event.data.id) {
-                // 立即加载新绘本详情
-                loadStorybook(event.data.id);
-                // 刷新绘本列表
-                loadStorybookList();
-              }
-              break;
-            case 'generation_started':
-              // 更新状态为生成中
-              break;
-            case 'generation_completed':
-              // 生成完成，刷新绘本详情
-              if (newStorybookId) {
-                loadStorybook(newStorybookId);
-              }
-              break;
-            case 'generation_error':
-            case 'error':
-              // 生成出错，刷新绘本详情和列表以获取错误状态
-              if (newStorybookId) {
-                loadStorybook(newStorybookId);
-              }
-              loadStorybookList();
-              break;
-          }
-        }
+        buildStreamEventHandler({ refreshList: true })
       );
     } catch (err) {
-      console.error('Failed to edit storybook:', err);
-      setError(err instanceof Error ? err.message : '编辑绘本失败');
+      handleStreamError(err, '编辑绘本失败');
     } finally {
       setIsEditing(false);
       setLoading(false);
@@ -338,6 +295,7 @@ const EditorView: React.FC<EditorViewProps> = ({
     if (!currentStorybook || !instruction.trim() || isEditing || editingPage === null) return;
 
     setIsEditing(true);
+    setInsufficientPointsMessage(null);
     try {
       const updated = await editStorybookPage(currentStorybook.id, editingPage, { instruction });
       setCurrentStorybook(updated);
@@ -346,7 +304,11 @@ const EditorView: React.FC<EditorViewProps> = ({
       alert('页面已更新！');
     } catch (err) {
       console.error('Failed to edit page:', err);
-      alert('编辑失败');
+      if (err instanceof InsufficientPointsError) {
+        setInsufficientPointsMessage(err.message);
+      } else {
+        alert('编辑失败');
+      }
     } finally {
       setIsEditing(false);
     }
@@ -461,6 +423,25 @@ const EditorView: React.FC<EditorViewProps> = ({
           </button>
         </div>
       </header>
+
+      {/* Insufficient Points Banner */}
+      {insufficientPointsMessage && (
+        <div className="mx-4 mt-3 bg-amber-50 border border-amber-200 px-4 py-3 rounded-xl flex items-center justify-between gap-4 z-50 shadow-md">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="text-amber-500 shrink-0" size={20} />
+            <div>
+              <p className="font-bold text-sm text-amber-900">积分不足</p>
+              <p className="text-xs text-amber-700">{insufficientPointsMessage}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setInsufficientPointsMessage(null)}
+            className="text-amber-400 hover:text-amber-600 transition-colors shrink-0 text-lg leading-none"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Main Workspace */}
       <div className="flex-1 flex overflow-hidden">
@@ -707,8 +688,8 @@ const EditorView: React.FC<EditorViewProps> = ({
 
           {!loading && currentStorybook && currentStorybook.status === 'finished' && pages.length > 0 && (
             <>
-              {/* 页面容器 - 图片+文字整体，比例16:11 */}
-              <div className="relative w-full max-w-5xl aspect-[16/11] transition-all duration-500">
+              {/* 页面容器 - 按16:9设计，16:9图片刚好占满，其他比例会有空白 */}
+              <div className="relative w-full max-w-5xl aspect-[16/9] transition-all duration-500">
                 {/* Navigation Left */}
                 <button
                   onClick={prevSpread}
@@ -746,38 +727,36 @@ const EditorView: React.FC<EditorViewProps> = ({
                           backfaceVisibility: 'hidden',
                         }}
                       >
-                        {/* 整页内容：图片+文字 */}
-                        <div className="w-full h-full flex flex-col bg-white relative">
-                          {/* 图片区域 - 占9份（16:9） */}
-                          <div className="relative w-full flex-[9] bg-gradient-to-br from-indigo-100 to-purple-100 min-h-0">
-                            <img
-                              src={page.image_url}
-                              alt={`Page ${idx + 1}`}
-                              className="w-full h-full object-cover"
-                            />
-                            {/* 编辑按钮 */}
-                            <button
-                              onClick={() => {
-                                setEditingPage(idx);
-                                setShowFloatingInput(true);
-                              }}
-                              className="absolute top-4 right-4 p-2 bg-white/90 hover:bg-white backdrop-blur rounded-lg text-indigo-600 transition-all shadow-lg z-20"
-                              title="编辑此页"
-                            >
-                              <Edit2 size={18} />
-                            </button>
-                          </div>
+                        {/* 整页内容：图片填满，文字叠加底部 */}
+                        <div className="w-full h-full relative bg-gradient-to-br from-indigo-100 to-purple-100">
+                          {/* 图片 - object-contain：16:9图片刚好占满，其他比例留空白 */}
+                          <img
+                            src={page.image_url}
+                            alt={`Page ${idx + 1}`}
+                            className="w-full h-full object-contain"
+                          />
+                          {/* 编辑按钮 */}
+                          <button
+                            onClick={() => {
+                              setEditingPage(idx);
+                              setShowFloatingInput(true);
+                            }}
+                            className="absolute top-4 right-4 p-2 bg-white/90 hover:bg-white backdrop-blur rounded-lg text-indigo-600 transition-all shadow-lg z-20"
+                            title="编辑此页"
+                          >
+                            <Edit2 size={18} />
+                          </button>
 
-                          {/* 文字区域 - 占2份 */}
-                          <div className="flex-[2] bg-gradient-to-br from-amber-50 to-orange-50 book-paper-texture p-3 md:p-4 lg:p-5 flex flex-col justify-center">
-                            <p className="text-xs md:text-sm lg:text-base xl:text-lg text-slate-800 font-lexend leading-relaxed text-center">
+                          {/* 文字区域 - 底部渐变叠加 */}
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/75 via-black/40 to-transparent px-6 pt-10 pb-4">
+                            <p className="text-white text-sm md:text-base lg:text-lg font-lexend leading-relaxed text-center drop-shadow">
                               {page.text}
                             </p>
                           </div>
 
-                          {/* 页码 - 整页右下角 */}
-                          <div className="absolute bottom-4 right-4 px-3 py-1 bg-black/50 backdrop-blur rounded-full z-20">
-                            <span className="text-white text-sm font-bold">{idx + 1}</span>
+                          {/* 页码 - 右下角 */}
+                          <div className="absolute bottom-3 right-3 px-2.5 py-0.5 bg-black/50 backdrop-blur rounded-full z-20">
+                            <span className="text-white text-xs font-bold">{idx + 1}</span>
                           </div>
                         </div>
                       </div>

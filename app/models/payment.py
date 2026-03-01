@@ -47,8 +47,8 @@ class RechargeOrder(Base):
     """
     积分充值订单
 
-    充值比例：1 元 = 7 积分
-      points_amount = amount_fen // 100 * 7
+    充值比例：1 元 = 3 积分
+      points_amount = amount_fen // 100 * 3
 
     支付成功回调流程：
       1. status → paid，回填 wechat_transaction_id、paid_at

@@ -4,6 +4,7 @@ import LoginModal from './components/LoginModal';
 import HomeView from './pages/HomeView';
 import EditorView from './pages/EditorView';
 import TemplatesView from './pages/TemplatesView';
+import UserProfileView from './pages/UserProfileView';
 import { CreateStorybookRequest } from './services/storybookService';
 import { Loader2 } from 'lucide-react';
 
@@ -15,6 +16,7 @@ const InnerApp: React.FC = () => {
   const [currentStorybookId, setCurrentStorybookId] = useState<number | undefined>(undefined);
   const [showMyWorks,     setShowMyWorks]     = useState(false);
   const [showMyTemplates, setShowMyTemplates] = useState(false);
+  const [showProfile,     setShowProfile]     = useState(false);
   const [createParams,    setCreateParams]    = useState<CreateStorybookRequest | null>(null);
 
   const handleBack = () => {
@@ -22,9 +24,10 @@ const InnerApp: React.FC = () => {
     setCreateParams(null);
     setShowMyWorks(false);
     setShowMyTemplates(false);
+    setShowProfile(false);
   };
 
-  const isHomeView = !currentStorybookId && !showMyWorks && !showMyTemplates && !createParams;
+  const isHomeView = !currentStorybookId && !showMyWorks && !showMyTemplates && !showProfile && !createParams;
 
   // 初始化验证 token 时显示全屏 loading，避免登录弹窗闪烁
   if (isLoading) {
@@ -36,7 +39,7 @@ const InnerApp: React.FC = () => {
   }
 
   return (
-    <div className={`h-screen flex flex-col ${isHomeView ? 'overflow-auto' : 'overflow-hidden'}`}>
+    <div className={`h-screen flex flex-col ${isHomeView || showProfile ? 'overflow-auto' : 'overflow-hidden'}`}>
       {/* 按需弹出登录框（后端 401 时触发） */}
       {loginModalOpen && (
         <LoginModal
@@ -45,7 +48,9 @@ const InnerApp: React.FC = () => {
         />
       )}
 
-      {showMyTemplates ? (
+      {showProfile ? (
+        <UserProfileView onBack={handleBack} />
+      ) : showMyTemplates ? (
         <TemplatesView onBack={handleBack} />
       ) : isHomeView ? (
         <HomeView
@@ -65,6 +70,13 @@ const InnerApp: React.FC = () => {
             setCurrentStorybookId(undefined);
             setCreateParams(null);
             setShowMyWorks(false);
+          }}
+          onShowProfile={() => {
+            setShowProfile(true);
+            setCurrentStorybookId(undefined);
+            setCreateParams(null);
+            setShowMyWorks(false);
+            setShowMyTemplates(false);
           }}
         />
       ) : (

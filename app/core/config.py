@@ -57,6 +57,14 @@ class Settings(BaseSettings):
     OSS_BUCKET_NAME: str = ""
     OSS_BASE_URL: str = ""        # 自定义域名，e.g. https://cdn.example.com（可选）
 
+    # WeChat Pay (微信支付 APIv3)
+    WECHAT_PAY_APP_ID: str = ""           # 小程序 / 公众号 AppID
+    WECHAT_PAY_MCHID: str = ""            # 商户号（10位数字）
+    WECHAT_PAY_API_KEY_V3: str = ""       # APIv3 密钥（32字节）
+    WECHAT_PAY_CERT_SERIAL_NO: str = ""   # 商户 API 证书序列号
+    WECHAT_PAY_PRIVATE_KEY: str = ""      # 商户私钥 PEM（多行用 \n 连接，存于 .env）
+    WECHAT_PAY_NOTIFY_URL: str = ""       # 回调基础 URL，如 https://example.com/api/v1/payment/notify
+
 
 @lru_cache
 def get_settings() -> Settings:

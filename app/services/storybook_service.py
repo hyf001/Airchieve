@@ -12,6 +12,12 @@ from app.core.utils.logger import get_logger
 from app.db.session import async_session_maker
 from app.models.storybook import Storybook, StorybookPage, StorybookStatus
 from app.services.gemini_cli import GeminiCli
+from app.services.points_service import (
+    check_creation_points,
+    check_page_edit_points,
+    consume_for_creation,
+    consume_for_page_edit,
+)
 
 logger = get_logger(__name__)
 
@@ -162,9 +168,9 @@ async def _generate_storybook_content_stream(
 
 async def create_storybook_stream(
     instruction: str,
+    user_id: int,
     template_id: Optional[int] = None,
     images: Optional[List[str]] = None,
-    creator: str = "user"
 ) -> AsyncGenerator[str, None]:
     """
     流式创建绘本
@@ -173,11 +179,13 @@ async def create_storybook_stream(
         instruction: 用户指令/绘本描述
         template_id: 模版ID（可选）
         images: base64编码的图片列表（可选）
-        creator: 创建者名称
+        user_id: 用户ID，用于积分检查和扣费
 
     Yields:
         str: JSON格式的进度更新
     """
+    # 创建前检查积分是否足够（不足则抛出 ValueError）
+    await check_creation_points(user_id)
     # 查询模版（如果提供了 template_id）
     start_time = time.time()
     style_prefix = ""
@@ -203,7 +211,7 @@ async def create_storybook_stream(
         new_storybook = Storybook(
             title=instruction[:100] if len(instruction) > 100 else instruction,
             description=f"风格: {style_prefix}\n指令: {instruction}",
-            creator=creator,
+            creator=str(user_id),
             instruction=instruction,
             template_id=template_id,
             status="init"
@@ -228,7 +236,8 @@ async def create_storybook_stream(
         }
     }, ensure_ascii=False)
 
-    # 使用公共生成流程
+    # 使用公共生成流程，生成完成后扣除积分
+    generation_success = False
     async for event in _generate_storybook_content_stream(
         storybook_id=storybook_id,
         instruction=instruction,
@@ -237,6 +246,17 @@ async def create_storybook_stream(
         is_edit=False
     ):
         yield event
+        try:
+            if json.loads(event).get("type") == "generation_completed":
+                generation_success = True
+        except Exception:
+            pass
+
+    if generation_success:
+        try:
+            await consume_for_creation(user_id)
+        except Exception as e:
+            logger.warning("创建绘本积分扣费失败 | user_id=%s error=%s", user_id, e)
 
 
 async def get_storybook(storybook_id: int) -> Optional[Storybook]:
@@ -259,7 +279,8 @@ async def get_storybook(storybook_id: int) -> Optional[Storybook]:
 async def edit_storybook_stream(
     storybook_id: int,
     instruction: str,
-    images: Optional[List[str]] = None
+    user_id: int,
+    images: Optional[List[str]] = None,
 ) -> AsyncGenerator[str, None]:
     """
     流式编辑绘本（创建新版本）
@@ -270,10 +291,13 @@ async def edit_storybook_stream(
         storybook_id: 原绘本ID
         instruction: 编辑指令
         images: base64编码的图片列表（可选）
+        user_id: 用户ID，用于积分检查和扣费
 
     Yields:
         str: JSON格式的进度更新
     """
+    # 编辑前检查积分是否足够（不足则抛出 ValueError）
+    await check_creation_points(user_id)
     # 获取原绘本
     async with async_session_maker() as session:
         result = await session.execute(
@@ -333,7 +357,8 @@ async def edit_storybook_stream(
         }
     }, ensure_ascii=False)
 
-    # 使用公共生成流程
+    # 使用公共生成流程，生成完成后扣除积分
+    generation_success = False
     async for event in _generate_storybook_content_stream(
         storybook_id=new_storybook_id,
         instruction=instruction,
@@ -343,6 +368,17 @@ async def edit_storybook_stream(
         original_pages=current_pages
     ):
         yield event
+        try:
+            if json.loads(event).get("type") == "generation_completed":
+                generation_success = True
+        except Exception:
+            pass
+
+    if generation_success:
+        try:
+            await consume_for_creation(user_id)
+        except Exception as e:
+            logger.warning("修改绘本积分扣费失败 | user_id=%s error=%s", user_id, e)
 
 
 async def update_storybook_pages(
@@ -380,7 +416,8 @@ async def update_storybook_pages(
 async def edit_storybook_page(
     storybook_id: int,
     page_index: int,
-    instruction: str
+    instruction: str,
+    user_id: int,
 ) -> bool:
     """
     编辑绘本单页
@@ -389,10 +426,13 @@ async def edit_storybook_page(
         storybook_id: 绘本ID
         page_index: 页码索引
         instruction: 编辑指令
+        user_id: 用户ID，用于积分检查和扣费
 
     Returns:
         bool: 编辑是否成功
     """
+    # 编辑前检查积分是否足够（不足则抛出 ValueError）
+    await check_page_edit_points(user_id)
     async with async_session_maker() as session:
         result = await session.execute(
             select(Storybook).where(Storybook.id == storybook_id)
@@ -446,6 +486,12 @@ async def edit_storybook_page(
             storybook.pages[page_index] = new_page
             await session.commit()
             logger.info("单页编辑完成 | storybook_id=%s page_index=%s", storybook_id, page_index)
+
+        # 编辑成功后扣除积分
+        try:
+            await consume_for_page_edit(user_id)
+        except Exception as e:
+            logger.warning("单页编辑积分扣费失败 | user_id=%s error=%s", user_id, e)
 
         return True
 

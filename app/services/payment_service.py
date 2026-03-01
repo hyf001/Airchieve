@@ -32,8 +32,8 @@ from app.models.user import MembershipLevel, User
 from app.services import points_service
 
 
-# 充值积分换算比例：1 元 = 7 积分
-POINTS_PER_YUAN: int = 7
+# 充值积分换算比例：1 元 = 3 积分
+POINTS_PER_YUAN: int = 3
 
 
 # ---------------------------------------------------------------------------

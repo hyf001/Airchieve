@@ -232,7 +232,8 @@ class GeminiCli(LLMClientBase):
                 "- Maintain visual consistency: Keep the main character's appearance identical across all pages\n"
                 "- Use a consistent art style and color palette throughout the book\n"
                 "- Ensure professional storybook quality with clean backgrounds and consistent lighting\n"
-                "- Generate images inline with the text, alternating between text and image for each page"
+                "- Generate images inline with the text, alternating between text and image for each page\n"
+                "- Images must contain NO text, letters, or words whatsoever; text and images are completely separate"
             )
 
         # User Prompt：用户的具体创意要求
@@ -253,7 +254,8 @@ class GeminiCli(LLMClientBase):
             model=settings.GEMINI_MODEL,
             contents=types.Content(parts=parts),
             config=types.GenerateContentConfig(
-                system_instruction=system_instruction
+                system_instruction=system_instruction,
+                image_config=types.ImageConfig(aspect_ratio="16:9"),
             ),
         )
 
@@ -299,7 +301,8 @@ class GeminiCli(LLMClientBase):
                 "- Use a consistent art style and color palette throughout the book\n"
                 "- Ensure professional storybook quality with clean backgrounds and consistent lighting\n"
                 "- Consider the original story context and images provided\n"
-                "- Generate images inline with the text, alternating between text and image for each page"
+                "- Generate images inline with the text, alternating between text and image for each page\n"
+                "- Images must contain NO text, letters, or words whatsoever; text and images are completely separate"
             )
 
         # User Prompt：当前故事内容 + 编辑要求
@@ -325,7 +328,8 @@ class GeminiCli(LLMClientBase):
             model=settings.GEMINI_MODEL,
             contents=types.Content(parts=parts),
             config=types.GenerateContentConfig(
-                system_instruction=system_instruction
+                system_instruction=system_instruction,
+                image_config=types.ImageConfig(aspect_ratio="16:9"),
             ),
         )
 
@@ -372,7 +376,8 @@ class GeminiCli(LLMClientBase):
                 "- Keep visual consistency with the original style\n"
                 "- Maintain the character's appearance if applicable\n"
                 "- Ensure professional storybook quality with clean background and good lighting\n"
-                "- Generate the image inline with the text"
+                "- Generate the image inline with the text\n"
+                "- Images must contain NO text, letters, or words whatsoever; text and images are completely separate"
             )
 
         # User Prompt：当前页内容 + 编辑要求
@@ -396,7 +401,8 @@ class GeminiCli(LLMClientBase):
             model=settings.GEMINI_MODEL,
             contents=types.Content(parts=parts),
             config=types.GenerateContentConfig(
-                system_instruction=system_instruction
+                system_instruction=system_instruction,
+                image_config=types.ImageConfig(aspect_ratio="16:9"),
             ),
         )
 

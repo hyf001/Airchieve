@@ -2,13 +2,24 @@ const API_BASE = "/api/v1/storybooks";
 import { getAuthHeaders, triggerUnauthorized } from "./authService";
 
 // ============ 内部工具 ============
+
+export class InsufficientPointsError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InsufficientPointsError";
+  }
+}
+
 const handleWriteError = async (res: Response, fallback: string): Promise<never> => {
   if (res.status === 401) {
     triggerUnauthorized();
     throw new Error("请先登录");
   }
-  const error = await res.json().catch(() => ({ detail: "Unknown error" }));
-  throw new Error(error.detail || fallback);
+  const error = await res.json().catch(() => ({ detail: fallback }));
+  if (res.status === 402 && error.detail?.code === "INSUFFICIENT_POINTS") {
+    throw new InsufficientPointsError(error.detail.message || fallback);
+  }
+  throw new Error(typeof error.detail === "string" ? error.detail : fallback);
 };
 
 // ============ Types ============
@@ -59,6 +70,7 @@ export interface StreamEvent {
     pages_count?: number;
     message?: string;
     error?: string;
+    code?: string;
   };
 }
 
