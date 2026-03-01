@@ -233,18 +233,21 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
 
   return (
     <div className="relative flex-1 flex flex-col items-center py-12 px-4 pb-20 max-w-6xl mx-auto w-full">
+      {/* 背景暖光装饰 */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] rounded-full bg-amber-100/50 blur-3xl pointer-events-none -z-10" />
+
       {/* Hero Section */}
       <header className="text-center mb-8">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 font-medium text-sm mb-4">
-          <Sparkles size={14} />
-          <span>Powered by AI</span>
-        </div>
-        <h1 className="text-5xl md:text-6xl font-bold font-lexend text-slate-900 mb-4 tracking-tight">
-          Create Your <span className="text-indigo-600">Magic Story</span>
+        <h1 className="flex items-center justify-center gap-3 mb-5">
+          <img src="/logo.png" alt="AIrchieve Logo" className="w-24 h-24 md:w-32 md:h-32 object-contain drop-shadow-lg" />
+          <span className="text-6xl md:text-7xl font-black font-lexend title-flow">毛毛虫</span>
         </h1>
-        <p className="text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
-          Transform your imagination into a beautifully illustrated picture book in seconds.
-          Just describe your story and pick a style.
+        <p className="text-base text-slate-500 max-w-xl mx-auto leading-relaxed">
+          用 AI 将你的想象变成精美绘本，描述故事创意，选择画风，即刻生成。
+          <span className="inline-flex items-center gap-1 ml-2 text-xs text-slate-400 align-middle">
+            <Sparkles size={10} />
+            Powered by AI
+          </span>
         </p>
       </header>
 
@@ -351,7 +354,10 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
 
       {/* Style Templates — Carousel */}
       <section className="w-full mb-16">
-        <h2 className="text-2xl font-bold font-lexend text-slate-900 mb-8 text-center">选择你的艺术风格</h2>
+        <h2 className="text-2xl font-bold font-lexend mb-8 text-center">
+          <span className="text-amber-500">选择</span>
+          <span className="text-slate-800">你的艺术风格</span>
+        </h2>
         <div
           ref={carouselSectionRef}
           className="relative group/carousel overflow-visible"
@@ -459,9 +465,9 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
       </section>
 
       {/* Showcase Area */}
-      <section className="w-full bg-slate-900 rounded-[3rem] py-16 px-8 text-center text-white my-16">
-        <h2 className="text-3xl font-bold font-lexend mb-4">Community Creations</h2>
-        <p className="text-slate-400 mb-10">See what others have imagined with AIrchieve.</p>
+      <section className="w-full bg-gradient-to-br from-slate-800 via-slate-900 to-slate-800 rounded-[3rem] py-16 px-8 text-center text-white my-16">
+        <h2 className="text-3xl font-bold font-lexend mb-3">大家的创作</h2>
+        <p className="text-slate-400 mb-10 text-sm">看看其他人都在用毛毛虫创作什么故事</p>
 
         {loadingPublicBooks ? (
           <div className="flex items-center justify-center py-12">
