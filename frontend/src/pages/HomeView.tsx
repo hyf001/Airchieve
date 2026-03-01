@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Sparkles, ChevronLeft, ChevronRight, Loader2, FileText, BookOpen, LogOut, Coins, Crown, User } from 'lucide-react';
+import { Sparkles, ChevronLeft, ChevronRight, Loader2, FileText, BookOpen, LogOut, Coins, Crown, User, Shield } from 'lucide-react';
 import { CreateStorybookRequest, listStorybooks, getStorybook, StorybookListItem, Storybook } from '../services/storybookService';
 import { listTemplates, TemplateListItem, Template } from '../services/templateService';
 import StorybookPreview from '../components/StorybookPreview';
@@ -12,13 +12,14 @@ interface HomeViewProps {
   onShowMyWorks?: () => void;
   onShowMyTemplates?: () => void;
   onShowProfile?: () => void;
+  onShowAdmin?: () => void;
 }
 
 const MEMBERSHIP_LABEL: Record<string, string> = {
   free: '', lite: 'Lite', pro: 'Pro', max: 'Max',
 };
 
-const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTemplates, onShowProfile }) => {
+const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTemplates, onShowProfile, onShowAdmin }) => {
   const { user, logout, openLoginModal } = useAuth();
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateListItem | null>(null);
   const [templates, setTemplates] = useState<TemplateListItem[]>([]);
@@ -318,6 +319,15 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
                 <User size={16} className="text-indigo-500" />
                 <span>个人主页</span>
               </button>
+              {user?.role === 'admin' && (
+                <button
+                  onClick={() => { onShowAdmin?.(); setUserMenuOpen(false); }}
+                  className="w-full px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                >
+                  <Shield size={16} className="text-rose-500" />
+                  <span>系统管理</span>
+                </button>
+              )}
               <button
                 onClick={() => { onShowMyWorks?.(); setUserMenuOpen(false); }}
                 className="w-full px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-2"

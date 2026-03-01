@@ -5,6 +5,7 @@ import HomeView from './pages/HomeView';
 import EditorView from './pages/EditorView';
 import TemplatesView from './pages/TemplatesView';
 import UserProfileView from './pages/UserProfileView';
+import AdminView from './pages/AdminView';
 import { CreateStorybookRequest } from './services/storybookService';
 import { Loader2 } from 'lucide-react';
 
@@ -17,6 +18,7 @@ const InnerApp: React.FC = () => {
   const [showMyWorks,     setShowMyWorks]     = useState(false);
   const [showMyTemplates, setShowMyTemplates] = useState(false);
   const [showProfile,     setShowProfile]     = useState(false);
+  const [showAdmin,       setShowAdmin]       = useState(false);
   const [createParams,    setCreateParams]    = useState<CreateStorybookRequest | null>(null);
 
   const handleBack = () => {
@@ -25,9 +27,10 @@ const InnerApp: React.FC = () => {
     setShowMyWorks(false);
     setShowMyTemplates(false);
     setShowProfile(false);
+    setShowAdmin(false);
   };
 
-  const isHomeView = !currentStorybookId && !showMyWorks && !showMyTemplates && !showProfile && !createParams;
+  const isHomeView = !currentStorybookId && !showMyWorks && !showMyTemplates && !showProfile && !showAdmin && !createParams;
 
   // 初始化验证 token 时显示全屏 loading，避免登录弹窗闪烁
   if (isLoading) {
@@ -48,7 +51,9 @@ const InnerApp: React.FC = () => {
         />
       )}
 
-      {showProfile ? (
+      {showAdmin ? (
+        <AdminView onBack={handleBack} />
+      ) : showProfile ? (
         <UserProfileView onBack={handleBack} />
       ) : showMyTemplates ? (
         <TemplatesView onBack={handleBack} />
@@ -73,6 +78,13 @@ const InnerApp: React.FC = () => {
           }}
           onShowProfile={() => {
             setShowProfile(true);
+            setCurrentStorybookId(undefined);
+            setCreateParams(null);
+            setShowMyWorks(false);
+            setShowMyTemplates(false);
+          }}
+          onShowAdmin={() => {
+            setShowAdmin(true);
             setCurrentStorybookId(undefined);
             setCreateParams(null);
             setShowMyWorks(false);

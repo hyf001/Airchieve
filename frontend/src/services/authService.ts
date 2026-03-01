@@ -150,3 +150,53 @@ export const getMe = async (token: string): Promise<UserOut> =>
 /** 获取积分概览 */
 export const getPointsOverview = async (token: string): Promise<PointsOverview> =>
   get(`${USERS_BASE}/me/points`, token);
+
+// ============ Admin Types ============
+
+export interface UserListResponse {
+  total: number;
+  items: UserOut[];
+}
+
+export interface AdminUpdateUserRequest {
+  status?: string;
+  role?: string;
+  points_delta?: number;
+  points_description?: string;
+  free_creation_remaining?: number;
+  membership_level?: string;
+  membership_expire_at?: string | null;
+}
+
+// ============ Admin API ============
+
+const patch = async <T>(url: string, body: unknown, token: string): Promise<T> => {
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({ detail: res.statusText }));
+  if (res.status === 401) { triggerUnauthorized(); throw new Error('未登录'); }
+  if (!res.ok) throw new Error(extractDetail(data, `请求失败 (${res.status})`));
+  return data as T;
+};
+
+/** 管理员：获取用户列表 */
+export const adminListUsers = async (
+  token: string,
+  page = 1,
+  size = 20,
+  search?: string,
+): Promise<UserListResponse> => {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  if (search) params.set('search', search);
+  return get(`${USERS_BASE}/?${params}`, token);
+};
+
+/** 管理员：更新用户属性 */
+export const adminUpdateUser = async (
+  token: string,
+  userId: number,
+  data: AdminUpdateUserRequest,
+): Promise<UserOut> => patch(`${USERS_BASE}/${userId}`, data, token);

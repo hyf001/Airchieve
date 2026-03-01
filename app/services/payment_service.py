@@ -231,6 +231,27 @@ async def handle_subscription_paid(order_no: str, wechat_transaction_id: str) ->
         await session.commit()
 
 
+async def admin_set_membership(
+    user_id: int,
+    level: str,
+    expire_at: datetime | None,
+) -> None:
+    """管理员直接设置用户会员等级和到期时间"""
+    async with async_session_maker() as session:
+        user = (
+            await session.execute(
+                select(User).where(User.id == user_id).with_for_update()
+            )
+        ).scalar_one_or_none()
+
+        if user is None:
+            raise ValueError("用户不存在")
+
+        user.membership_level = level
+        user.membership_expire_at = expire_at
+        await session.commit()
+
+
 # ---------------------------------------------------------------------------
 # 查询
 # ---------------------------------------------------------------------------

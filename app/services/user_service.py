@@ -10,7 +10,7 @@ User Service
 """
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_password_hash, verify_password
@@ -248,6 +248,63 @@ async def get_user(user_id: int) -> User | None:
         return (
             await session.execute(select(User).where(User.id == user_id))
         ).scalar_one_or_none()
+
+
+async def list_users(
+    page: int = 1,
+    size: int = 20,
+    search: str | None = None,
+) -> tuple[list[User], int]:
+    """管理员：分页查询用户列表，支持按昵称或 ID 搜索"""
+    async with async_session_maker() as session:
+        base = select(User)
+        if search:
+            like_pat = f"%{search}%"
+            if search.isdigit():
+                base = base.where(or_(User.nickname.like(like_pat), User.id == int(search)))
+            else:
+                base = base.where(User.nickname.like(like_pat))
+
+        total: int = (
+            await session.execute(
+                select(func.count()).select_from(base.subquery())
+            )
+        ).scalar_one()
+
+        users = (
+            await session.execute(
+                base.order_by(User.id.desc())
+                .offset((page - 1) * size)
+                .limit(size)
+            )
+        ).scalars().all()
+
+        return list(users), total
+
+
+async def admin_update_user(
+    user_id: int,
+    status: str | None = None,
+    role: str | None = None,
+) -> User | None:
+    """管理员：更新用户状态或角色"""
+    async with async_session_maker() as session:
+        user = (
+            await session.execute(select(User).where(User.id == user_id))
+        ).scalar_one_or_none()
+
+        if user is None:
+            return None
+
+        if status is not None:
+            user.status = status
+        if role is not None:
+            user.role = role
+
+        user.updated_at = datetime.now(timezone.utc)
+        await session.commit()
+        await session.refresh(user)
+        return user
 
 
 async def update_profile(

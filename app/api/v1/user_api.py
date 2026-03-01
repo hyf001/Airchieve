@@ -12,9 +12,9 @@ User API
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.api.deps import get_current_user
-from app.models.user import User
-from app.services import points_service, user_service
+from app.api.deps import get_current_user, get_current_admin
+from app.models.user import User, UserRole, UserStatus, MembershipLevel
+from app.services import points_service, user_service, payment_service
 
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -187,3 +187,104 @@ async def get_points_history(
         )
         for log in logs
     ]
+
+
+# ---------------------------------------------------------------------------
+# 内部辅助
+# ---------------------------------------------------------------------------
+
+def _user_to_out(u: User) -> UserOut:
+    return UserOut(
+        id=u.id,
+        nickname=u.nickname,
+        avatar_url=u.avatar_url,
+        role=u.role,
+        status=u.status,
+        membership_level=u.membership_level,
+        membership_expire_at=u.membership_expire_at.isoformat() if u.membership_expire_at else None,
+        points_balance=u.points_balance,
+        free_creation_remaining=u.free_creation_remaining,
+        created_at=u.created_at.isoformat(),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 管理员端点
+# ---------------------------------------------------------------------------
+
+class UserListResponse(BaseModel):
+    total: int
+    items: list[UserOut]
+
+
+class AdminUpdateUserRequest(BaseModel):
+    status:                  str | None = Field(None, description="active | banned")
+    role:                    str | None = Field(None, description="admin | user")
+    points_delta:            int | None = Field(None, description="积分增减（可正可负）")
+    points_description:      str | None = Field(None, description="积分调整备注")
+    free_creation_remaining: int | None = Field(None, ge=0, description="直接设置免费次数")
+    membership_level:        str | None = Field(None, description="free | lite | pro | max")
+    membership_expire_at:    str | None = Field(None, description="会员到期时间 ISO 字符串，null 表示清除")
+
+
+@router.get("/", response_model=UserListResponse)
+async def admin_list_users(
+    page:   int = 1,
+    size:   int = 20,
+    search: str | None = None,
+    _admin: User = Depends(get_current_admin),
+):
+    """管理员：获取用户列表（分页 + 按昵称/ID 搜索）"""
+    users, total = await user_service.list_users(
+        page=page, size=min(size, 100), search=search
+    )
+    return UserListResponse(total=total, items=[_user_to_out(u) for u in users])
+
+
+@router.patch("/{user_id}", response_model=UserOut)
+async def admin_update_user(
+    user_id: int,
+    req:     AdminUpdateUserRequest,
+    _admin:  User = Depends(get_current_admin),
+):
+    """管理员：更新用户状态/角色/积分/免费次数/会员等级"""
+    from datetime import datetime
+
+    valid_statuses = {s.value for s in UserStatus}
+    valid_roles    = {r.value for r in UserRole}
+    valid_levels   = {m.value for m in MembershipLevel}
+
+    if req.status is not None and req.status not in valid_statuses:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"无效的状态值: {req.status}")
+    if req.role is not None and req.role not in valid_roles:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"无效的角色值: {req.role}")
+    if req.membership_level is not None and req.membership_level not in valid_levels:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"无效的会员等级: {req.membership_level}")
+
+    if await user_service.get_user(user_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "用户不存在")
+
+    if req.status is not None or req.role is not None:
+        await user_service.admin_update_user(user_id, status=req.status, role=req.role)
+
+    if req.points_delta is not None and req.points_delta != 0:
+        try:
+            await points_service.admin_adjust_points(
+                user_id=user_id,
+                delta=req.points_delta,
+                description=req.points_description or "管理员调整",
+            )
+        except ValueError as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+
+    if req.free_creation_remaining is not None:
+        await points_service.admin_set_free_creation(user_id, req.free_creation_remaining)
+
+    if req.membership_level is not None:
+        expire_at = None
+        if req.membership_expire_at:
+            expire_at = datetime.fromisoformat(req.membership_expire_at)
+        await payment_service.admin_set_membership(user_id, req.membership_level, expire_at)
+
+    user = await user_service.get_user(user_id)
+    return _user_to_out(user)  # type: ignore[arg-type]

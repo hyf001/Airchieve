@@ -261,6 +261,22 @@ async def admin_adjust_points(user_id: int, delta: int, description: str) -> Non
         await session.commit()
 
 
+async def admin_set_free_creation(user_id: int, count: int) -> None:
+    """管理员直接设置用户免费创作次数"""
+    async with async_session_maker() as session:
+        user = (
+            await session.execute(
+                select(User).where(User.id == user_id).with_for_update()
+            )
+        ).scalar_one_or_none()
+
+        if user is None:
+            raise ValueError("用户不存在")
+
+        user.free_creation_remaining = count
+        await session.commit()
+
+
 # ---------------------------------------------------------------------------
 # 查询
 # ---------------------------------------------------------------------------
