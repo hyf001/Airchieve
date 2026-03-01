@@ -157,7 +157,7 @@ const EditModal: React.FC<EditModalProps> = ({ user, token, onClose, onSaved }) 
             <label className="w-20 text-sm text-slate-500 shrink-0">VIP 等级</label>
             <select
               value={membershipLevel}
-              onChange={e => setMembershipLevel(e.target.value)}
+              onChange={e => setMembershipLevel(e.target.value as "free" | "lite" | "pro" | "max")}
               className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
             >
               <option value="free">免费</option>
