@@ -158,7 +158,6 @@ async def _generate_storybook_content_stream(
                 "error": str(e)
             }
         }, ensure_ascii=False)
-        raise
 
 
 async def create_storybook_stream(
