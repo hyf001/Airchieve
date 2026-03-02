@@ -37,6 +37,9 @@ export interface Storybook {
   creator: string;
   pages: StorybookPage[] | null;
   status: StorybookStatus;
+  error_message?: string | null;
+  instruction?: string | null;
+  template_id?: number | null;
 }
 
 export interface StorybookListItem {
@@ -61,34 +64,26 @@ export interface EditStorybookRequest {
   images?: string[];
 }
 
-export interface StreamEvent {
-  type: "storybook_created" | "generation_started" | "generation_completed" | "generation_error" | "error";
-  data: {
-    id?: number;
-    title?: string;
-    status?: string;
-    pages_count?: number;
-    message?: string;
-    error?: string;
-    code?: string;
-  };
+export interface StorybookCreateResponse {
+  id: number;
+  title: string;
+  status: StorybookStatus;
 }
 
-export type StreamEventHandler = (event: StreamEvent) => void;
+export interface EditPageAsyncResponse {
+  storybook_id: number;
+  status: StorybookStatus;
+}
 
 // ============ API Functions ============
 
 /**
- * 流式创建绘本
- * @param req 创建请求
- * @param onEvent 事件回调函数
- * @returns Promise，在流结束时 resolve，返回最终的 storybook ID
+ * 创建绘本（异步，返回绘本 ID，后台生成）
  */
-export const createStorybookStream = async (
-  req: CreateStorybookRequest,
-  onEvent: StreamEventHandler
-): Promise<number> => {
-  const res = await fetch(`${API_BASE}/stream`, {
+export const createStorybook = async (
+  req: CreateStorybookRequest
+): Promise<StorybookCreateResponse> => {
+  const res = await fetch(`${API_BASE}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify({
@@ -97,62 +92,10 @@ export const createStorybookStream = async (
       images: req.images || [],
     }),
   });
-
   if (!res.ok) {
-    await handleWriteError(res, `Failed to create storybook: ${res.status}`);
+    await handleWriteError(res, "创建绘本失败");
   }
-
-  const reader = res.body?.getReader();
-  if (!reader) {
-    throw new Error("No response body");
-  }
-
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let storybookId: number | undefined;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      // 处理 SSE 格式的数据
-      const lines = buffer.split("\n\n");
-      buffer = lines.pop() || ""; // 保留未完成的行
-
-      for (const line of lines) {
-        if (!line.trim()) continue;
-
-        // 解析 SSE 数据行
-        const dataLine = line.split("\n").find((l) => l.startsWith("data: "));
-        if (!dataLine) continue;
-
-        const data = dataLine.slice(6); // 移除 "data: " 前缀
-
-        if (data === "[DONE]") {
-          return storybookId!;
-        }
-
-        try {
-          const event: StreamEvent = JSON.parse(data);
-          onEvent(event);
-
-          // 提取 storybook ID
-          if (event.type === "storybook_created" && event.data.id) {
-            storybookId = event.data.id;
-          }
-        } catch (e) {
-          console.error("Failed to parse SSE event:", e);
-        }
-      }
-    }
-
-    return storybookId!;
-  } finally {
-    reader.releaseLock();
-  }
+  return res.json() as Promise<StorybookCreateResponse>;
 };
 
 /**
@@ -181,7 +124,7 @@ export const listStorybooks = async (params?: {
 };
 
 /**
- * 获取绘本详情
+ * 获取绘本详情（含 status、error_message，用于轮询）
  */
 export const getStorybook = async (storybookId: number): Promise<Storybook> => {
   const res = await fetch(`${API_BASE}/${storybookId}`);
@@ -193,18 +136,13 @@ export const getStorybook = async (storybookId: number): Promise<Storybook> => {
 };
 
 /**
- * 流式编辑绘本（创建新版本）
- * @param storybookId 原绘本ID
- * @param req 编辑请求
- * @param onEvent 事件回调函数
- * @returns Promise，在流结束时 resolve，返回新创建的 storybook ID
+ * 编辑绘本（异步，创建新版本，返回新绘本 ID）
  */
-export const editStorybookStream = async (
+export const editStorybook = async (
   storybookId: number,
-  req: EditStorybookRequest,
-  onEvent: StreamEventHandler
-): Promise<number> => {
-  const res = await fetch(`${API_BASE}/${storybookId}/stream`, {
+  req: EditStorybookRequest
+): Promise<StorybookCreateResponse> => {
+  const res = await fetch(`${API_BASE}/${storybookId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify({
@@ -212,83 +150,30 @@ export const editStorybookStream = async (
       images: req.images || [],
     }),
   });
-
   if (!res.ok) {
-    await handleWriteError(res, `Failed to edit storybook: ${res.status}`);
+    await handleWriteError(res, "编辑绘本失败");
   }
-
-  const reader = res.body?.getReader();
-  if (!reader) {
-    throw new Error("No response body");
-  }
-
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let storybookId_new: number | undefined;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      // 处理 SSE 格式的数据
-      const lines = buffer.split("\n\n");
-      buffer = lines.pop() || ""; // 保留未完成的行
-
-      for (const line of lines) {
-        if (!line.trim()) continue;
-
-        // 解析 SSE 数据行
-        const dataLine = line.split("\n").find((l) => l.startsWith("data: "));
-        if (!dataLine) continue;
-
-        const data = dataLine.slice(6); // 移除 "data: " 前缀
-
-        if (data === "[DONE]") {
-          return storybookId_new!;
-        }
-
-        try {
-          const event: StreamEvent = JSON.parse(data);
-          onEvent(event);
-
-          // 提取新 storybook ID
-          if (event.type === "storybook_created" && event.data.id) {
-            storybookId_new = event.data.id;
-          }
-        } catch (e) {
-          console.error("Failed to parse SSE event:", e);
-        }
-      }
-    }
-
-    return storybookId_new!;
-  } finally {
-    reader.releaseLock();
-  }
+  return res.json() as Promise<StorybookCreateResponse>;
 };
 
 /**
- * 编辑绘本单页
+ * 编辑绘本单页（异步，返回 storybook_id + status: "updating"）
+ * 客户端轮询 GET /{storybook_id} 直到 status !== "updating"
  */
 export const editStorybookPage = async (
   storybookId: number,
   pageIndex: number,
-  req: EditStorybookRequest
-): Promise<Storybook> => {
+  req: { instruction: string }
+): Promise<EditPageAsyncResponse> => {
   const res = await fetch(`${API_BASE}/${storybookId}/pages/${pageIndex}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-    body: JSON.stringify({
-      instruction: req.instruction,
-    }),
+    body: JSON.stringify({ instruction: req.instruction }),
   });
   if (!res.ok) {
-    await handleWriteError(res, `Failed to edit page: ${res.status}`);
+    await handleWriteError(res, "编辑页面失败");
   }
-  return res.json() as Promise<Storybook>;
+  return res.json() as Promise<EditPageAsyncResponse>;
 };
 
 /**

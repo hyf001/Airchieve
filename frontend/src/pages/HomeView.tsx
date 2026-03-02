@@ -1,14 +1,14 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Sparkles, ChevronLeft, ChevronRight, Loader2, FileText, BookOpen, LogOut, Coins, Crown, User, Shield } from 'lucide-react';
-import { CreateStorybookRequest, listStorybooks, getStorybook, StorybookListItem, Storybook } from '../services/storybookService';
+import { CreateStorybookRequest, createStorybook, InsufficientPointsError, listStorybooks, getStorybook, StorybookListItem, Storybook } from '../services/storybookService';
 import { listTemplates, TemplateListItem, Template } from '../services/templateService';
 import StorybookPreview from '../components/StorybookPreview';
 import FloatingInputBox from '../components/FloatingInputBox';
 import { useAuth } from '../contexts/AuthContext';
 
 interface HomeViewProps {
-  onStart?: (params: CreateStorybookRequest) => void;
+  onStart?: (storybookId: number) => void;
   onShowMyWorks?: () => void;
   onShowMyTemplates?: () => void;
   onShowProfile?: () => void;
@@ -43,8 +43,20 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
   // 登录后自动执行待处理的创作跳转
   useEffect(() => {
     if (user && pendingCreateParams) {
+      const params = pendingCreateParams;
       setPendingCreateParams(null);
-      onStart?.(pendingCreateParams);
+      setIsCreating(true);
+      setError(null);
+      createStorybook(params)
+        .then((res) => { onStart?.(res.id); })
+        .catch((err) => {
+          if (err instanceof InsufficientPointsError) {
+            setError(`积分不足：${err.message}`);
+          } else {
+            setError(err instanceof Error ? err.message : '创建失败，请重试');
+          }
+        })
+        .finally(() => setIsCreating(false));
     }
   }, [user, pendingCreateParams, onStart]);
 
@@ -154,39 +166,38 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [handleClickOutside]);
 
-  const handleStart = (instruction: string) => {
+  const handleStart = async (instruction: string) => {
     if (!instruction.trim() || isCreating) return;
 
     // 未登录时，先弹出登录框，登录完成后再跳转
     if (!user) {
-      const createParams: CreateStorybookRequest = {
+      const params: CreateStorybookRequest = {
         instruction,
         template_id: selectedTemplate?.id,
         images: uploadedImages.length > 0 ? uploadedImages : undefined,
       };
-      setPendingCreateParams(createParams);
+      setPendingCreateParams(params);
       openLoginModal();
       return;
     }
 
     setIsCreating(true);
     setError(null);
-    setGenerationStatus('正在跳转到编辑器...');
+    setGenerationStatus('正在创建绘本...');
 
     try {
-      // 不发起请求，直接跳转到 EditorView 并传递创建参数
-      const createParams: CreateStorybookRequest = {
+      const res = await createStorybook({
         instruction,
         template_id: selectedTemplate?.id,
         images: uploadedImages.length > 0 ? uploadedImages : undefined,
-      };
-
-      if (onStart) {
-        onStart(createParams);
-      }
+      });
+      onStart?.(res.id);
     } catch (err) {
-      console.error('Failed to navigate to editor:', err);
-      setError(err instanceof Error ? err.message : '跳转失败，请重试');
+      if (err instanceof InsufficientPointsError) {
+        setError(`积分不足：${err.message}`);
+      } else {
+        setError(err instanceof Error ? err.message : '创建失败，请重试');
+      }
     } finally {
       setIsCreating(false);
       setGenerationStatus(null);

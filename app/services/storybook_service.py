@@ -2,9 +2,8 @@
 Storybook Service
 绘本服务
 """
-from typing import Optional, List, AsyncGenerator
+from typing import Optional, List
 import asyncio
-import json
 import time
 from sqlalchemy import select
 
@@ -14,7 +13,6 @@ from app.models.storybook import Storybook, StorybookPage, StorybookStatus
 from app.services.gemini_cli import GeminiCli
 from app.services.points_service import (
     check_creation_points,
-    check_page_edit_points,
     consume_for_creation,
     consume_for_page_edit,
 )
@@ -50,39 +48,18 @@ async def _upload_pages_images_to_oss(
     return list(results)
 
 
-async def _generate_storybook_content_stream(
+async def _generate_storybook_content(
     storybook_id: int,
     instruction: str,
     system_prompt: Optional[str] = None,
     images: Optional[List[str]] = None,
     is_edit: bool = False,
     original_pages: Optional[List[StorybookPage]] = None
-) -> AsyncGenerator[str, None]:
-    """
-    通用的绘本内容生成流程（支持创建和编辑）
-
-    Args:
-        storybook_id: 绘本ID
-        instruction: 用户指令
-        system_prompt: 系统提示词（可选）
-        images: base64编码的图片列表（可选）
-        is_edit: 是否为编辑模式
-        original_pages: 原始页面（仅编辑模式使用）
-
-    Yields:
-        str: JSON格式的进度更新
-    """
+) -> None:
+    """通用的绘本内容生成流程（支持创建和编辑）"""
     mode = "编辑" if is_edit else "创建"
     start_time = time.time()
     logger.info("开始生成绘本内容 | storybook_id=%s mode=%s", storybook_id, mode)
-
-    # 发送开始生成事件
-    yield json.dumps({
-        "type": "generation_started",
-        "data": {
-            "message": "开始生成绘本内容..."
-        }
-    }, ensure_ascii=False)
 
     # 更新状态为 creating
     async with async_session_maker() as session:
@@ -95,18 +72,15 @@ async def _generate_storybook_content_stream(
             await session.commit()
 
     try:
-        # 使用 LLM CLI 生成绘本内容
         llm_client = GeminiCli()
 
         if is_edit and original_pages:
-            # 编辑模式：基于原始页面重新生成
             pages = await llm_client.edit_story(
                 instruction=instruction,
                 current_pages=original_pages,
                 system_prompt=system_prompt
             )
         else:
-            # 创建模式：全新生成
             pages = await llm_client.create_story(
                 instruction=instruction,
                 system_prompt=system_prompt,
@@ -125,71 +99,44 @@ async def _generate_storybook_content_stream(
                 select(Storybook).where(Storybook.id == storybook_id)
             )
             storybook = result.scalar_one_or_none()
-
             if storybook:
                 storybook.pages = pages
                 storybook.status = "finished"
+                storybook.error_message = None
                 await session.commit()
 
         elapsed = time.time() - start_time
         logger.info("绘本生成完成 | storybook_id=%s pages_count=%s elapsed=%.2fs", storybook_id, len(pages) if pages else 0, elapsed)
 
-        # 发送完成事件
-        yield json.dumps({
-            "type": "generation_completed",
-            "data": {
-                "id": storybook_id,
-                "status": "finished",
-                "pages_count": len(pages) if pages else 0
-            }
-        }, ensure_ascii=False)
-
     except Exception as e:
         logger.exception("绘本生成失败 | storybook_id=%s error=%s", storybook_id, e)
-
-        # 发送错误事件
         async with async_session_maker() as session:
             result = await session.execute(
                 select(Storybook).where(Storybook.id == storybook_id)
             )
             storybook = result.scalar_one_or_none()
-
             if storybook:
                 storybook.status = "error"
+                storybook.error_message = str(e)[:500]
                 await session.commit()
 
-        yield json.dumps({
-            "type": "generation_error",
-            "data": {
-                "error": str(e)
-            }
-        }, ensure_ascii=False)
 
+# ============ 异步创建（轮询模式） ============
 
-async def create_storybook_stream(
+async def create_storybook_async(
     instruction: str,
     user_id: int,
     template_id: Optional[int] = None,
-    images: Optional[List[str]] = None,
-) -> AsyncGenerator[str, None]:
+) -> tuple[int, str, Optional[str]]:
     """
-    流式创建绘本
-
-    Args:
-        instruction: 用户指令/绘本描述
-        template_id: 模版ID（可选）
-        images: base64编码的图片列表（可选）
-        user_id: 用户ID，用于积分检查和扣费
-
-    Yields:
-        str: JSON格式的进度更新
+    同步阶段：检查积分、解析模版、创建绘本记录。
+    返回 (storybook_id, title, systemprompt) 供后台任务使用。
+    积分不足时抛出 InsufficientPointsError。
     """
-    # 创建前检查积分是否足够（不足则抛出 ValueError）
     await check_creation_points(user_id)
-    # 查询模版（如果提供了 template_id）
-    start_time = time.time()
+
+    systemprompt: Optional[str] = None
     style_prefix = ""
-    systemprompt = None
 
     if template_id:
         from app.models.template import Template
@@ -198,15 +145,10 @@ async def create_storybook_stream(
                 select(Template).where(Template.id == template_id)
             )
             template = result.scalar_one_or_none()
-
             if template and template.is_active:
-                # 使用模版的 systemprompt
                 systemprompt = template.systemprompt
-                # 从模版的 instruction 中提取 style_prefix（如果需要的话）
-                # 这里可以根据实际需求调整
                 style_prefix = template.instruction if template.instruction else ""
 
-    # 步骤1: 创建绘本记录
     async with async_session_maker() as session:
         new_storybook = Storybook(
             title=instruction[:100] if len(instruction) > 100 else instruction,
@@ -216,110 +158,80 @@ async def create_storybook_stream(
             template_id=template_id,
             status="init"
         )
-
         session.add(new_storybook)
         await session.commit()
         await session.refresh(new_storybook)
-
         storybook_id = new_storybook.id
+        title = new_storybook.title
 
-    elapsed = time.time() - start_time
-    logger.info("绘本记录已创建 | storybook_id=%s title=%s 耗时=%.2fs", storybook_id, new_storybook.title, elapsed)
-
-    # 发送绘本创建成功事件
-    yield json.dumps({
-        "type": "storybook_created",
-        "data": {
-            "id": storybook_id,
-            "title": new_storybook.title,
-            "status": "init"
-        }
-    }, ensure_ascii=False)
-
-    # 使用公共生成流程，生成完成后扣除积分
-    generation_success = False
-    async for event in _generate_storybook_content_stream(
-        storybook_id=storybook_id,
-        instruction=instruction,
-        system_prompt=systemprompt,
-        images=images,
-        is_edit=False
-    ):
-        yield event
-        try:
-            if json.loads(event).get("type") == "generation_completed":
-                generation_success = True
-        except Exception:
-            pass
-
-    if generation_success:
-        try:
-            await consume_for_creation(user_id)
-        except Exception as e:
-            logger.warning("创建绘本积分扣费失败 | user_id=%s error=%s", user_id, e)
+    logger.info("绘本记录已创建（异步模式）| storybook_id=%s", storybook_id)
+    return storybook_id, title, systemprompt
 
 
-async def get_storybook(storybook_id: int) -> Optional[Storybook]:
-    """
-    获取绘本信息
-
-    Args:
-        storybook_id: 绘本ID
-
-    Returns:
-        Storybook对象，如果不存在则返回None
-    """
-    async with async_session_maker() as session:
-        result = await session.execute(
-            select(Storybook).where(Storybook.id == storybook_id)
-        )
-        return result.scalar_one_or_none()
-
-
-async def edit_storybook_stream(
+async def run_create_storybook_background(
     storybook_id: int,
     instruction: str,
     user_id: int,
-    images: Optional[List[str]] = None,
-) -> AsyncGenerator[str, None]:
+    systemprompt: Optional[str],
+    images: Optional[List[str]],
+) -> None:
+    """后台任务：执行绘本内容生成，生成完成后扣除积分。"""
+    logger.info("创建绘本后台任务开始 | storybook_id=%s", storybook_id)
+    try:
+        await asyncio.wait_for(
+            _generate_storybook_content(
+                storybook_id=storybook_id,
+                instruction=instruction,
+                system_prompt=systemprompt,
+                images=images,
+                is_edit=False,
+            ),
+            timeout=900,
+        )
+        await consume_for_creation(user_id)
+    except asyncio.TimeoutError:
+        logger.error("创建绘本超时 | storybook_id=%s", storybook_id)
+        async with async_session_maker() as session:
+            result = await session.execute(select(Storybook).where(Storybook.id == storybook_id))
+            storybook = result.scalar_one_or_none()
+            if storybook:
+                storybook.status = "error"
+                storybook.error_message = "生成超时，请重试"
+                await session.commit()
+    except Exception as e:
+        logger.exception("创建绘本后台任务异常 | storybook_id=%s error=%s", storybook_id, e)
+
+
+# ============ 异步编辑整本（轮询模式） ============
+
+async def edit_storybook_async(
+    storybook_id: int,
+    instruction: str,
+    user_id: int,
+) -> tuple[int, str, Optional[str], List[StorybookPage]]:
     """
-    流式编辑绘本（创建新版本）
-
-    根据编辑指令对绘本进行修改，创建一个新的绘本保留原版本。
-
-    Args:
-        storybook_id: 原绘本ID
-        instruction: 编辑指令
-        images: base64编码的图片列表（可选）
-        user_id: 用户ID，用于积分检查和扣费
-
-    Yields:
-        str: JSON格式的进度更新
+    同步阶段：检查积分、获取原绘本、创建新绘本记录。
+    返回 (new_storybook_id, title, systemprompt, original_pages) 供后台任务使用。
+    积分不足时抛出 InsufficientPointsError。
+    原绘本不存在时抛出 ValueError。
     """
-    # 编辑前检查积分是否足够（不足则抛出 ValueError）
     await check_creation_points(user_id)
-    # 获取原绘本
+
     async with async_session_maker() as session:
         result = await session.execute(
             select(Storybook).where(Storybook.id == storybook_id)
         )
-        original_storybook = result.scalar_one_or_none()
+        original = result.scalar_one_or_none()
 
-        if not original_storybook or not original_storybook.pages:
-            logger.warning("编辑失败，原绘本不存在或无页面 | storybook_id=%s", storybook_id)
-            yield json.dumps({
-                "type": "generation_error",
-                "data": {
-                    "error": "原绘本不存在或没有页面"
-                }
-            }, ensure_ascii=False)
-            return
+        if not original or not original.pages:
+            raise ValueError("原绘本不存在或没有页面")
 
-        current_pages = original_storybook.pages
-        template_id = original_storybook.template_id
+        original_pages: List[StorybookPage] = list(original.pages)
+        template_id = original.template_id
+        original_title = original.title
+        original_creator = original.creator
 
-        # 查询模版（如果原绘本使用了模版）
-        systemprompt = None
+        systemprompt: Optional[str] = None
         if template_id:
             from app.models.template import Template
             result = await session.execute(
@@ -329,72 +241,166 @@ async def edit_storybook_stream(
             if template and template.is_active:
                 systemprompt = template.systemprompt
 
-        # 创建新绘本记录
         new_storybook = Storybook(
-            title=f"{original_storybook.title} (编辑版)",
+            title=f"{original_title} (编辑版)",
             description=f"基于绘本#{storybook_id}编辑\n编辑指令: {instruction}",
-            creator=original_storybook.creator,
+            creator=original_creator,
             instruction=instruction,
             template_id=template_id,
             status="init"
         )
-
         session.add(new_storybook)
         await session.commit()
         await session.refresh(new_storybook)
+        new_id = new_storybook.id
+        new_title = new_storybook.title
 
-        new_storybook_id = new_storybook.id
+    logger.info("编辑版绘本记录已创建（异步模式）| original_id=%s new_id=%s", storybook_id, new_id)
+    return new_id, new_title, systemprompt, original_pages
 
-    logger.info("编辑版绘本记录已创建 | original_id=%s new_id=%s", storybook_id, new_storybook_id)
 
-    # 发送新绘本创建成功事件
-    yield json.dumps({
-        "type": "storybook_created",
-        "data": {
-            "id": new_storybook_id,
-            "title": new_storybook.title,
-            "status": "init"
-        }
-    }, ensure_ascii=False)
+async def run_edit_storybook_background(
+    new_storybook_id: int,
+    instruction: str,
+    user_id: int,
+    systemprompt: Optional[str],
+    images: Optional[List[str]],
+    original_pages: List[StorybookPage],
+) -> None:
+    """后台任务：执行编辑版绘本的内容生成，生成完成后扣除积分。"""
+    logger.info("编辑绘本后台任务开始 | new_storybook_id=%s", new_storybook_id)
+    try:
+        await asyncio.wait_for(
+            _generate_storybook_content(
+                storybook_id=new_storybook_id,
+                instruction=instruction,
+                system_prompt=systemprompt,
+                images=images,
+                is_edit=True,
+                original_pages=original_pages,
+            ),
+            timeout=900,
+        )
+        await consume_for_creation(user_id)
+    except asyncio.TimeoutError:
+        logger.error("编辑绘本超时 | new_storybook_id=%s", new_storybook_id)
+        async with async_session_maker() as session:
+            result = await session.execute(select(Storybook).where(Storybook.id == new_storybook_id))
+            storybook = result.scalar_one_or_none()
+            if storybook:
+                storybook.status = "error"
+                storybook.error_message = "生成超时，请重试"
+                await session.commit()
+    except Exception as e:
+        logger.exception("编辑绘本后台任务异常 | new_storybook_id=%s error=%s", new_storybook_id, e)
 
-    # 使用公共生成流程，生成完成后扣除积分
-    generation_success = False
-    async for event in _generate_storybook_content_stream(
-        storybook_id=new_storybook_id,
+
+# ============ 异步编辑单页（轮询模式） ============
+
+async def run_edit_page_background(
+    storybook_id: int,
+    page_index: int,
+    instruction: str,
+    user_id: int,
+) -> None:
+    """后台任务：执行单页编辑，更新绘本状态，成功后扣除积分。"""
+    logger.info("单页编辑后台任务开始 | storybook_id=%s page_index=%s", storybook_id, page_index)
+    try:
+        await asyncio.wait_for(
+            _do_edit_page(storybook_id, page_index, instruction, user_id),
+            timeout=900,
+        )
+    except asyncio.TimeoutError:
+        logger.error("单页编辑超时 | storybook_id=%s page_index=%s", storybook_id, page_index)
+        async with async_session_maker() as session:
+            result = await session.execute(select(Storybook).where(Storybook.id == storybook_id))
+            storybook = result.scalar_one_or_none()
+            if storybook:
+                storybook.status = "error"
+                storybook.error_message = "生成超时，请重试"
+                await session.commit()
+    except Exception as e:
+        logger.exception("单页编辑后台任务失败 | storybook_id=%s error=%s", storybook_id, e)
+        async with async_session_maker() as session:
+            result = await session.execute(select(Storybook).where(Storybook.id == storybook_id))
+            storybook = result.scalar_one_or_none()
+            if storybook:
+                storybook.status = "error"
+                storybook.error_message = str(e)[:500]
+                await session.commit()
+
+
+async def _do_edit_page(
+    storybook_id: int,
+    page_index: int,
+    instruction: str,
+    user_id: int,
+) -> None:
+    """单页编辑的实际逻辑，供 wait_for 包裹。"""
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Storybook).where(Storybook.id == storybook_id)
+        )
+        storybook = result.scalar_one_or_none()
+        if not storybook or not storybook.pages:
+            logger.warning("单页编辑失败，绘本不存在或无页面 | storybook_id=%s", storybook_id)
+            return
+
+        current_page = storybook.pages[page_index]
+        template_id = storybook.template_id
+        systemprompt: Optional[str] = None
+
+        if template_id:
+            from app.models.template import Template
+            result = await session.execute(
+                select(Template).where(Template.id == template_id)
+            )
+            template = result.scalar_one_or_none()
+            if template and template.is_active:
+                systemprompt = template.systemprompt
+
+    # LLM 编辑单页
+    llm_client = GeminiCli()
+    new_page = await llm_client.edit_page(
+        page_index=page_index,
         instruction=instruction,
+        current_page=current_page,
         system_prompt=systemprompt,
-        images=images,
-        is_edit=True,
-        original_pages=current_pages
-    ):
-        yield event
-        try:
-            if json.loads(event).get("type") == "generation_completed":
-                generation_success = True
-        except Exception:
-            pass
+    )
 
-    if generation_success:
-        try:
-            await consume_for_creation(user_id)
-        except Exception as e:
-            logger.warning("修改绘本积分扣费失败 | user_id=%s error=%s", user_id, e)
+    # 更新页面内容并恢复状态
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Storybook).where(Storybook.id == storybook_id)
+        )
+        storybook = result.scalar_one_or_none()
+        if storybook and storybook.pages:
+            storybook.pages[page_index] = new_page
+            storybook.status = "finished"
+            storybook.error_message = None
+            await session.commit()
+            logger.info("单页编辑完成 | storybook_id=%s page_index=%s", storybook_id, page_index)
+
+    try:
+        await consume_for_page_edit(user_id)
+    except Exception as e:
+        logger.warning("单页编辑积分扣费失败 | user_id=%s error=%s", user_id, e)
+
+
+# ============ 查询 ============
+
+async def get_storybook(storybook_id: int) -> Optional[Storybook]:
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Storybook).where(Storybook.id == storybook_id)
+        )
+        return result.scalar_one_or_none()
 
 
 async def update_storybook_pages(
     storybook_id: int,
     pages: List[StorybookPage]
 ) -> bool:
-    """
-    更新绘本页面内容
-
-    Args:
-        storybook_id: 绘本ID
-        pages: 页面列表
-
-    Returns:
-        bool: 更新是否成功
-    """
     async with async_session_maker() as session:
         result = await session.execute(
             select(Storybook).where(Storybook.id == storybook_id)
@@ -413,89 +419,6 @@ async def update_storybook_pages(
         return True
 
 
-async def edit_storybook_page(
-    storybook_id: int,
-    page_index: int,
-    instruction: str,
-    user_id: int,
-) -> bool:
-    """
-    编辑绘本单页
-
-    Args:
-        storybook_id: 绘本ID
-        page_index: 页码索引
-        instruction: 编辑指令
-        user_id: 用户ID，用于积分检查和扣费
-
-    Returns:
-        bool: 编辑是否成功
-    """
-    # 编辑前检查积分是否足够（不足则抛出 ValueError）
-    await check_page_edit_points(user_id)
-    async with async_session_maker() as session:
-        result = await session.execute(
-            select(Storybook).where(Storybook.id == storybook_id)
-        )
-        storybook = result.scalar_one_or_none()
-
-        if not storybook or not storybook.pages:
-            logger.warning("编辑单页失败，绘本不存在或无页面 | storybook_id=%s", storybook_id)
-            return False
-
-        if page_index < 0 or page_index >= len(storybook.pages):
-            logger.warning("编辑单页失败，页码越界 | storybook_id=%s page_index=%s total=%s", storybook_id, page_index, len(storybook.pages))
-            return False
-
-        current_page = storybook.pages[page_index]
-        template_id = storybook.template_id
-
-        # 查询模版（如果绘本使用了模版）
-        systemprompt = None
-        if template_id:
-            from app.models.template import Template
-            result = await session.execute(
-                select(Template).where(Template.id == template_id)
-            )
-            template = result.scalar_one_or_none()
-            if template and template.is_active:
-                systemprompt = template.systemprompt
-
-    # 使用 LLM CLI 编辑单页
-    logger.info("开始编辑单页 | storybook_id=%s page_index=%s", storybook_id, page_index)
-    llm_client = GeminiCli()
-    try:
-        new_page = await llm_client.edit_page(
-            page_index=page_index,
-            instruction=instruction,
-            current_page=current_page,
-            system_prompt=systemprompt
-        )
-    except Exception as e:
-        logger.exception("编辑单页失败 | storybook_id=%s page_index=%s error=%s", storybook_id, page_index, e)
-        raise
-
-    # 更新绘本的该页内容
-    async with async_session_maker() as session:
-        result = await session.execute(
-            select(Storybook).where(Storybook.id == storybook_id)
-        )
-        storybook = result.scalar_one_or_none()
-
-        if storybook and storybook.pages:
-            storybook.pages[page_index] = new_page
-            await session.commit()
-            logger.info("单页编辑完成 | storybook_id=%s page_index=%s", storybook_id, page_index)
-
-        # 编辑成功后扣除积分
-        try:
-            await consume_for_page_edit(user_id)
-        except Exception as e:
-            logger.warning("单页编辑积分扣费失败 | user_id=%s error=%s", user_id, e)
-
-        return True
-
-
 async def list_storybooks(
     creator: Optional[str] = None,
     title: Optional[str] = None,
@@ -504,42 +427,23 @@ async def list_storybooks(
     limit: int = 20,
     offset: int = 0
 ) -> List[Storybook]:
-    """
-    获取绘本列表
-
-    Args:
-        creator: 按创建者筛选
-        title: 按标题模糊匹配
-        status: 按状态筛选
-        is_public: 按是否公开筛选
-        limit: 返回数量限制
-        offset: 偏移量
-
-    Returns:
-        List[Storybook]: 绘本列表
-    """
     from sqlalchemy import desc
 
     async with async_session_maker() as session:
         query = select(Storybook).order_by(desc(Storybook.created_at))
 
-        # 筛选条件
         if creator:
             query = query.where(Storybook.creator == creator)
         if title:
-            # 模糊匹配标题
             query = query.where(Storybook.title.like(f"%{title}%"))
         if status:
             query = query.where(Storybook.status == status)
         if is_public is not None:
             query = query.where(Storybook.is_public == is_public)
 
-        # 分页
         query = query.limit(limit).offset(offset)
 
         result = await session.execute(query)
         storybooks = result.scalars().all()
 
         return list(storybooks)
-
-

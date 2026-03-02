@@ -4,7 +4,7 @@ Book Model
 """
 import json
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, TypedDict, Literal
+from typing import TYPE_CHECKING, TypedDict, Literal, Optional
 
 from sqlalchemy import Integer, String, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -66,6 +66,7 @@ class Storybook(Base):
 
     # 绘本状态: init-初始化, creating-生成中, updating-更新中, finished-完成, error-错误
     status: Mapped[StorybookStatus] = mapped_column(String(32), default="init", index=True)
+    error_message: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)  # 错误信息（status=error时）
 
     # 时间戳
     created_at: Mapped[datetime] = mapped_column(
