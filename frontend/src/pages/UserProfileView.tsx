@@ -357,6 +357,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({ onBack }) => {
             <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">{user.nickname}</h2>
+                <p className="text-xs text-slate-400 font-mono mt-0.5">UID · {user.id}</p>
                 <div className="flex flex-wrap items-center gap-2 mt-1.5">
                   {user.role === 'admin' && (
                     <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-600 text-xs font-medium flex items-center gap-1">

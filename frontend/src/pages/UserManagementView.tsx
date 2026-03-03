@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ChevronLeft, Search, ChevronLeft as PrevIcon, ChevronRight as NextIcon, X, Shield } from 'lucide-react';
+import { ChevronLeft, Search, ChevronLeft as PrevIcon, ChevronRight as NextIcon, X, Shield, BookOpen, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   UserOut,
@@ -8,6 +8,8 @@ import {
   adminListUsers,
   adminUpdateUser,
 } from '../services/authService';
+import { listStorybooks, StorybookListItem, StorybookStatus } from '../services/storybookService';
+import StorybookPreview from '../components/StorybookPreview';
 
 interface UserManagementViewProps {
   onBack: () => void;
@@ -205,6 +207,124 @@ const EditModal: React.FC<EditModalProps> = ({ user, token, onClose, onSaved }) 
   );
 };
 
+// ——— 作品弹窗 ———
+
+const WORK_STATUS_LABEL: Record<StorybookStatus, string> = {
+  init: '初始化', creating: '生成中', updating: '更新中', finished: '已完成', error: '失败',
+};
+const WORK_STATUS_COLOR: Record<StorybookStatus, string> = {
+  init: 'bg-slate-100 text-slate-500',
+  creating: 'bg-blue-100 text-blue-600',
+  updating: 'bg-blue-100 text-blue-600',
+  finished: 'bg-emerald-100 text-emerald-600',
+  error: 'bg-red-100 text-red-500',
+};
+const WORKS_PAGE_SIZE = 12;
+
+interface WorksModalProps {
+  user: UserOut;
+  onClose: () => void;
+}
+
+const WorksModal: React.FC<WorksModalProps> = ({ user, onClose }) => {
+  const [items, setItems]   = useState<StorybookListItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [offset, setOffset]   = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+
+  const fetchWorks = useCallback(async (off: number, reset: boolean) => {
+    setLoading(true);
+    try {
+      const data = await listStorybooks(
+        { creator: String(user.id), limit: WORKS_PAGE_SIZE, offset: off },
+      );
+      if (reset) setItems(data);
+      else setItems(prev => [...prev, ...data]);
+      setHasMore(data.length === WORKS_PAGE_SIZE);
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  }, [user.id]);
+
+  useEffect(() => {
+    setOffset(0);
+    setItems([]);
+    setHasMore(true);
+    fetchWorks(0, true);
+  }, [fetchWorks]);
+
+  const handleLoadMore = () => {
+    const next = offset + WORKS_PAGE_SIZE;
+    setOffset(next);
+    fetchWorks(next, false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div
+        className="bg-white rounded-2xl shadow-xl w-full max-w-2xl mx-4 flex flex-col"
+        style={{ maxHeight: '80vh' }}
+      >
+        {/* 标题栏 */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
+          <div className="flex items-center gap-2">
+            <BookOpen size={16} className="text-indigo-500" />
+            <span className="font-semibold text-slate-800 text-sm">
+              {user.nickname} 的作品
+            </span>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* 内容区 */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {items.length === 0 && !loading ? (
+            <div className="py-16 text-center text-slate-400">
+              <BookOpen size={32} className="mx-auto mb-2 opacity-40" />
+              <p className="text-sm">暂无作品</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              {items.map(item => (
+                <div key={item.id}>
+                  <StorybookPreview storybook={item} popupPosition="center" />
+                  <div className="flex items-center justify-between mt-1.5 px-0.5">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${WORK_STATUS_COLOR[item.status]}`}>
+                      {WORK_STATUS_LABEL[item.status]}
+                    </span>
+                    <span className="text-[10px] text-slate-400">{item.created_at.slice(0, 10)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {loading && (
+            <div className="flex justify-center py-6">
+              <Loader2 size={20} className="text-indigo-400 animate-spin" />
+            </div>
+          )}
+
+          {!loading && hasMore && items.length > 0 && (
+            <div className="text-center mt-4">
+              <button
+                onClick={handleLoadMore}
+                className="px-4 py-2 text-sm text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50"
+              >
+                加载更多
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ——— 主页面 ———
 
 const UserManagementView: React.FC<UserManagementViewProps> = ({ onBack }) => {
@@ -216,7 +336,8 @@ const UserManagementView: React.FC<UserManagementViewProps> = ({ onBack }) => {
   const [search, setSearch] = useState('');
   const [inputVal, setInputVal] = useState('');
   const [loading, setLoading]   = useState(false);
-  const [editingUser, setEditingUser] = useState<UserOut | null>(null);
+  const [editingUser, setEditingUser]       = useState<UserOut | null>(null);
+  const [viewingWorksUser, setViewingWorksUser] = useState<UserOut | null>(null);
 
   const PAGE_SIZE = 20;
 
@@ -357,12 +478,20 @@ const UserManagementView: React.FC<UserManagementViewProps> = ({ onBack }) => {
                       {u.created_at.slice(0, 10)}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => setEditingUser(u)}
-                        className="px-3 py-1 rounded-lg border border-indigo-200 text-indigo-600 text-xs hover:bg-indigo-50 transition-colors"
-                      >
-                        编辑
-                      </button>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => setViewingWorksUser(u)}
+                          className="px-3 py-1 rounded-lg border border-slate-200 text-slate-500 text-xs hover:bg-slate-50 transition-colors flex items-center gap-1"
+                        >
+                          <BookOpen size={12} /> 作品
+                        </button>
+                        <button
+                          onClick={() => setEditingUser(u)}
+                          className="px-3 py-1 rounded-lg border border-indigo-200 text-indigo-600 text-xs hover:bg-indigo-50 transition-colors"
+                        >
+                          编辑
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -403,6 +532,14 @@ const UserManagementView: React.FC<UserManagementViewProps> = ({ onBack }) => {
           token={token}
           onClose={() => setEditingUser(null)}
           onSaved={handleSaved}
+        />
+      )}
+
+      {/* 作品弹窗 */}
+      {viewingWorksUser && (
+        <WorksModal
+          user={viewingWorksUser}
+          onClose={() => setViewingWorksUser(null)}
         />
       )}
     </div>
