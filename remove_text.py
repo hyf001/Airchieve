@@ -59,21 +59,33 @@ def remove_text(input_path: str, output_path: str):
 
     # Step 2: Build a mask covering all text bounding boxes
     mask = np.zeros((h, w), dtype=np.uint8)
-    padding = 6  # pixels of extra padding around each text box
+    padding = 12  # pixels of extra padding around each text box
 
+    # Collect all valid bboxes first, then also merge nearby lines into one block
+    all_coords = []
     for bbox, text, conf in results:
-        if conf < 0.3:
-            continue
         pts = np.array(bbox, dtype=np.int32)
         x_min = max(0, pts[:, 0].min() - padding)
         y_min = max(0, pts[:, 1].min() - padding)
         x_max = min(w, pts[:, 0].max() + padding)
         y_max = min(h, pts[:, 1].max() + padding)
+        all_coords.append((x_min, y_min, x_max, y_max))
         mask[y_min:y_max, x_min:x_max] = 255
 
-    # Step 3: Inpaint the masked regions
+    # Also fill the union bounding box covering all detected text (handles gaps between lines)
+    if all_coords:
+        union_x1 = min(c[0] for c in all_coords)
+        union_y1 = min(c[1] for c in all_coords)
+        union_x2 = max(c[2] for c in all_coords)
+        union_y2 = max(c[3] for c in all_coords)
+        mask[union_y1:union_y2, union_x1:union_x2] = 255
+        print(f"Text block union area: ({union_x1},{union_y1}) -> ({union_x2},{union_y2})")
+
+    # Step 3: Inpaint the masked regions (two passes for better quality)
     print("Inpainting text regions...")
-    result = cv2.inpaint(img, mask, inpaintRadius=7, flags=cv2.INPAINT_TELEA)
+    result = cv2.inpaint(img, mask, inpaintRadius=10, flags=cv2.INPAINT_TELEA)
+    # Second pass to smooth any remaining artifacts
+    result = cv2.inpaint(result, mask, inpaintRadius=5, flags=cv2.INPAINT_NS)
 
     cv2.imwrite(output_path, result)
     print(f"Saved cleaned image to: {output_path}")

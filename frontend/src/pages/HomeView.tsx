@@ -336,7 +336,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
                   className="w-full px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-2"
                 >
                   <Shield size={16} className="text-rose-500" />
-                  <span>系统管理</span>
+                  <span>用户管理</span>
                 </button>
               )}
               <button

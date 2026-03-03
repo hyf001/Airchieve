@@ -5,7 +5,7 @@ import HomeView from './pages/HomeView';
 import EditorView from './pages/EditorView';
 import TemplatesView from './pages/TemplatesView';
 import UserProfileView from './pages/UserProfileView';
-import AdminView from './pages/AdminView';
+import UserManagementView from './pages/UserManagementView';
 import { Loader2 } from 'lucide-react';
 
 // ============ Inner App（需要 AuthProvider 上下文） ============
@@ -47,7 +47,7 @@ const InnerApp: React.FC = () => {
       )}
 
       {showAdmin ? (
-        <AdminView onBack={handleBack} />
+        <UserManagementView onBack={handleBack} />
       ) : showProfile ? (
         <UserProfileView onBack={handleBack} />
       ) : showMyTemplates ? (

@@ -9,7 +9,7 @@ import {
   adminUpdateUser,
 } from '../services/authService';
 
-interface AdminViewProps {
+interface UserManagementViewProps {
   onBack: () => void;
 }
 
@@ -207,7 +207,7 @@ const EditModal: React.FC<EditModalProps> = ({ user, token, onClose, onSaved }) 
 
 // ——— 主页面 ———
 
-const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
+const UserManagementView: React.FC<UserManagementViewProps> = ({ onBack }) => {
   const { user: currentUser, token } = useAuth();
 
   const [users, setUsers]   = useState<UserOut[]>([]);
@@ -269,7 +269,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
         </button>
         <div className="flex items-center gap-2">
           <Shield size={16} className="text-indigo-500" />
-          <span className="font-semibold text-slate-800">系统管理</span>
+          <span className="font-semibold text-slate-800">用户管理</span>
         </div>
       </header>
 
@@ -409,4 +409,4 @@ const AdminView: React.FC<AdminViewProps> = ({ onBack }) => {
   );
 };
 
-export default AdminView;
+export default UserManagementView;
