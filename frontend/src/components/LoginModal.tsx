@@ -314,7 +314,7 @@ const LoginModal: React.FC<Props> = ({ onSuccess, onClose }) => {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm mx-4 bg-white rounded-2xl shadow-2xl
+        className="w-full max-w-sm mx-4 bg-white rounded-2xl shadow-2xl text-slate-900
                    animate-in fade-in zoom-in-95 duration-200 relative"
         onClick={(e) => e.stopPropagation()}
       >

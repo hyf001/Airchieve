@@ -81,7 +81,7 @@ const EditModal: React.FC<EditModalProps> = ({ user, token, onClose, onSaved }) 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 text-slate-900">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-base font-semibold text-slate-800">
             编辑用户 <span className="text-indigo-600">#{user.id}</span> · {user.nickname}
@@ -379,7 +379,7 @@ const UserManagementView: React.FC<UserManagementViewProps> = ({ onBack }) => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 text-slate-900">
       {/* 顶栏 */}
       <header className="sticky top-0 z-10 bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3">
         <button

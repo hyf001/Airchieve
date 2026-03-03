@@ -264,7 +264,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({ onBack }) => {
   const isWorking  = payState === 'creating' || payState === 'polling';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 text-slate-900">
 
       {/* Toast */}
       {toast && (

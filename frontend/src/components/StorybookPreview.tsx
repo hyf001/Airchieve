@@ -84,7 +84,7 @@ const StorybookPreview: React.FC<StorybookPreviewProps> = ({
         setSelectedPageIndex(null);
       } else if (e.key === 'ArrowLeft' && selectedPageIndex > 0) {
         setSelectedPageIndex(selectedPageIndex - 1);
-      } else if (e.key === 'ArrowRight' && selectedPageIndex < storybook.pages.length - 1) {
+      } else if (e.key === 'ArrowRight' && selectedPageIndex < (storybook.pages?.length ?? 0) - 1) {
         setSelectedPageIndex(selectedPageIndex + 1);
       }
     };
@@ -93,7 +93,7 @@ const StorybookPreview: React.FC<StorybookPreviewProps> = ({
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
     }
-  }, [selectedPageIndex, storybook.pages.length]);
+  }, [selectedPageIndex, storybook.pages?.length ?? 0]);
 
   return (
     <div

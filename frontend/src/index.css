@@ -2,36 +2,105 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Global: Night Sky Base ── */
 body {
-    font-family: 'Inter', sans-serif;
-    background-color: #f8fafc;
+  font-family: 'Inter', sans-serif;
+  color: #e2e8f0;
+  background-color: #061428;
+  background-attachment: fixed;
+  background-size: 100vw 100vh;
+  background-image:
+    /* ── 星云大气层晕染 ── */
+    radial-gradient(ellipse 90% 50% at 70% 10%, rgba(26, 82, 148, 0.30) 0%, transparent 65%),
+    radial-gradient(ellipse 60% 40% at 15% 60%, rgba(10, 40, 80, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 40% 30% at 90% 75%, rgba(14, 52, 98, 0.18) 0%, transparent 50%),
+    /* ── 亮星 (1.5px) ── */
+    radial-gradient(1.5px 1.5px at  8.1%  6.7%, rgba(255,255,255,0.92), transparent),
+    radial-gradient(1.5px 1.5px at 64.3%  3.2%, rgba(255,255,255,0.88), transparent),
+    radial-gradient(1.5px 1.5px at 78.2% 21.8%, rgba(255,255,255,0.92), transparent),
+    radial-gradient(1.5px 1.5px at 33.5% 54.2%, rgba(255,255,255,0.88), transparent),
+    radial-gradient(1.5px 1.5px at 91.4% 43.1%, rgba(255,255,255,0.85), transparent),
+    radial-gradient(1.5px 1.5px at 14.9% 80.6%, rgba(255,255,255,0.82), transparent),
+    radial-gradient(1.5px 1.5px at 55.8% 70.4%, rgba(255,255,255,0.85), transparent),
+    radial-gradient(1.5px 1.5px at 41.6% 12.9%, rgba(255,255,255,0.90), transparent),
+    radial-gradient(1.5px 1.5px at 88.7% 76.5%, rgba(255,255,255,0.82), transparent),
+    /* ── 中等星 (1px) ── */
+    radial-gradient(1px 1px at  2.9% 17.4%, rgba(255,255,255,0.65), transparent),
+    radial-gradient(1px 1px at 21.3%  8.1%, rgba(255,255,255,0.62), transparent),
+    radial-gradient(1px 1px at 46.9% 22.3%, rgba(255,255,255,0.68), transparent),
+    radial-gradient(1px 1px at 83.1%  7.8%, rgba(255,255,255,0.62), transparent),
+    radial-gradient(1px 1px at 27.6% 31.4%, rgba(255,255,255,0.65), transparent),
+    radial-gradient(1px 1px at 59.3% 28.7%, rgba(255,255,255,0.60), transparent),
+    radial-gradient(1px 1px at  4.7% 44.5%, rgba(255,255,255,0.58), transparent),
+    radial-gradient(1px 1px at 71.5% 38.9%, rgba(255,255,255,0.65), transparent),
+    radial-gradient(1px 1px at 38.4% 49.2%, rgba(255,255,255,0.60), transparent),
+    radial-gradient(1px 1px at 93.8% 19.8%, rgba(255,255,255,0.62), transparent),
+    radial-gradient(1px 1px at 17.1% 52.6%, rgba(255,255,255,0.55), transparent),
+    radial-gradient(1px 1px at 50.2% 61.8%, rgba(255,255,255,0.62), transparent),
+    radial-gradient(1px 1px at 85.4% 55.7%, rgba(255,255,255,0.58), transparent),
+    radial-gradient(1px 1px at  6.8% 74.1%, rgba(255,255,255,0.60), transparent),
+    radial-gradient(1px 1px at 30.6% 68.3%, rgba(255,255,255,0.55), transparent),
+    radial-gradient(1px 1px at 62.9% 84.4%, rgba(255,255,255,0.58), transparent),
+    radial-gradient(1px 1px at 75.3% 91.8%, rgba(255,255,255,0.52), transparent),
+    radial-gradient(1px 1px at 43.1% 87.5%, rgba(255,255,255,0.55), transparent),
+    radial-gradient(1px 1px at 11.6% 95.7%, rgba(255,255,255,0.48), transparent),
+    radial-gradient(1px 1px at 96.4% 89.1%, rgba(255,255,255,0.52), transparent),
+    /* ── 淡星 (0.8px) ── */
+    radial-gradient(0.8px 0.8px at 12.5% 25.3%, rgba(255,255,255,0.40), transparent),
+    radial-gradient(0.8px 0.8px at 35.9%  4.6%, rgba(255,255,255,0.36), transparent),
+    radial-gradient(0.8px 0.8px at 52.6% 16.1%, rgba(255,255,255,0.38), transparent),
+    radial-gradient(0.8px 0.8px at 69.1% 32.8%, rgba(255,255,255,0.36), transparent),
+    radial-gradient(0.8px 0.8px at 79.7% 48.5%, rgba(255,255,255,0.40), transparent),
+    radial-gradient(0.8px 0.8px at 24.4% 57.6%, rgba(255,255,255,0.34), transparent),
+    radial-gradient(0.8px 0.8px at 47.3% 41.2%, rgba(255,255,255,0.36), transparent),
+    radial-gradient(0.8px 0.8px at  9.5% 63.1%, rgba(255,255,255,0.34), transparent),
+    radial-gradient(0.8px 0.8px at 66.2% 59.4%, rgba(255,255,255,0.38), transparent),
+    radial-gradient(0.8px 0.8px at 87.6% 65.8%, rgba(255,255,255,0.34), transparent),
+    radial-gradient(0.8px 0.8px at 19.9% 78.7%, rgba(255,255,255,0.36), transparent),
+    radial-gradient(0.8px 0.8px at 54.1% 93.4%, rgba(255,255,255,0.30), transparent),
+    radial-gradient(0.8px 0.8px at 39.5% 75.9%, rgba(255,255,255,0.34), transparent),
+    radial-gradient(0.8px 0.8px at 72.8% 81.7%, rgba(255,255,255,0.36), transparent),
+    radial-gradient(0.8px 0.8px at 95.5% 73.2%, rgba(255,255,255,0.30), transparent),
+    radial-gradient(0.8px 0.8px at 28.7% 92.6%, rgba(255,255,255,0.28), transparent),
+    radial-gradient(0.8px 0.8px at 81.9% 35.4%, rgba(255,255,255,0.34), transparent),
+    radial-gradient(0.8px 0.8px at 57.5% 50.7%, rgba(255,255,255,0.30), transparent),
+    radial-gradient(0.8px 0.8px at 16.2% 43.1%, rgba(255,255,255,0.36), transparent),
+    radial-gradient(0.8px 0.8px at 44.6% 68.2%, rgba(255,255,255,0.32), transparent);
 }
 
 .font-lexend {
-    font-family: 'Lexend', sans-serif;
+  font-family: 'Lexend', sans-serif;
 }
 
-/* Custom scrollbar for a cleaner look */
+/* ── Custom Scrollbar (dark theme) ── */
 ::-webkit-scrollbar {
-    width: 8px;
+  width: 6px;
 }
 ::-webkit-scrollbar-track {
-    background: #f1f1f1;
+  background: rgba(6, 20, 40, 0.8);
 }
 ::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 4px;
+  background: rgba(71, 130, 180, 0.4);
+  border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
+  background: rgba(71, 130, 180, 0.7);
 }
 
-/* ── 流光标题 ── */
-.title-flow {
-    background: linear-gradient(120deg, #fbbf24 0%, #f97316 55%, #ef4444 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    filter: drop-shadow(0 2px 16px rgba(251, 146, 60, 0.35));
-    letter-spacing: 0.05em;
+/* ── 毛毛虫书法大标题 ── */
+.mao-title {
+  font-family: 'Ma Shan Zheng', 'STKaiti', 'KaiTi', cursive;
+  color: #f0e6ce;
+  text-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.6),
+    0 0 40px rgba(77, 217, 192, 0.15);
+  letter-spacing: 0.12em;
+}
+
+/* ── 玻璃卡片通用 ── */
+.glass-card {
+  background: rgba(10, 30, 60, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(100, 160, 220, 0.18);
 }
