@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowRight, Loader2, X, Upload, Palette } from 'lucide-react';
+import { Wand2, Loader2, X, Upload, Palette } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { TemplateListItem } from '../services/templateService';
 
@@ -52,12 +52,6 @@ const FloatingInputBox: React.FC<FloatingInputBoxProps> = ({
     setPrompt('');
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      handleSubmit();
-    }
-  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -145,7 +139,7 @@ const FloatingInputBox: React.FC<FloatingInputBoxProps> = ({
             placeholder={placeholder}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={handleKeyDown}
+
             disabled={disabled}
           />
 
@@ -188,50 +182,57 @@ const FloatingInputBox: React.FC<FloatingInputBoxProps> = ({
             multiple
             onChange={handleFileChange}
           />
+          {/* Upload — pill shape, glassy */}
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center justify-center w-8 h-8 rounded-lg
-                       text-slate-400 hover:text-slate-600
-                       hover:bg-white/60 transition-all duration-200"
             title="上传参考图片"
+            className="group flex items-center gap-1.5 px-3.5 h-8 rounded-full
+                       bg-white/40 backdrop-blur-sm
+                       border border-white/60
+                       text-slate-500 text-xs font-medium
+                       shadow-sm
+                       hover:bg-white/60 hover:text-slate-700 hover:shadow-md
+                       active:scale-95 transition-all duration-200"
           >
-            <Upload size={15} />
+            <Upload size={13} className="shrink-0" />
+            <span>上传图片</span>
           </button>
 
           {/* Hint */}
-          <div className="flex-1 text-xs text-slate-400/80 select-none">
+          <div className="flex-1 text-xs text-slate-400/70 select-none text-center">
             {mode ?? (displayImages.length > 0
               ? `已上传 ${displayImages.length} 张图片`
-              : '⌘ + Enter 发送')}
+              : '')}
           </div>
 
           {/* Cancel */}
           {showCancelButton && (
             <button
               onClick={() => { setPrompt(''); onCancel?.(); }}
-              className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1 rounded-lg hover:bg-white/60 transition-colors"
+              className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1 rounded-full hover:bg-white/60 transition-colors"
             >
               取消
             </button>
           )}
 
-          {/* Send */}
+          {/* Send — magic wand pill */}
           <button
             disabled={!prompt.trim() || isLoading || disabled}
             onClick={handleSubmit}
             className={`
-              shrink-0 flex items-center justify-center w-9 h-9
-              rounded-xl text-white font-medium
+              shrink-0 flex items-center gap-2 px-4 h-10
+              rounded-full text-white text-sm font-semibold
               transition-all duration-200
               ${prompt.trim() && !isLoading && !disabled
-                ? 'bg-gradient-to-br from-blue-500 to-sky-400 shadow-md shadow-blue-300/50 hover:shadow-blue-400/60 hover:scale-105 active:scale-95'
-                : 'bg-slate-200/80 text-slate-400 cursor-not-allowed'}
+                ? 'bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500 shadow-lg shadow-purple-300/50 hover:shadow-purple-400/60 hover:scale-105 active:scale-95'
+                : 'bg-slate-200/70 text-slate-400/60 cursor-not-allowed'}
             `}
           >
             {isLoading
               ? <Loader2 size={16} className="animate-spin" />
-              : <ArrowRight size={16} />
+              : <Wand2 size={16} strokeWidth={2} />
             }
+            <span>{isLoading ? '创作中...' : '使用魔法'}</span>
           </button>
         </div>
       </div>

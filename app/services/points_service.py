@@ -24,9 +24,6 @@ from app.models.points import PointsLogType, UserPointsLog
 from app.models.user import User
 
 
-# 每次绘本创作/修改整本消耗的积分
-CREATION_COST: int = 10
-
 # 每次修改绘本单页消耗的积分
 PAGE_EDIT_COST: int = 1
 
@@ -69,14 +66,14 @@ async def _apply_points_delta(
 # 创作消耗
 # ---------------------------------------------------------------------------
 
-async def consume_for_creation(user_id: int) -> None:
+async def consume_for_creation(user_id: int, page_count: int) -> None:
     """
-    绘本创作扣费：
-      优先消耗 free_creation_remaining（免费次数），
-      不足时扣 CREATION_COST 积分。
+    绘本创作/整本编辑扣费：消耗 page_count 积分（1页1积分）。
+    优先消耗 free_creation_remaining（免费次数，消耗1次且不扣积分），
+    否则直接扣除 page_count 积分（允许扣至负数）。
 
     Raises:
-        ValueError: 免费次数和积分均不足
+        ValueError: 用户不存在
     """
     async with async_session_maker() as session:
         # with_for_update 防止并发超扣（MySQL 支持行锁，SQLite 忽略）
@@ -94,16 +91,11 @@ async def consume_for_creation(user_id: int) -> None:
             await session.commit()
             return
 
-        if user.points_balance < CREATION_COST:
-            raise ValueError(
-                f"积分不足，创作需要 {CREATION_COST} 积分，当前余额 {user.points_balance}"
-            )
-
         await _apply_points_delta(
             session, user,
-            delta=-CREATION_COST,
+            delta=-page_count,
             log_type=PointsLogType.creation_cost,
-            description="绘本创作消耗",
+            description=f"绘本创作消耗（{page_count}页）",
         )
         await session.commit()
 
@@ -114,11 +106,11 @@ async def consume_for_creation(user_id: int) -> None:
 
 async def check_creation_points(user_id: int) -> None:
     """
-    检查用户是否有足够的创作/修改整本积分（仅检查，不扣费）。
-    优先看免费次数，再看积分余额。
+    检查用户是否可以创作/修改整本绘本（仅检查，不扣费）。
+    有免费次数，或积分余额 > 0 即可。
 
     Raises:
-        InsufficientPointsError: 免费次数和积分均不足
+        InsufficientPointsError: 无免费次数且积分 <= 0
     """
     async with async_session_maker() as session:
         user = (
@@ -131,18 +123,19 @@ async def check_creation_points(user_id: int) -> None:
         if user.free_creation_remaining > 0:
             return
 
-        if user.points_balance < CREATION_COST:
+        if user.points_balance <= 0:
             raise InsufficientPointsError(
-                f"积分不足，创作需要 {CREATION_COST} 积分，当前余额 {user.points_balance}"
+                f"积分不足，当前余额 {user.points_balance}，请充值后继续使用"
             )
 
 
 async def check_page_edit_points(user_id: int) -> None:
     """
-    检查用户是否有足够的单页编辑积分（仅检查，不扣费）。
+    检查用户是否可以编辑单页（仅检查，不扣费）。
+    积分余额 > 0 即可。
 
     Raises:
-        InsufficientPointsError: 积分不足
+        InsufficientPointsError: 积分 <= 0
     """
     async with async_session_maker() as session:
         user = (
@@ -152,9 +145,9 @@ async def check_page_edit_points(user_id: int) -> None:
         if user is None:
             raise ValueError("用户不存在")
 
-        if user.points_balance < PAGE_EDIT_COST:
+        if user.points_balance <= 0:
             raise InsufficientPointsError(
-                f"积分不足，单页编辑需要 {PAGE_EDIT_COST} 积分，当前余额 {user.points_balance}"
+                f"积分不足，当前余额 {user.points_balance}，请充值后继续使用"
             )
 
 
@@ -164,10 +157,10 @@ async def check_page_edit_points(user_id: int) -> None:
 
 async def consume_for_page_edit(user_id: int) -> None:
     """
-    绘本单页编辑扣费：消耗 PAGE_EDIT_COST 积分。
+    绘本单页编辑扣费：消耗 PAGE_EDIT_COST 积分（允许扣至负数）。
 
     Raises:
-        ValueError: 积分不足
+        ValueError: 用户不存在
     """
     async with async_session_maker() as session:
         user = (
@@ -178,11 +171,6 @@ async def consume_for_page_edit(user_id: int) -> None:
 
         if user is None:
             raise ValueError("用户不存在")
-
-        if user.points_balance < PAGE_EDIT_COST:
-            raise ValueError(
-                f"积分不足，单页编辑需要 {PAGE_EDIT_COST} 积分，当前余额 {user.points_balance}"
-            )
 
         await _apply_points_delta(
             session, user,

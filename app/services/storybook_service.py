@@ -184,7 +184,7 @@ async def run_create_storybook_background(
     systemprompt: Optional[str],
     images: Optional[List[str]],
 ) -> None:
-    """后台任务：执行绘本内容生成，生成完成后扣除积分。"""
+    """后台任务：执行绘本内容生成，生成完成后按页数扣除积分。"""
     logger.info("创建绘本后台任务开始 | storybook_id=%s", storybook_id)
     try:
         await asyncio.wait_for(
@@ -197,7 +197,12 @@ async def run_create_storybook_background(
             ),
             timeout=900,
         )
-        await consume_for_creation(user_id)
+        # 获取实际生成的页数作为积分消耗
+        async with async_session_maker() as session:
+            result = await session.execute(select(Storybook).where(Storybook.id == storybook_id))
+            storybook = result.scalar_one_or_none()
+            page_count = len(storybook.pages) if storybook and storybook.pages else 1
+        await consume_for_creation(user_id, page_count)
     except asyncio.TimeoutError:
         logger.error("创建绘本超时 | storybook_id=%s", storybook_id)
         async with async_session_maker() as session:
@@ -276,7 +281,7 @@ async def run_edit_storybook_background(
     images: Optional[List[str]],
     original_pages: List[StorybookPage],
 ) -> None:
-    """后台任务：执行编辑版绘本的内容生成，生成完成后扣除积分。"""
+    """后台任务：执行编辑版绘本的内容生成，生成完成后按页数扣除积分。"""
     logger.info("编辑绘本后台任务开始 | new_storybook_id=%s", new_storybook_id)
     try:
         await asyncio.wait_for(
@@ -290,7 +295,12 @@ async def run_edit_storybook_background(
             ),
             timeout=900,
         )
-        await consume_for_creation(user_id)
+        # 获取实际生成的页数作为积分消耗
+        async with async_session_maker() as session:
+            result = await session.execute(select(Storybook).where(Storybook.id == new_storybook_id))
+            storybook = result.scalar_one_or_none()
+            page_count = len(storybook.pages) if storybook and storybook.pages else 1
+        await consume_for_creation(user_id, page_count)
     except asyncio.TimeoutError:
         logger.error("编辑绘本超时 | new_storybook_id=%s", new_storybook_id)
         async with async_session_maker() as session:
