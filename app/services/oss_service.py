@@ -34,8 +34,9 @@ def get_api_url(object_key: str) -> str:
     return f"{_OSS_API_PREFIX}/{object_key}"
 
 
-def _download_sync(bucket: oss2.Bucket, object_key: str) -> tuple[bytes, str]:
-    """同步下载 OSS 文件（get_object + read 必须在同一线程内完成）"""
+def _download_sync(object_key: str) -> tuple[bytes, str]:
+    """同步下载 OSS 文件（bucket 创建、连接、读取全在同一线程完成）"""
+    bucket = _get_bucket()
     result = bucket.get_object(object_key)
     data: bytes = result.read() or b""
     content_type: str = result.headers.get("Content-Type") or "application/octet-stream"
@@ -44,15 +45,18 @@ def _download_sync(bucket: oss2.Bucket, object_key: str) -> tuple[bytes, str]:
 
 async def download_bytes(object_key: str) -> tuple[bytes, str]:
     """从 OSS 下载文件，返回 (bytes, content_type)"""
+    return await asyncio.to_thread(_download_sync, object_key)
+
+
+def _upload_sync(data: bytes, object_key: str, content_type: str) -> None:
+    """同步上传到 OSS（bucket 创建和上传全在同一线程完成）"""
     bucket = _get_bucket()
-    return await asyncio.to_thread(_download_sync, bucket, object_key)
+    bucket.put_object(object_key, data, headers={"Content-Type": content_type})
 
 
 async def upload_bytes(data: bytes, object_key: str, content_type: str = "image/png") -> str:
     """上传字节数据到 OSS，返回后端 API 代理 URL"""
-    bucket = _get_bucket()
-    headers = {"Content-Type": content_type}
-    await asyncio.to_thread(bucket.put_object, object_key, data, headers=headers)
+    await asyncio.to_thread(_upload_sync, data, object_key, content_type)
     url = get_api_url(object_key)
     logger.info("OSS上传成功 | key=%s size=%d url=%s", object_key, len(data), url)
     return url
