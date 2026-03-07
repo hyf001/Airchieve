@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ArrowRight, Loader2, X, Upload, Palette } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import { TemplateListItem } from '../services/templateService';
 
 interface FloatingInputBoxProps {
@@ -136,11 +137,11 @@ const FloatingInputBox: React.FC<FloatingInputBoxProps> = ({
           )}
 
           {/* Textarea */}
-          <textarea
+          <Textarea
             rows={4}
-            className="w-full resize-none bg-transparent focus:outline-none
+            className="resize-none bg-transparent border-0 shadow-none focus-visible:ring-0
                        text-[15px] leading-relaxed text-slate-800
-                       placeholder:text-slate-400/70"
+                       placeholder:text-slate-400/70 p-0"
             placeholder={placeholder}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}

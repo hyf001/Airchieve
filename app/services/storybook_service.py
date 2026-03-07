@@ -2,10 +2,19 @@
 Storybook Service
 绘本服务
 """
-from typing import Optional, List
+from typing import Optional, List, Tuple
 import asyncio
 import time
+import io
 from sqlalchemy import select
+from reportlab.lib.pagesizes import A4, A3, A5, LETTER, LEGAL, landscape
+from reportlab.platypus import SimpleDocTemplate, Image, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import Paragraph
+import httpx
+from PIL import Image as PILImage, ImageDraw, ImageFont
 
 from app.core.utils.logger import get_logger
 from app.db.session import async_session_maker
@@ -447,3 +456,297 @@ async def list_storybooks(
         storybooks = result.scalars().all()
 
         return list(storybooks)
+
+
+# ============ PDF 生成 ============
+
+async def _download_image(image_url: str, timeout: float = 30.0) -> Optional[bytes]:
+    """下载图片并返回字节数据"""
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.get(image_url)
+            response.raise_for_status()
+            return response.content
+    except Exception as e:
+        logger.warning("下载图片失败 | url=%s error=%s", image_url, e)
+        return None
+
+
+def _get_chinese_font_size(size: int) -> ImageFont.ImageFont:
+    """获���中文字体，支持不同大小"""
+    font_paths = [
+        # macOS
+        "/System/Library/Fonts/PingFang.ttc",
+        "/System/Library/Fonts/STHeiti Light.ttc",
+        "/System/Library/Fonts/STSong.ttc",
+        # Linux
+        "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        # Windows
+        "C:/Windows/Fonts/msyh.ttc",
+        "C:/Windows/Fonts/simsun.ttc",
+    ]
+
+    for font_path in font_paths:
+        try:
+            return ImageFont.truetype(font_path, size)
+        except Exception:
+            continue
+
+    # 如果都失败了，使用默认字体
+    return ImageFont.load_default()
+
+
+def _draw_text_on_image(image_data: bytes, text: str) -> bytes:
+    """
+    将文字绘制到图片底部
+
+    保持图片原始尺寸，在图片底部绘制半透明背景和文字
+    """
+    # 打开图片
+    img = PILImage.open(io.BytesIO(image_data))
+
+    # 转换为 RGBA 模式以支持透明度
+    if img.mode != 'RGBA':
+        img = img.convert('RGBA')
+
+    # 创建一个新的图层用于绘制
+    overlay = PILImage.new('RGBA', img.size, (255, 255, 255, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    # 计算文字区域大小（底部 25%）
+    text_area_height = int(img.height * 0.25)
+    text_area_top = img.height - text_area_height
+
+    # 绘制半透明白色背景
+    draw.rectangle(
+        [(0, text_area_top), (img.width, img.height)],
+        fill=(255, 255, 255, 230)
+    )
+
+    # 获取字体（根据图片大小自适应）
+    font_size = max(20, int(img.width * 0.04))  # 动态字体大小
+    font = _get_chinese_font_size(font_size)
+
+    # 计算文字位置（居中）
+    # 获取文本边界框
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+
+    # 居中位置
+    x = (img.width - text_width) // 2
+    y = text_area_top + (text_area_height - text_height) // 2
+
+    # 如果文字太宽，进行换行处理
+    if text_width > img.width * 0.9:
+        # 简单的换行逻辑
+        avg_char_width = text_width / len(text)
+        max_chars_per_line = int((img.width * 0.9) / avg_char_width)
+
+        lines = []
+        current_line = ""
+        for char in text:
+            if len(current_line) >= max_chars_per_line:
+                lines.append(current_line)
+                current_line = char
+            else:
+                current_line += char
+        if current_line:
+            lines.append(current_line)
+
+        # 绘制多行文字
+        line_height = text_height + 10
+        total_text_height = len(lines) * line_height
+        start_y = text_area_top + (text_area_height - total_text_height) // 2
+
+        for i, line in enumerate(lines):
+            line_bbox = draw.textbbox((0, 0), line, font=font)
+            line_width = line_bbox[2] - line_bbox[0]
+            line_x = (img.width - line_width) // 2
+            draw.text((line_x, start_y + i * line_height), line, font=font, fill=(0, 0, 0, 255))
+    else:
+        # 单行文字
+        draw.text((x, y), text, font=font, fill=(0, 0, 0, 255))
+
+    # 合并图片和覆盖层
+    combined = PILImage.alpha_composite(img, overlay)
+
+    # 转换回 RGB 并保存
+    if combined.mode != 'RGB':
+        combined = combined.convert('RGB')
+
+    # 保存到字节流
+    output = io.BytesIO()
+    combined.save(output, format='JPEG', quality=95)
+    return output.getvalue()
+
+
+def _setup_chinese_font() -> bool:
+    """设置中文字体，返回是否成功"""
+    # 尝试注册常见的中文字体
+    font_paths = [
+        # macOS 系统字体
+        "/System/Library/Fonts/PingFang.ttc",
+        "/System/Library/Fonts/STHeiti Light.ttc",
+        "/System/Library/Fonts/STSong.ttc",
+        # Linux 常见字体
+        "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        # Windows 字体
+        "C:/Windows/Fonts/msyh.ttc",
+        "C:/Windows/Fonts/simsun.ttc",
+    ]
+
+    for font_path in font_paths:
+        try:
+            pdfmetrics.registerFont(TTFont("ChineseFont", font_path))
+            logger.info("成功注册中文字体 | path=%s", font_path)
+            return True
+        except Exception:
+            continue
+
+    logger.warning("未找到可用的中文字体，PDF中文可能无法正常显示")
+    return False
+
+
+async def generate_storybook_pdf(
+    storybook_id: int,
+    paper_size: str = "a4",
+    orientation: str = "landscape"
+) -> Optional[bytes]:
+    """
+    生成绘本PDF
+
+    参数:
+        storybook_id: 绘本ID
+        paper_size: 纸张类型 (a3, a4, a5, letter, legal)
+        orientation: 纸张方向 (portrait, landscape)
+
+    返回 PDF 字节数据，失败返回 None
+    """
+    storybook = await get_storybook(storybook_id)
+
+    if not storybook or not storybook.pages:
+        logger.warning("生成PDF失败，绘本不存在或无页面 | storybook_id=%s", storybook_id)
+        return None
+
+    # 设置中文字体
+    _setup_chinese_font()
+
+    # 根据参数选择纸张类型
+    paper_sizes = {
+        "a3": A3,
+        "a4": A4,
+        "a5": A5,
+        "letter": LETTER,
+        "legal": LEGAL,
+    }
+
+    base_size = paper_sizes.get(paper_size, A4)
+
+    # 根据方向设置页面尺寸
+    if orientation == "landscape":
+        page_size = landscape(base_size)
+    else:
+        page_size = base_size
+
+    # 创建 PDF buffer
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=page_size,
+        leftMargin=0,
+        rightMargin=0,
+        topMargin=0,
+        bottomMargin=0,
+    )
+
+    # 创建样式
+    styles = getSampleStyleSheet()
+
+    # 尝试使用中文字体
+    try:
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontName='ChineseFont',
+            fontSize=20,
+            alignment=1,  # 居中
+            spaceAfter=12,
+        )
+    except Exception:
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=20,
+            alignment=1,
+            spaceAfter=12,
+        )
+
+    # 构建 PDF 内容
+    story = []
+
+    # 添加标题页（单独一页）
+    title = storybook.title or "未命名绘本"
+    try:
+        story.append(Paragraph(title, title_style))
+    except Exception:
+        story.append(Paragraph(title, styles['Heading1']))
+    story.append(PageBreak())
+
+    # 为每一页添加内容
+    for page in storybook.pages:
+        text = page.get("text", "")
+        image_url = page.get("image_url", "")
+
+        # 下载图片并将文字绘制到图片上
+        if image_url:
+            image_data = await _download_image(image_url)
+            if image_data:
+                try:
+                    # 如果有文字，将文字绘制到图片上
+                    if text:
+                        image_data = _draw_text_on_image(image_data, text)
+
+                    img_buffer = io.BytesIO(image_data)
+                    # 创建 Image 对象获取原始尺寸
+                    img = Image(img_buffer)
+
+                    # 计算适合横向 A4 页面的尺寸（保持原始宽高比）
+                    page_width = page_size[0]
+                    page_height = page_size[1]
+
+                    # 计算缩放比例，使图片填满页面（不被挤压）
+                    width_ratio = page_width / img.drawWidth
+                    height_ratio = page_height / img.drawHeight
+                    scale = min(width_ratio, height_ratio)
+
+                    # 应用缩放，让图片尽可能大
+                    img.drawWidth = img.drawWidth * scale
+                    img.drawHeight = img.drawHeight * scale
+
+                    img.hAlign = 'CENTER'
+                    img.vAlign = 'MIDDLE'
+                    story.append(img)
+                except Exception as e:
+                    logger.warning("添加图片到PDF失败 | url=%s error=%s", image_url, e)
+
+        story.append(PageBreak())
+
+    # 生成 PDF
+    try:
+        doc.build(story)
+        pdf_data = buffer.getvalue()
+        buffer.close()
+        logger.info("PDF生成成功 | storybook_id=%s pages=%s size=%s",
+                   storybook_id, len(storybook.pages), len(pdf_data))
+        return pdf_data
+    except Exception as e:
+        logger.exception("PDF生成失败 | storybook_id=%s error=%s", storybook_id, e)
+        buffer.close()
+        return None

@@ -221,25 +221,27 @@ class GeminiCli(LLMClientBase):
             system_instruction = system_prompt
         else:
             system_instruction = (
-                "You are a professional children's picture book creator. "
-                "Your task is to generate a complete 10-page picture book with both text and illustrations. "
-                "For each page, you must provide:\n"
-                "1. A short, engaging text (1-2 sentences suitable for children)\n"
+                "You are a professional visual storyteller and illustrator. "
+                "Your task is to generate a complete series of 10 sequential illustration panels with accompanying text. "
+                "For each panel, you must provide:\n"
+                "1. A short, engaging narrative text (1-2 sentences suitable for children)\n"
                 "2. An illustration image that matches the text\n\n"
                 "CRITICAL REQUIREMENTS:\n"
-                "- LANGUAGE: Generate the picture book text in the SAME language as the user's input instruction. "
+                "- LANGUAGE: Generate the narrative text in the SAME language as the user's input instruction. "
                 "If the user writes in Chinese, respond in Chinese. If in English, respond in English, etc.\n"
-                "- Maintain visual consistency: Keep the main character's appearance identical across all pages\n"
-                "- Use a consistent art style and color palette throughout the book\n"
-                "- Ensure professional storybook quality with clean backgrounds and consistent lighting\n"
-                "- Generate images inline with the text, alternating between text and image for each page\n"
+                "- Maintain visual consistency: Keep the main character's appearance identical across all panels\n"
+                "- Use a consistent art style and color palette throughout the series\n"
+                "- Each image should look like a standalone scene illustration, NOT a book page — no page borders, no book decorations, no margins\n"
+                "- Ensure cinematic, full-bleed illustrations with clean backgrounds and consistent lighting\n"
+                "- Generate images inline with the text, alternating between text and image for each panel\n"
                 "- Images must contain NO text, letters, or words whatsoever; text and images are completely separate"
             )
 
         # User Prompt：用户的具体创意要求
         user_prompt = (
-            f"Create a 10-page picture book based on this idea: \"{instruction}\"\n\n"
-            f"Please generate all 10 pages now, with text and images alternating."
+            f"Create a 10-panel illustrated story series based on the user's input instruction: \"{instruction}\"\n\n"
+            f"Please generate all 10 panels now, with text and images alternating. "
+            f"Each image should be a full scene illustration without any book-style framing. **Important: No text on images!!!**"
         )
 
         # 构建请求内容
@@ -289,31 +291,32 @@ class GeminiCli(LLMClientBase):
             system_instruction = system_prompt
         else:
             system_instruction = (
-                "You are a professional children's picture book editor. "
-                "Your task is to regenerate a complete 10-page picture book based on the existing story and user's editing request. "
-                "For each page, you must provide:\n"
-                "1. A short, engaging text (1-2 sentences suitable for children)\n"
+                "You are a professional visual storyteller and illustrator. "
+                "Your task is to regenerate a complete series of 10 sequential illustration panels based on the existing story and user's editing request. "
+                "For each panel, you must provide:\n"
+                "1. A short, engaging narrative text (1-2 sentences suitable for children)\n"
                 "2. An illustration image that matches the text\n\n"
                 "CRITICAL REQUIREMENTS:\n"
-                "- LANGUAGE: Generate the picture book text in the SAME language as the user's editing instruction. "
+                "- LANGUAGE: Generate the narrative text in the SAME language as the user's editing instruction. "
                 "If the user writes in Chinese, respond in Chinese. If in English, respond in English, etc.\n"
-                "- Maintain visual consistency: Keep the main character's appearance identical across all pages\n"
-                "- Use a consistent art style and color palette throughout the book\n"
-                "- Ensure professional storybook quality with clean backgrounds and consistent lighting\n"
+                "- Maintain visual consistency: Keep the main character's appearance identical across all panels\n"
+                "- Use a consistent art style and color palette throughout the series\n"
+                "- Each image should look like a standalone scene illustration, NOT a book page — no page borders, no book decorations, no margins\n"
+                "- Ensure cinematic, full-bleed illustrations with clean backgrounds and consistent lighting\n"
                 "- Consider the original story context and images provided\n"
-                "- Generate images inline with the text, alternating between text and image for each page\n"
+                "- Generate images inline with the text, alternating between text and image for each panel\n"
                 "- Images must contain NO text, letters, or words whatsoever; text and images are completely separate"
             )
 
         # User Prompt：当前故事内容 + 编辑要求
-        user_prompt = f"Current story (10 pages):\n\n"
+        user_prompt = f"Current story (10 panels):\n\n"
         for i, page in enumerate(current_pages):
-            user_prompt += f"Page {i+1}:\nText: {page['text']}\n\n"
+            user_prompt += f"Panel {i+1}:\nText: {page['text']}\n\n"
 
         user_prompt += (
             f"\n\nUser editing request: {instruction}\n\n"
-            f"Please regenerate the entire 10-page picture book based on the editing request. "
-            f"Generate all 10 pages now, with text and images alternating."
+            f"Please regenerate the entire 10-panel illustrated story series based on the editing request. "
+            f"Generate all 10 panels now, with text and images alternating. Each image should be a full scene illustration without any book-style framing."
         )
 
         # 构建请求内容：文本 + 原故事图片作为上下文
@@ -365,27 +368,28 @@ class GeminiCli(LLMClientBase):
             system_instruction = system_prompt
         else:
             system_instruction = (
-                "You are a professional children's picture book editor. "
-                "Your task is to regenerate a single page of a picture book based on the existing content and user's editing request. "
+                "You are a professional visual storyteller and illustrator. "
+                "Your task is to regenerate a single illustration panel based on the existing content and user's editing request. "
                 "You must provide:\n"
-                "1. A short, engaging text (1-2 sentences suitable for children)\n"
+                "1. A short, engaging narrative text (1-2 sentences suitable for children)\n"
                 "2. An illustration image that matches the text\n\n"
                 "CRITICAL REQUIREMENTS:\n"
-                "- LANGUAGE: Generate the page text in the SAME language as the user's editing instruction. "
+                "- LANGUAGE: Generate the text in the SAME language as the user's editing instruction. "
                 "If the user writes in Chinese, respond in Chinese. If in English, respond in English, etc.\n"
                 "- Keep visual consistency with the original style\n"
                 "- Maintain the character's appearance if applicable\n"
-                "- Ensure professional storybook quality with clean background and good lighting\n"
+                "- The image should look like a standalone scene illustration, NOT a book page — no page borders, no book decorations, no margins\n"
+                "- Ensure cinematic, full-bleed illustration with clean background and good lighting\n"
                 "- Generate the image inline with the text\n"
                 "- Images must contain NO text, letters, or words whatsoever; text and images are completely separate"
             )
 
         # User Prompt：当前页内容 + 编辑要求
         user_prompt = (
-            f"Current page {page_index + 1}:\n"
+            f"Current panel {page_index + 1}:\n"
             f"Text: {current_page['text']}\n\n"
             f"User editing request: {instruction}\n\n"
-            f"Please regenerate this page with new text and image."
+            f"Please regenerate this panel with new text and a full scene illustration without any book-style framing."
         )
 
         # 构建请求内容：文本 + 当前页图片作为上下文

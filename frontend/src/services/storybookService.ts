@@ -205,3 +205,57 @@ export const updateStorybookPublicStatus = async (
     await handleWriteError(res, `Failed to update public status: ${res.status}`);
   }
 };
+
+export type PaperSize = "a3" | "a4" | "a5" | "letter" | "legal";
+export type Orientation = "portrait" | "landscape";
+
+export interface DownloadPDFOptions {
+  paperSize?: PaperSize;
+  orientation?: Orientation;
+}
+
+/**
+ * 下载绘本 PDF
+ */
+export const downloadStorybookPDF = async (
+  storybookId: number,
+  title: string,
+  options?: DownloadPDFOptions
+): Promise<void> => {
+  const params = new URLSearchParams();
+  if (options?.paperSize) params.append("paper_size", options.paperSize);
+  if (options?.orientation) params.append("orientation", options.orientation);
+
+  const url = `${API_BASE}/${storybookId}/download${params.toString() ? `?${params.toString()}` : ""}`;
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { ...getAuthHeaders() },
+  });
+
+  if (!res.ok) {
+    if (res.status === 404) throw new Error("绘本不存在");
+    throw new Error(`Failed to download PDF: ${res.status}`);
+  }
+
+  // 获取文件名
+  const contentDisposition = res.headers.get("Content-Disposition");
+  let filename = `${title}_${storybookId}.pdf`;
+  if (contentDisposition) {
+    const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    if (filenameMatch && filenameMatch[1]) {
+      filename = filenameMatch[1].replace(/['"]/g, "");
+    }
+  }
+
+  // 下载文件
+  const blob = await res.blob();
+  const url_obj = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url_obj;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url_obj);
+  document.body.removeChild(a);
+};

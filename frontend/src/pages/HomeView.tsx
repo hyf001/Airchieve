@@ -6,6 +6,7 @@ import { listTemplates, TemplateListItem, Template } from '../services/templateS
 import StorybookPreview from '../components/StorybookPreview';
 import FloatingInputBox from '../components/FloatingInputBox';
 import { useAuth } from '../contexts/AuthContext';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 interface HomeViewProps {
   onStart?: (storybookId: number) => void;
@@ -35,8 +36,6 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
   const carouselSectionRef = useRef<HTMLDivElement>(null);
   const carouselRef = useRef<HTMLDivElement>(null);
   const [carouselPaused, setCarouselPaused] = useState(false);
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const userMenuRef = useRef<HTMLDivElement>(null);
   const [needsCarousel, setNeedsCarousel] = useState(false);
   const [pendingCreateParams, setPendingCreateParams] = useState<CreateStorybookRequest | null>(null);
 
@@ -143,21 +142,6 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
     };
     fetchPublicStorybooks();
   }, []);
-
-  const handleClickOutside = useCallback((e: MouseEvent) => {
-    if (
-      userMenuOpen &&
-      userMenuRef.current &&
-      !userMenuRef.current.contains(e.target as Node)
-    ) {
-      setUserMenuOpen(false);
-    }
-  }, [userMenuOpen]);
-
-  useEffect(() => {
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [handleClickOutside]);
 
   const handleStart = async (instruction: string) => {
     if (!instruction.trim() || isCreating) return;
@@ -423,92 +407,67 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
       {/* ── User Avatar — Fixed Top Right ── */}
       <div className="fixed top-6 right-6 z-50">
         {user ? (
-          <div className="relative" ref={userMenuRef}>
-            <button
-              onClick={() => setUserMenuOpen(!userMenuOpen)}
-              className="w-11 h-11 rounded-full bg-slate-800/80 backdrop-blur border-2 border-slate-600/60
-                         flex items-center justify-center
-                         hover:border-teal-400/60 hover:bg-slate-700/80
-                         transition-all duration-300 hover:scale-105 active:scale-95
-                         shadow-md hover:shadow-teal-900/30 overflow-hidden"
-            >
-              {user?.avatar_url ? (
-                <img src={user.avatar_url} alt={user.nickname} className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-sm font-bold text-teal-300">
-                  {user?.nickname?.[0]?.toUpperCase() ?? '?'}
-                </span>
-              )}
-            </button>
-
-            {userMenuOpen && (
-              <div className="absolute top-full mt-2 right-0 w-56
-                              bg-slate-900/95 backdrop-blur-xl
-                              rounded-xl border border-slate-700/60
-                              shadow-[0_8px_32px_rgba(0,0,0,0.4)]
-                              overflow-hidden animate-in slide-in-from-top-2 duration-200">
-                {/* User info header */}
-                <div className="px-4 py-3 border-b border-slate-700/60 bg-slate-800/50">
-                  <p className="text-sm font-semibold text-slate-100 truncate">{user?.nickname}</p>
-                  <div className="flex items-center gap-3 mt-1">
-                    <span className="flex items-center gap-1 text-xs text-amber-400">
-                      <Coins size={12} />
-                      {user?.points_balance ?? 0} 积分
-                    </span>
-                    {user && user.membership_level !== 'free' && (
-                      <span className="flex items-center gap-1 text-xs text-teal-400">
-                        <Crown size={12} />
-                        {MEMBERSHIP_LABEL[user.membership_level]}
-                      </span>
-                    )}
-                    {user && user.free_creation_remaining > 0 && (
-                      <span className="text-xs text-emerald-400">
-                        免费 ×{user.free_creation_remaining}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => { onShowProfile?.(); setUserMenuOpen(false); }}
-                  className="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-slate-700/50 hover:text-slate-100 transition-colors flex items-center gap-2 border-t border-slate-700/40"
-                >
-                  <User size={16} className="text-teal-400" />
-                  <span>个人主页</span>
-                </button>
-                {user?.role === 'admin' && (
-                  <button
-                    onClick={() => { onShowAdmin?.(); setUserMenuOpen(false); }}
-                    className="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-slate-700/50 hover:text-slate-100 transition-colors flex items-center gap-2"
-                  >
-                    <Shield size={16} className="text-rose-400" />
-                    <span>用户管理</span>
-                  </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="w-11 h-11 rounded-full bg-slate-800/80 backdrop-blur border-2 border-slate-600/60
+                           flex items-center justify-center
+                           hover:border-teal-400/60 hover:bg-slate-700/80
+                           transition-all duration-300 hover:scale-105 active:scale-95
+                           shadow-md hover:shadow-teal-900/30 overflow-hidden"
+              >
+                {user?.avatar_url ? (
+                  <img src={user.avatar_url} alt={user.nickname} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-sm font-bold text-teal-300">
+                    {user?.nickname?.[0]?.toUpperCase() ?? '?'}
+                  </span>
                 )}
-                <button
-                  onClick={() => { onShowMyWorks?.(); setUserMenuOpen(false); }}
-                  className="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-slate-700/50 hover:text-slate-100 transition-colors flex items-center gap-2"
-                >
-                  <Sparkles size={16} className="text-teal-400" />
-                  <span>我的作品</span>
-                </button>
-                <button
-                  onClick={() => { onShowMyTemplates?.(); setUserMenuOpen(false); }}
-                  className="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-slate-700/50 hover:text-slate-100 transition-colors flex items-center gap-2 border-t border-slate-700/40"
-                >
-                  <FileText size={16} className="text-teal-400" />
-                  <span>我的模版</span>
-                </button>
-                <button
-                  onClick={() => { logout(); setUserMenuOpen(false); }}
-                  className="w-full px-4 py-3 text-left text-sm text-red-400 hover:bg-red-900/30 hover:text-red-300 transition-colors flex items-center gap-2 border-t border-slate-700/40"
-                >
-                  <LogOut size={16} />
-                  <span>退出登录</span>
-                </button>
-              </div>
-            )}
-          </div>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="w-56 bg-slate-900/95 backdrop-blur-xl border-slate-700/60 text-slate-300"
+            >
+              <DropdownMenuLabel className="bg-slate-800/50 border-b border-slate-700/60">
+                <p className="text-sm font-semibold text-slate-100 truncate">{user?.nickname}</p>
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="flex items-center gap-1 text-xs text-amber-400">
+                    <Coins size={12} />
+                    {user?.points_balance ?? 0} 积分
+                  </span>
+                  {user && user.membership_level !== 'free' && (
+                    <span className="flex items-center gap-1 text-xs text-teal-400">
+                      <Crown size={12} />
+                      {MEMBERSHIP_LABEL[user.membership_level]}
+                    </span>
+                  )}
+                  {user && user.free_creation_remaining > 0 && (
+                    <span className="text-xs text-emerald-400">免费 ×{user.free_creation_remaining}</span>
+                  )}
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => onShowProfile?.()} className="gap-2 focus:bg-slate-700/50 focus:text-slate-100">
+                <User size={16} className="text-teal-400" /> 个人主页
+              </DropdownMenuItem>
+              {user?.role === 'admin' && (
+                <DropdownMenuItem onClick={() => onShowAdmin?.()} className="gap-2 focus:bg-slate-700/50 focus:text-slate-100">
+                  <Shield size={16} className="text-rose-400" /> 用户管理
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={() => onShowMyWorks?.()} className="gap-2 focus:bg-slate-700/50 focus:text-slate-100">
+                <Sparkles size={16} className="text-teal-400" /> 我的作品
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-slate-700/40" />
+              <DropdownMenuItem onClick={() => onShowMyTemplates?.()} className="gap-2 focus:bg-slate-700/50 focus:text-slate-100">
+                <FileText size={16} className="text-teal-400" /> 我的模版
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-slate-700/40" />
+              <DropdownMenuItem onClick={() => logout()} className="gap-2 text-red-400 focus:bg-red-900/30 focus:text-red-300">
+                <LogOut size={16} /> 退出登录
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         ) : (
           <button
             onClick={openLoginModal}
