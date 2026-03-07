@@ -34,13 +34,18 @@ def get_api_url(object_key: str) -> str:
     return f"{_OSS_API_PREFIX}/{object_key}"
 
 
-async def download_bytes(object_key: str) -> tuple[bytes, str]:
-    """从 OSS 下载文件，返回 (bytes, content_type)"""
-    bucket = _get_bucket()
-    result = await asyncio.to_thread(bucket.get_object, object_key)
+def _download_sync(bucket: oss2.Bucket, object_key: str) -> tuple[bytes, str]:
+    """同步下载 OSS 文件（get_object + read 必须在同一线程内完成）"""
+    result = bucket.get_object(object_key)
     data: bytes = result.read() or b""
     content_type: str = result.headers.get("Content-Type") or "application/octet-stream"
     return data, content_type
+
+
+async def download_bytes(object_key: str) -> tuple[bytes, str]:
+    """从 OSS 下载文件，返回 (bytes, content_type)"""
+    bucket = _get_bucket()
+    return await asyncio.to_thread(_download_sync, bucket, object_key)
 
 
 async def upload_bytes(data: bytes, object_key: str, content_type: str = "image/png") -> str:

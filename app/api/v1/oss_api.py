@@ -27,5 +27,5 @@ async def get_oss_file(object_key: str):
             headers={"Cache-Control": "private, max-age=86400"},
         )
     except Exception as e:
-        logger.warning("OSS文件读取失败 | key=%s error=%s", object_key, e)
-        raise HTTPException(status_code=404, detail="文件不存在")
+        logger.error("OSS文件读取失败 | key=%s error=%r", object_key, e)
+        raise HTTPException(status_code=404, detail=f"文件不存在: {object_key}")
