@@ -483,17 +483,22 @@ async def _download_image(image_url: str, timeout: float = 30.0) -> Optional[byt
 
 
 def _get_chinese_font_size(size: int) -> ImageFont.ImageFont:
-    """获���中文字体，支持不同大小"""
+    """获取中文字体，支持不同大小"""
     font_paths = [
         # macOS
         "/System/Library/Fonts/PingFang.ttc",
         "/System/Library/Fonts/STHeiti Light.ttc",
         "/System/Library/Fonts/STSong.ttc",
-        # Linux
-        "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+        # CentOS / RHEL / Fedora（dnf 安装路径）
+        "/usr/share/fonts/wqy-zenhei/wqy-zenhei.ttc",
+        "/usr/share/fonts/wqy-microhei/wqy-microhei.ttc",
+        "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/google-noto-cjk/NotoSansCJKsc-Regular.otf",
+        # Debian / Ubuntu（apt 安装路径）
         "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
         "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
         # Windows
         "C:/Windows/Fonts/msyh.ttc",
         "C:/Windows/Fonts/simsun.ttc",
@@ -602,11 +607,16 @@ def _setup_chinese_font() -> bool:
         "/System/Library/Fonts/PingFang.ttc",
         "/System/Library/Fonts/STHeiti Light.ttc",
         "/System/Library/Fonts/STSong.ttc",
-        # Linux 常见字体
-        "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+        # CentOS / RHEL / Fedora（dnf 安装路径）
+        "/usr/share/fonts/wqy-zenhei/wqy-zenhei.ttc",
+        "/usr/share/fonts/wqy-microhei/wqy-microhei.ttc",
+        "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/google-noto-cjk/NotoSansCJKsc-Regular.otf",
+        # Debian / Ubuntu（apt 安装路径）
         "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
         "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
         # Windows 字体
         "C:/Windows/Fonts/msyh.ttc",
         "C:/Windows/Fonts/simsun.ttc",
