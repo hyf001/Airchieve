@@ -482,7 +482,7 @@ async def _download_image(image_url: str, timeout: float = 30.0) -> Optional[byt
         return None
 
 
-def _get_chinese_font_size(size: int) -> ImageFont.ImageFont:
+def _get_chinese_font_size(size: int) -> ImageFont.ImageFont | ImageFont.FreeTypeFont:
     """获取中文字体，支持不同大小"""
     font_paths = [
         # macOS
@@ -506,7 +506,14 @@ def _get_chinese_font_size(size: int) -> ImageFont.ImageFont:
 
     for font_path in font_paths:
         try:
-            return ImageFont.truetype(font_path, size)
+            import os
+            if not os.path.exists(font_path):
+                continue
+            # .ttc 是字体集合文件，PIL 需要指定 index
+            if font_path.lower().endswith(".ttc"):
+                return ImageFont.truetype(font_path, size, index=0)
+            else:
+                return ImageFont.truetype(font_path, size)
         except Exception:
             continue
 
@@ -624,10 +631,18 @@ def _setup_chinese_font() -> bool:
 
     for font_path in font_paths:
         try:
-            pdfmetrics.registerFont(TTFont("ChineseFont", font_path))
+            import os
+            if not os.path.exists(font_path):
+                continue
+            # .ttc 是字体集合文件，ReportLab 需要指定 subfontIndex
+            if font_path.lower().endswith(".ttc"):
+                pdfmetrics.registerFont(TTFont("ChineseFont", font_path, subfontIndex=0))
+            else:
+                pdfmetrics.registerFont(TTFont("ChineseFont", font_path))
             logger.info("成功注册中文字体 | path=%s", font_path)
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug("注册字体失败 | path=%s error=%s", font_path, e)
             continue
 
     logger.warning("未找到可用的中文字体，PDF中文可能无法正常显示")

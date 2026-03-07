@@ -116,12 +116,9 @@ if [[ "$CHINESE_FONTS" -gt 0 ]]; then
     warn "已检测到 ${CHINESE_FONTS} 个中文字体，跳过安装"
 else
     dnf install -y fontconfig
-    # WenQuanYi 文泉驿字体（覆盖宋体/黑体，PDF/图片渲染常用）
-    dnf install -y wqy-zenhei-fonts wqy-microhei-fonts 2>/dev/null || \
-        warn "dnf 未找到 wqy 字体包，尝试 Google Noto CJK..."
-    # Noto CJK 作为备选
-    dnf install -y google-noto-sans-cjk-fonts 2>/dev/null || \
-        warn "Noto CJK 也未找到，请手动安装中文字体"
+    # CentOS 8 使用 google-noto-cjk 字体（wqy 字体包在此系统不可用）
+    dnf install -y google-noto-sans-cjk-ttc-fonts || \
+        warn "Noto CJK 安装失败，请手动安装中文字体"
     # 刷新字体缓存
     fc-cache -fv
     log "中文字体安装完成，共 $(fc-list :lang=zh | wc -l) 个字体"
