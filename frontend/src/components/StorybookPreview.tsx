@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { BookOpen, ChevronLeft, ChevronRight, X } from 'lucide-react';
-import { StorybookListItem } from '../services/storybookService';
+import { StorybookListItem, StorybookPage, getStorybook } from '../services/storybookService';
 
 interface StorybookPreviewProps {
   storybook: StorybookListItem;
@@ -24,6 +24,8 @@ const StorybookPreview: React.FC<StorybookPreviewProps> = ({
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
   const [selectedPageIndex, setSelectedPageIndex] = useState<number | null>(null);
+  const [fullPages, setFullPages] = useState<StorybookPage[] | null>(null);
+  const [loadingPages, setLoadingPages] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -65,6 +67,19 @@ const StorybookPreview: React.FC<StorybookPreviewProps> = ({
     }
   };
 
+  // hover 时懒加载全部页面
+  useEffect(() => {
+    if (!isHovered || fullPages) return;
+    setLoadingPages(true);
+    getStorybook(storybook.id)
+      .then(detail => setFullPages(detail.pages ?? []))
+      .catch(() => setFullPages(storybook.pages ?? []))
+      .finally(() => setLoadingPages(false));
+  }, [isHovered]);
+
+  // 弹出层实际使用的页面数据
+  const popupPages = fullPages ?? storybook.pages ?? [];
+
   // 监听滚动事件
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -84,7 +99,7 @@ const StorybookPreview: React.FC<StorybookPreviewProps> = ({
         setSelectedPageIndex(null);
       } else if (e.key === 'ArrowLeft' && selectedPageIndex > 0) {
         setSelectedPageIndex(selectedPageIndex - 1);
-      } else if (e.key === 'ArrowRight' && selectedPageIndex < (storybook.pages?.length ?? 0) - 1) {
+      } else if (e.key === 'ArrowRight' && selectedPageIndex < popupPages.length - 1) {
         setSelectedPageIndex(selectedPageIndex + 1);
       }
     };
@@ -93,7 +108,7 @@ const StorybookPreview: React.FC<StorybookPreviewProps> = ({
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
     }
-  }, [selectedPageIndex, storybook.pages?.length ?? 0]);
+  }, [selectedPageIndex, popupPages.length]);
 
   return (
     <div
@@ -133,7 +148,7 @@ const StorybookPreview: React.FC<StorybookPreviewProps> = ({
       </div>
 
       {/* 悬浮弹出层 - 显示所有页面 */}
-      {isHovered && storybook.pages && storybook.pages.length > 0 && (
+      {isHovered && popupPages.length > 0 && (
         popupPosition === 'center' ? (
           // 屏幕中央模态框模式
           <div
@@ -155,7 +170,7 @@ const StorybookPreview: React.FC<StorybookPreviewProps> = ({
                 <div className="flex items-center gap-2 text-slate-900">
                   <BookOpen size={20} className="text-indigo-600" />
                   <h3 className="font-bold text-lg">{storybook.title}</h3>
-                  <span className="text-xs text-slate-500 ml-2">共 {storybook.pages.length} 页</span>
+                  <span className="text-xs text-slate-500 ml-2">共 {popupPages.length} 页</span>
                 </div>
                 <button
                   onClick={() => setIsHovered(false)}
@@ -194,7 +209,7 @@ const StorybookPreview: React.FC<StorybookPreviewProps> = ({
                   style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 >
                   <div className="flex gap-4">
-                    {storybook.pages.map((page, index) => (
+                    {popupPages.map((page, index) => (
                       <div
                         key={index}
                         onClick={() => setSelectedPageIndex(index)}
@@ -255,7 +270,7 @@ const StorybookPreview: React.FC<StorybookPreviewProps> = ({
               <div className="flex items-center gap-2 text-slate-900">
                 <BookOpen size={20} className="text-indigo-600" />
                 <h3 className="font-bold text-lg">{storybook.title}</h3>
-                <span className="text-xs text-slate-500 ml-auto">共 {storybook.pages.length} 页</span>
+                <span className="text-xs text-slate-500 ml-auto">共 {popupPages.length} 页</span>
               </div>
             </div>
 
@@ -288,7 +303,7 @@ const StorybookPreview: React.FC<StorybookPreviewProps> = ({
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               >
                 <div className="flex gap-4">
-                  {storybook.pages.map((page, index) => (
+                  {popupPages.map((page, index) => (
                     <div
                       key={index}
                       onClick={() => setSelectedPageIndex(index)}
@@ -338,7 +353,7 @@ const StorybookPreview: React.FC<StorybookPreviewProps> = ({
       )}
 
       {/* 放大视图模态框 */}
-      {selectedPageIndex !== null && storybook.pages[selectedPageIndex] && (
+      {selectedPageIndex !== null && popupPages[selectedPageIndex] && (
         <div
           className="fixed inset-0 bg-black/95 z-[100] flex items-center justify-center p-4 md:p-8 animate-in fade-in duration-200"
           onClick={() => setSelectedPageIndex(null)}
@@ -366,7 +381,7 @@ const StorybookPreview: React.FC<StorybookPreviewProps> = ({
             )}
 
             {/* 右箭头 - 下一页 */}
-            {selectedPageIndex < storybook.pages.length - 1 && (
+            {selectedPageIndex < popupPages.length - 1 && (
               <button
                 onClick={() => setSelectedPageIndex(selectedPageIndex + 1)}
                 className="absolute right-4 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white shadow-2xl rounded-full p-3 transition-all duration-200 hover:scale-110"
@@ -377,9 +392,9 @@ const StorybookPreview: React.FC<StorybookPreviewProps> = ({
 
             {/* 放大的图片 */}
             <div className="relative rounded-2xl overflow-hidden bg-slate-900">
-              {storybook.pages[selectedPageIndex].image_url ? (
+              {popupPages[selectedPageIndex].image_url ? (
                 <img
-                  src={storybook.pages[selectedPageIndex].image_url}
+                  src={popupPages[selectedPageIndex].image_url}
                   alt={`Page ${selectedPageIndex + 1}`}
                   className="w-full h-auto"
                   style={{ aspectRatio: '16/9' }}
@@ -399,10 +414,10 @@ const StorybookPreview: React.FC<StorybookPreviewProps> = ({
               </div>
 
               {/* 文字内容 - 放大后显示在底部 */}
-              {storybook.pages[selectedPageIndex].text && (
+              {popupPages[selectedPageIndex].text && (
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 via-black/85 to-transparent px-8 py-6">
                   <p className="text-white text-base md:text-lg leading-relaxed">
-                    {storybook.pages[selectedPageIndex].text}
+                    {popupPages[selectedPageIndex].text}
                   </p>
                 </div>
               )}
@@ -411,13 +426,13 @@ const StorybookPreview: React.FC<StorybookPreviewProps> = ({
             {/* 导航提示 */}
             <div className="mt-6 text-center text-slate-400 text-sm">
               <span>点击图片外部或按 ESC 键关闭</span>
-              {storybook.pages.length > 1 && (
+              {popupPages.length > 1 && (
                 <>
                   <span className="mx-2">|</span>
                   <span>← → 切换页面</span>
                   <span className="mx-2">|</span>
                   <span className="font-medium text-slate-300">
-                    {selectedPageIndex + 1} / {storybook.pages.length}
+                    {selectedPageIndex + 1} / {popupPages.length}
                   </span>
                 </>
               )}

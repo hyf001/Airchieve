@@ -211,7 +211,7 @@ async def list_storybooks(
             "status": book.status,
             "is_public": book.is_public if book.is_public is not None else False,
             "created_at": book.created_at.isoformat() if book.created_at else "",
-            "pages": book.pages if book.pages is not None else None
+            "pages": book.pages[:1] if book.pages else None
         })
 
     return response_data

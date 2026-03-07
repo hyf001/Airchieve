@@ -207,17 +207,33 @@ export const updateStorybookPublicStatus = async (
 };
 
 /**
+ * 将 OSS 公开直链转换为后端 API 代理路径（用于 Canvas 绘制，避免 CORS）
+ * 例：https://bucket.oss-cn-xxx.aliyuncs.com/storybooks/1/page_1.png
+ *  → /api/v1/oss/storybooks/1/page_1.png
+ */
+const toApiUrl = (url: string): string => {
+  if (!url || url.startsWith("data:") || url.startsWith("/")) return url;
+  try {
+    const { pathname } = new URL(url);
+    // pathname 形如 /storybooks/1/page_1.png，去掉开头的 /
+    return `/api/v1/oss/${pathname.replace(/^\//, "")}`;
+  } catch {
+    return url;
+  }
+};
+
+/**
  * 加载图片为 HTMLImageElement（用于 Canvas 绘制）
- * 图片 URL 已统一为同源的 /api/v1/oss/... 路径，直接加载无 CORS 问题。
- * data: URL 同样直接加载。
+ * OSS 直链先转为同源的 /api/v1/oss/... 路径，避免 CORS 污染 Canvas。
  */
 const loadImage = async (url: string): Promise<HTMLImageElement | null> => {
   if (!url) return null;
+  const src = toApiUrl(url);
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => resolve(img);
     img.onerror = () => resolve(null);
-    img.src = url;
+    img.src = src;
   });
 };
 
