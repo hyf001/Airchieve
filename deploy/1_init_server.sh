@@ -19,7 +19,7 @@ warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 err()  { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 
 echo "=============================================="
-echo "      AIrchieve 服务器初始化脚本"
+echo "      AIrchieve 服务器初始化脚本 (含中文字体)"
 echo "      CentOS 8 / 阿里云"
 echo "=============================================="
 
@@ -27,7 +27,7 @@ echo "=============================================="
 
 # ── 1. 基础工具 ─────────────────────────────────────────────
 echo ""
-log "步骤 1/6: 安装基础工具..."
+log "步骤 1/7: 安装基础工具..."
 dnf install -y epel-release
 dnf install -y wget curl git vim tar \
     gcc gcc-c++ make \
@@ -37,7 +37,7 @@ dnf install -y wget curl git vim tar \
 # ── 2. Python 3.12（源码编译） ───────────────────────────────
 PYTHON_VERSION="3.12.9"
 echo ""
-log "步骤 2/6: 编译安装 Python ${PYTHON_VERSION}（约5分钟）..."
+log "步骤 2/7: 编译安装 Python ${PYTHON_VERSION}（约5分钟）..."
 if python3.12 --version &>/dev/null; then
     warn "Python 3.12 已安装 ($(python3.12 --version))，跳过"
 else
@@ -68,7 +68,7 @@ fi
 
 # ── 3. Node.js 20 ───────────────────────────────────────────
 echo ""
-log "步骤 3/6: 安装 Node.js ${NODE_VERSION}..."
+log "步骤 3/7: 安装 Node.js ${NODE_VERSION}..."
 if node --version &>/dev/null; then
     warn "Node.js 已安装 ($(node --version))，跳过"
 else
@@ -79,7 +79,7 @@ fi
 
 # ── 4. Nginx ─────────────────────────────────────────────────
 echo ""
-log "步骤 4/6: 安装 Nginx..."
+log "步骤 4/7: 安装 Nginx..."
 if nginx -v &>/dev/null; then
     warn "Nginx 已安装 ($(nginx -v 2>&1))，跳过"
 else
@@ -99,7 +99,7 @@ fi
 
 # ── 5. Certbot ───────────────────────────────────────────────
 echo ""
-log "步骤 5/6: 安装 Certbot..."
+log "步骤 5/7: 安装 Certbot..."
 if certbot --version &>/dev/null; then
     warn "Certbot 已安装，跳过"
 else
@@ -109,7 +109,26 @@ fi
 
 # ── 6. 创建应用用户和目录 ────────────────────────────────────
 echo ""
-log "步骤 6/6: 创建应用用户 [${APP_USER}] 和目录 [${APP_DIR}]..."
+log "步骤 6/7: 安装中文字体..."
+# 检查是否已有中文字体
+CHINESE_FONTS=$(fc-list :lang=zh 2>/dev/null | wc -l)
+if [[ "$CHINESE_FONTS" -gt 0 ]]; then
+    warn "已检测到 ${CHINESE_FONTS} 个中文字体，跳过安装"
+else
+    dnf install -y fontconfig
+    # WenQuanYi 文泉驿字体（覆盖宋体/黑体，PDF/图片渲染常用）
+    dnf install -y wqy-zenhei-fonts wqy-microhei-fonts 2>/dev/null || \
+        warn "dnf 未找到 wqy 字体包，尝试 Google Noto CJK..."
+    # Noto CJK 作为备选
+    dnf install -y google-noto-sans-cjk-fonts 2>/dev/null || \
+        warn "Noto CJK 也未找到，请手动安装中文字体"
+    # 刷新字体缓存
+    fc-cache -fv
+    log "中文字体安装完成，共 $(fc-list :lang=zh | wc -l) 个字体"
+fi
+
+echo ""
+log "步骤 7/7: 创建应用用户 [${APP_USER}] 和目录 [${APP_DIR}]..."
 if ! id "$APP_USER" &>/dev/null; then
     useradd -r -s /bin/bash -d "$APP_DIR" "$APP_USER"
     log "用户 ${APP_USER} 创建完成"
@@ -129,7 +148,7 @@ fi
 
 echo ""
 echo "=============================================="
-echo "  ✅ 服务器初始化完成！"
+echo "  ✅ 服务器初始化完成！（7 个步骤）"
 echo ""
 echo "  下一步操作："
 echo "  1. 将项目代码部署到服务器："
