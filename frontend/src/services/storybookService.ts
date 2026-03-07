@@ -207,42 +207,132 @@ export const updateStorybookPublicStatus = async (
 };
 
 /**
- * 下载绘本横向长图（JPEG）
+ * 加载图片为 HTMLImageElement（用于 Canvas 绘制）
+ * 图片 URL 已统一为同源的 /api/v1/oss/... 路径，直接加载无 CORS 问题。
+ * data: URL 同样直接加载。
+ */
+const loadImage = async (url: string): Promise<HTMLImageElement | null> => {
+  if (!url) return null;
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+};
+
+/**
+ * 在浏览器端用 Canvas 生成绘本横向长图并触发下载（JPEG）
+ * 布局与 EditorView 一致：图片全屏 + 底部渐变遮罩 + 白色文字
  */
 export const downloadStorybookImage = async (
-  storybookId: number,
-  title: string,
+  storybook: Storybook,
 ): Promise<void> => {
-  const url = `${API_BASE}/${storybookId}/download`;
+  const pages = storybook.pages || [];
+  if (pages.length === 0) throw new Error('绘本无页面内容');
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: { ...getAuthHeaders() },
-  });
+  const PANEL_W = 600;
+  const PANEL_H = 800;
+  const GAP = 16;
+  const GRAD_RATIO = 0.42;
+  const gradH = Math.floor(PANEL_H * GRAD_RATIO);
+  const padding = Math.floor(PANEL_W * 0.05);
+  const fontSize = Math.max(22, Math.floor(PANEL_H * 0.030));
+  const maxTextW = PANEL_W - padding * 2;
 
-  if (!res.ok) {
-    if (res.status === 404) throw new Error("绘本不存在");
-    throw new Error(`下载失败: ${res.status}`);
-  }
+  // 并行加载所有图片
+  const images = await Promise.all(pages.map(p => loadImage(p.image_url)));
 
-  // 获取文件名
-  const contentDisposition = res.headers.get("Content-Disposition");
-  let filename = `${title}_${storybookId}.jpg`;
-  if (contentDisposition) {
-    const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-    if (filenameMatch && filenameMatch[1]) {
-      filename = filenameMatch[1].replace(/['"]/g, "");
+  const n = pages.length;
+  const canvas = document.createElement('canvas');
+  canvas.width = PANEL_W * n + GAP * (n - 1);
+  canvas.height = PANEL_H;
+  const ctx = canvas.getContext('2d')!;
+
+  // 画布背景
+  ctx.fillStyle = 'rgb(30, 30, 36)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const fontStack = `${fontSize}px "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif`;
+
+  for (let i = 0; i < n; i++) {
+    const page = pages[i];
+    const panelX = i * (PANEL_W + GAP);
+
+    // 面板底色（letterbox 留边可见）
+    ctx.fillStyle = 'rgb(20, 20, 28)';
+    ctx.fillRect(panelX, 0, PANEL_W, PANEL_H);
+
+    // 图片（letterbox fit，不裁剪）
+    const img = images[i];
+    if (img) {
+      const scale = Math.min(PANEL_W / img.naturalWidth, PANEL_H / img.naturalHeight);
+      const w = img.naturalWidth * scale;
+      const h = img.naturalHeight * scale;
+      ctx.drawImage(img, panelX + (PANEL_W - w) / 2, (PANEL_H - h) / 2, w, h);
+      if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
     }
+
+    // 底部渐变遮罩（transparent → black/75）
+    const gradY = PANEL_H - gradH;
+    const grad = ctx.createLinearGradient(0, gradY, 0, PANEL_H);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.75)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(panelX, gradY, PANEL_W, gradH);
+
+    // 白色文字（带阴影）
+    ctx.font = fontStack;
+    ctx.textBaseline = 'top';
+
+    const text = page.text || '';
+    const lines: string[] = [];
+    let cur = '';
+    for (const ch of text) {
+      const test = cur + ch;
+      if (ctx.measureText(test).width > maxTextW && cur) {
+        lines.push(cur);
+        cur = ch;
+      } else {
+        cur = test;
+      }
+    }
+    if (cur) lines.push(cur);
+
+    const lineH = fontSize * 1.55;
+    const totalH = lines.length * lineH;
+    let textY = gradY + (gradH - totalH) / 2;
+    textY = Math.max(gradY + padding / 2, textY);
+
+    ctx.shadowColor = 'rgba(0,0,0,0.6)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 1;
+    ctx.shadowOffsetY = 1;
+    ctx.fillStyle = 'white';
+    for (const line of lines) {
+      const lw = ctx.measureText(line).width;
+      ctx.fillText(line, panelX + (PANEL_W - lw) / 2, textY);
+      textY += lineH;
+    }
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
   }
 
-  // 下载文件
-  const blob = await res.blob();
-  const url_obj = window.URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url_obj;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  window.URL.revokeObjectURL(url_obj);
-  document.body.removeChild(a);
+  // 触发下载
+  await new Promise<void>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) { reject(new Error('生成图片失败')); return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${storybook.title || 'storybook'}_${storybook.id}.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      resolve();
+    }, 'image/jpeg', 0.92);
+  });
 };

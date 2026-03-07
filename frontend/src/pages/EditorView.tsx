@@ -243,7 +243,7 @@ const EditorView: React.FC<EditorViewProps> = ({
     if (!currentStorybook || currentStorybook.status !== 'finished') return;
     setIsDownloading(true);
     try {
-      await downloadStorybookImage(currentStorybook.id!, currentStorybook.title || 'storybook');
+      await downloadStorybookImage(currentStorybook);
     } catch (err) {
       alert(err instanceof Error ? err.message : '下载失败');
     } finally {

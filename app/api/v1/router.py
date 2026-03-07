@@ -9,6 +9,7 @@ from app.api.v1.user_api import router as user_router
 from app.api.v1.storybook_api import router as storybook_router
 from app.api.v1.template_api import router as template_router
 from app.api.v1.payment_api import router as payment_router
+from app.api.v1.oss_api import router as oss_router
 
 api_router = APIRouter()
 
@@ -17,6 +18,7 @@ api_router.include_router(user_router)
 api_router.include_router(storybook_router, tags=["storybooks"])
 api_router.include_router(template_router, tags=["templates"])
 api_router.include_router(payment_router)
+api_router.include_router(oss_router)
 
 
 # 健康检查
