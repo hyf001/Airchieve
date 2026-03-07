@@ -21,7 +21,7 @@ from app.services.storybook_service import (
     get_storybook,
     update_storybook_pages,
     list_storybooks as list_storybooks_service,
-    generate_storybook_pdf,
+    generate_storybook_image,
 )
 from app.services.points_service import InsufficientPointsError, check_page_edit_points
 
@@ -349,78 +349,28 @@ async def update_public_status_endpoint(
         )
 
 
-class DownloadPDFRequest(BaseModel):
-    """下载PDF请求参数"""
-    paper_size: str = Field("a4", description="纸张类型: a4, a3, a5, letter, legal")
-    orientation: str = Field("landscape", description="纸张方向: portrait(竖向), landscape(横向)")
-
-
 @router.get("/{storybook_id}/download", status_code=status.HTTP_200_OK)
-async def download_storybook_pdf(
+async def download_storybook_image(
     storybook_id: int,
-    paper_size: str = Query("a4", description="纸张类型: a4, a3, a5, letter, legal"),
-    orientation: str = Query("landscape", description="纸张方向: portrait(竖向), landscape(横向)"),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    下载绘本PDF
-
-    将绘本的图片和文本整理成PDF文件下载
-
-    参数:
-    - paper_size: 纸张类型，默认 a4，支持 a3, a4, a5, letter, legal
-    - orientation: 纸张方向，默认 landscape(横向)，支持 portrait(竖向)
-    """
-    # 检查绘本是否存在
+    """下载绘本横向长图（JPEG）"""
     storybook = await get_storybook(storybook_id)
     if not storybook:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="绘本不存在"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="绘本不存在")
 
-    # 验证参数
-    valid_paper_sizes = ["a3", "a4", "a5", "letter", "legal"]
-    valid_orientations = ["portrait", "landscape"]
+    image_data = await generate_storybook_image(storybook_id)
 
-    if paper_size.lower() not in valid_paper_sizes:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"无效的纸张类型，支持: {', '.join(valid_paper_sizes)}"
-        )
+    if not image_data:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="生成图片失败")
 
-    if orientation.lower() not in valid_orientations:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"无效的纸张方向，支持: {', '.join(valid_orientations)}"
-        )
-
-    # 生成PDF
-    pdf_data = await generate_storybook_pdf(
-        storybook_id,
-        paper_size=paper_size.lower(),
-        orientation=orientation.lower()
-    )
-
-    if not pdf_data:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="生成PDF失败"
-        )
-
-    # 返回PDF文件
-    filename = f"{storybook.title or 'storybook'}_{storybook_id}.pdf"
-    # 清理文件名中的特殊字符
+    filename = f"{storybook.title or 'storybook'}_{storybook_id}.jpg"
     filename = filename.replace("/", "-").replace("\\", "-").replace(":", "-")
-
-    # 对文件名进行 URL 编码以支持中文
     from urllib.parse import quote
     encoded_filename = quote(filename, safe='')
 
     return Response(
-        content=pdf_data,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
-        }
+        content=image_data,
+        media_type="image/jpeg",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"}
     )

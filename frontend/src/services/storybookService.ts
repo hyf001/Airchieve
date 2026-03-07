@@ -206,27 +206,14 @@ export const updateStorybookPublicStatus = async (
   }
 };
 
-export type PaperSize = "a3" | "a4" | "a5" | "letter" | "legal";
-export type Orientation = "portrait" | "landscape";
-
-export interface DownloadPDFOptions {
-  paperSize?: PaperSize;
-  orientation?: Orientation;
-}
-
 /**
- * 下载绘本 PDF
+ * 下载绘本横向长图（JPEG）
  */
-export const downloadStorybookPDF = async (
+export const downloadStorybookImage = async (
   storybookId: number,
   title: string,
-  options?: DownloadPDFOptions
 ): Promise<void> => {
-  const params = new URLSearchParams();
-  if (options?.paperSize) params.append("paper_size", options.paperSize);
-  if (options?.orientation) params.append("orientation", options.orientation);
-
-  const url = `${API_BASE}/${storybookId}/download${params.toString() ? `?${params.toString()}` : ""}`;
+  const url = `${API_BASE}/${storybookId}/download`;
 
   const res = await fetch(url, {
     method: "GET",
@@ -235,12 +222,12 @@ export const downloadStorybookPDF = async (
 
   if (!res.ok) {
     if (res.status === 404) throw new Error("绘本不存在");
-    throw new Error(`Failed to download PDF: ${res.status}`);
+    throw new Error(`下载失败: ${res.status}`);
   }
 
   // 获取文件名
   const contentDisposition = res.headers.get("Content-Disposition");
-  let filename = `${title}_${storybookId}.pdf`;
+  let filename = `${title}_${storybookId}.jpg`;
   if (contentDisposition) {
     const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
     if (filenameMatch && filenameMatch[1]) {

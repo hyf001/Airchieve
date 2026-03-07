@@ -11,13 +11,12 @@ import {
   createStorybook,
   deleteStorybook,
   updateStorybookPublicStatus,
-  downloadStorybookPDF,
+  downloadStorybookImage,
   InsufficientPointsError,
   Storybook,
   StorybookListItem,
 } from '../services/storybookService';
 import { usePolling } from '../hooks/usePolling';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
@@ -55,9 +54,6 @@ const EditorView: React.FC<EditorViewProps> = ({
   const [animatingPageIndex, setAnimatingPageIndex] = useState<number | null>(null);
   const [showFloatingInput, setShowFloatingInput] = useState(false);
   const [insufficientPointsMessage, setInsufficientPointsMessage] = useState<string | null>(null);
-  const [showPaperSelector, setShowPaperSelector] = useState(false);
-  const [selectedPaperSize, setSelectedPaperSize] = useState('a4');
-  const [selectedOrientation, setSelectedOrientation] = useState('landscape');
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [creationProgress, setCreationProgress] = useState(0);
@@ -65,7 +61,7 @@ const EditorView: React.FC<EditorViewProps> = ({
 
   const CREATION_ESTIMATED_MS = 120_000; // 2 分钟
 
-  // 下载假进度：0 → 85% 渐进，完成后跳 100%
+  // 下载假进度：0 → 99% 渐进，完成后跳 100%
   useEffect(() => {
     if (!isDownloading) {
       if (downloadProgress > 0) setDownloadProgress(100);
@@ -74,8 +70,8 @@ const EditorView: React.FC<EditorViewProps> = ({
     setDownloadProgress(5);
     const id = setInterval(() => {
       setDownloadProgress(prev => {
-        if (prev >= 85) { clearInterval(id); return prev; }
-        return prev + (85 - prev) * 0.08 + 0.5;
+        if (prev >= 99) { clearInterval(id); return prev; }
+        return prev + (99 - prev) * 0.06 + 0.35;
       });
     }, 400);
     return () => clearInterval(id);
@@ -242,22 +238,12 @@ const EditorView: React.FC<EditorViewProps> = ({
     }
   };
 
-  // 下载绘本 PDF
-  const handleDownloadPDF = async () => {
+  // 下载绘本长图
+  const handleDownloadImage = async () => {
     if (!currentStorybook || currentStorybook.status !== 'finished') return;
-    // 显示纸张选择对话框
-    setShowPaperSelector(true);
-  };
-
-  // 确认下载
-  const handleConfirmDownload = async (paperSize: string, orientation: string) => {
-    setShowPaperSelector(false);
     setIsDownloading(true);
     try {
-      await downloadStorybookPDF(currentStorybook.id!, currentStorybook.title || 'storybook', {
-        paperSize: paperSize as any,
-        orientation: orientation as any
-      });
+      await downloadStorybookImage(currentStorybook.id!, currentStorybook.title || 'storybook');
     } catch (err) {
       alert(err instanceof Error ? err.message : '下载失败');
     } finally {
@@ -389,7 +375,7 @@ const EditorView: React.FC<EditorViewProps> = ({
           </Button>
 
           <Button
-            onClick={handleDownloadPDF}
+            onClick={handleDownloadImage}
             disabled={!currentStorybook || currentStorybook.status !== 'finished'}
             variant="gradient"
             className="hidden md:flex"
@@ -424,55 +410,6 @@ const EditorView: React.FC<EditorViewProps> = ({
           </Button>
         </div>
       )}
-
-      {/* Paper Selection Dialog */}
-      <Dialog open={showPaperSelector} onOpenChange={setShowPaperSelector}>
-        <DialogContent className="bg-white text-slate-900 max-w-sm">
-          <h3 className="font-lexend font-bold text-lg text-slate-900 mb-4">选择下载格式</h3>
-          <div className="space-y-5">
-            <div>
-              <p className="text-sm font-semibold text-slate-700 mb-2">纸张大小</p>
-              <div className="grid grid-cols-3 gap-2">
-                {(['a4', 'a3', 'a5', 'letter', 'legal'] as const).map((size) => (
-                  <Button
-                    key={size}
-                    variant={selectedPaperSize === size ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setSelectedPaperSize(size)}
-                  >
-                    {size.toUpperCase()}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-slate-700 mb-2">纸张方向</p>
-              <div className="grid grid-cols-2 gap-2">
-                {([
-                  { value: 'landscape', label: '横向' },
-                  { value: 'portrait', label: '竖向' },
-                ] as const).map(({ value, label }) => (
-                  <Button
-                    key={value}
-                    variant={selectedOrientation === value ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setSelectedOrientation(value)}
-                  >
-                    {label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div className="flex gap-2 mt-6">
-            <Button variant="outline" onClick={() => setShowPaperSelector(false)} className="flex-1">取消</Button>
-            <Button onClick={() => handleConfirmDownload(selectedPaperSize, selectedOrientation)} className="flex-1">
-              <Download size={16} />
-              下载
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Main Workspace */}
       <div className="flex-1 flex overflow-hidden">

@@ -7,12 +7,6 @@ import asyncio
 import time
 import io
 from sqlalchemy import select
-from reportlab.lib.pagesizes import A4, A3, A5, LETTER, LEGAL, landscape
-from reportlab.platypus import SimpleDocTemplate, Image, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import Paragraph
 import httpx
 from PIL import Image as PILImage, ImageDraw, ImageFont
 
@@ -521,267 +515,113 @@ def _get_chinese_font_size(size: int) -> ImageFont.ImageFont | ImageFont.FreeTyp
     return ImageFont.load_default()
 
 
-def _draw_text_on_image(image_data: bytes, text: str) -> bytes:
-    """
-    将文字绘制到图片底部
-
-    保持图片原始尺寸，在图片底部绘制半透明背景和文字
-    """
-    # 打开图片
-    img = PILImage.open(io.BytesIO(image_data))
-
-    # 转换为 RGBA 模式以支持透明度
-    if img.mode != 'RGBA':
-        img = img.convert('RGBA')
-
-    # 创建一个新的图层用于绘制
-    overlay = PILImage.new('RGBA', img.size, (255, 255, 255, 0))
-    draw = ImageDraw.Draw(overlay)
-
-    # 计算文字区域大小（底部 25%）
-    text_area_height = int(img.height * 0.25)
-    text_area_top = img.height - text_area_height
-
-    # 绘制半透明白色背景
-    draw.rectangle(
-        [(0, text_area_top), (img.width, img.height)],
-        fill=(255, 255, 255, 230)
-    )
-
-    # 获取字体（根据图片大小自适应）
-    font_size = max(20, int(img.width * 0.04))  # 动态字体大小
-    font = _get_chinese_font_size(font_size)
-
-    # 计算文字位置（居中）
-    # 获取文本边界框
-    bbox = draw.textbbox((0, 0), text, font=font)
-    text_width = bbox[2] - bbox[0]
-    text_height = bbox[3] - bbox[1]
-
-    # 居中位置
-    x = (img.width - text_width) // 2
-    y = text_area_top + (text_area_height - text_height) // 2
-
-    # 如果文字太宽，进行换行处理
-    if text_width > img.width * 0.9:
-        # 简单的换行逻辑
-        avg_char_width = text_width / len(text)
-        max_chars_per_line = int((img.width * 0.9) / avg_char_width)
-
-        lines = []
-        current_line = ""
-        for char in text:
-            if len(current_line) >= max_chars_per_line:
-                lines.append(current_line)
-                current_line = char
-            else:
-                current_line += char
-        if current_line:
-            lines.append(current_line)
-
-        # 绘制多行文字
-        line_height = text_height + 10
-        total_text_height = len(lines) * line_height
-        start_y = text_area_top + (text_area_height - total_text_height) // 2
-
-        for i, line in enumerate(lines):
-            line_bbox = draw.textbbox((0, 0), line, font=font)
-            line_width = line_bbox[2] - line_bbox[0]
-            line_x = (img.width - line_width) // 2
-            draw.text((line_x, start_y + i * line_height), line, font=font, fill=(0, 0, 0, 255))
-    else:
-        # 单行文字
-        draw.text((x, y), text, font=font, fill=(0, 0, 0, 255))
-
-    # 合并图片和覆盖层
-    combined = PILImage.alpha_composite(img, overlay)
-
-    # 转换回 RGB 并保存
-    if combined.mode != 'RGB':
-        combined = combined.convert('RGB')
-
-    # 保存到字节流
-    output = io.BytesIO()
-    combined.save(output, format='JPEG', quality=95)
-    return output.getvalue()
-
-
-def _setup_chinese_font() -> bool:
-    """设置中文字体，返回是否成功"""
-    # 尝试注册常见的中文字体
-    font_paths = [
-        # macOS 系统字体
-        "/System/Library/Fonts/PingFang.ttc",
-        "/System/Library/Fonts/STHeiti Light.ttc",
-        "/System/Library/Fonts/STSong.ttc",
-        # CentOS / RHEL / Fedora（dnf 安装路径）
-        "/usr/share/fonts/wqy-zenhei/wqy-zenhei.ttc",
-        "/usr/share/fonts/wqy-microhei/wqy-microhei.ttc",
-        "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/google-noto-cjk/NotoSansCJKsc-Regular.otf",
-        # Debian / Ubuntu（apt 安装路径）
-        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
-        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
-        # Windows 字体
-        "C:/Windows/Fonts/msyh.ttc",
-        "C:/Windows/Fonts/simsun.ttc",
-    ]
-
-    for font_path in font_paths:
-        try:
-            import os
-            if not os.path.exists(font_path):
-                continue
-            # .ttc 是字体集合文件，ReportLab 需要指定 subfontIndex
-            if font_path.lower().endswith(".ttc"):
-                pdfmetrics.registerFont(TTFont("ChineseFont", font_path, subfontIndex=0))
-            else:
-                pdfmetrics.registerFont(TTFont("ChineseFont", font_path))
-            logger.info("成功注册中文字体 | path=%s", font_path)
-            return True
-        except Exception as e:
-            logger.debug("注册字体失败 | path=%s error=%s", font_path, e)
-            continue
-
-    logger.warning("未找到可用的中文字体，PDF中文可能无法正常显示")
-    return False
-
-
-async def generate_storybook_pdf(
+async def generate_storybook_image(
     storybook_id: int,
-    paper_size: str = "a4",
-    orientation: str = "landscape"
+    panel_width: int = 600,
+    panel_height: int = 800,
 ) -> Optional[bytes]:
     """
-    生成绘本PDF
-
-    参数:
-        storybook_id: 绘本ID
-        paper_size: 纸张类型 (a3, a4, a5, letter, legal)
-        orientation: 纸张方向 (portrait, landscape)
-
-    返回 PDF 字节数据，失败返回 None
+    生成绘本横向长图：图片全屏铺满面板，底部渐变遮罩叠加白色文字，面板间留白间距。
     """
     storybook = await get_storybook(storybook_id)
-
     if not storybook or not storybook.pages:
-        logger.warning("生成PDF失败，绘本不存在或无页面 | storybook_id=%s", storybook_id)
+        logger.warning("生成图片失败，绘本不存在或无页面 | storybook_id=%s", storybook_id)
         return None
 
-    # 设置中文字体
-    _setup_chinese_font()
+    GAP = 16                          # 面板间距（px）
+    BG_COLOR = (30, 30, 36)           # 画布背景色（深色）
+    GRAD_RATIO = 0.42                 # 底部渐变区占面板高度比例
+    grad_h = int(panel_height * GRAD_RATIO)
 
-    # 根据参数选择纸张类型
-    paper_sizes = {
-        "a3": A3,
-        "a4": A4,
-        "a5": A5,
-        "letter": LETTER,
-        "legal": LEGAL,
-    }
+    padding = int(panel_width * 0.05)
+    max_text_w = panel_width - padding * 2
+    font_size = max(22, int(panel_height * 0.030))
 
-    base_size = paper_sizes.get(paper_size, A4)
+    # 预生成底部渐变遮罩（RGBA：从全透明 → black/75）
+    gradient = PILImage.new('RGBA', (panel_width, grad_h), (0, 0, 0, 0))
+    draw_g = ImageDraw.Draw(gradient)
+    for row in range(grad_h):
+        alpha = int(192 * (row / grad_h))   # 0 → 192 ≈ black/75
+        draw_g.line([(0, row), (panel_width - 1, row)], fill=(0, 0, 0, alpha))
 
-    # 根据方向设置页面尺寸
-    if orientation == "landscape":
-        page_size = landscape(base_size)
-    else:
-        page_size = base_size
+    panels: list[PILImage.Image] = []
 
-    # 创建 PDF buffer
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=page_size,
-        leftMargin=0,
-        rightMargin=0,
-        topMargin=0,
-        bottomMargin=0,
-    )
-
-    # 创建样式
-    styles = getSampleStyleSheet()
-
-    # 尝试使用中文字体
-    try:
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontName='ChineseFont',
-            fontSize=20,
-            alignment=1,  # 居中
-            spaceAfter=12,
-        )
-    except Exception:
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontSize=20,
-            alignment=1,
-            spaceAfter=12,
-        )
-
-    # 构建 PDF 内容
-    story = []
-
-    # 添加标题页（单独一页）
-    title = storybook.title or "未命名绘本"
-    try:
-        story.append(Paragraph(title, title_style))
-    except Exception:
-        story.append(Paragraph(title, styles['Heading1']))
-    story.append(PageBreak())
-
-    # 为每一页添加内容
     for page in storybook.pages:
         text = page.get("text", "")
         image_url = page.get("image_url", "")
 
-        # 下载图片并将文字绘制到图片上
+        # ── 底色（深色，letterbox 留边时可见）──────────────────
+        panel = PILImage.new('RGB', (panel_width, panel_height), (20, 20, 28))
+
+        # ── 故事图（全屏 letterbox，不裁剪）───────────────────
         if image_url:
             image_data = await _download_image(image_url)
             if image_data:
                 try:
-                    # 如果有文字，将文字绘制到图片上
-                    if text:
-                        image_data = _draw_text_on_image(image_data, text)
-
-                    img_buffer = io.BytesIO(image_data)
-                    # 创建 Image 对象获取原始尺寸
-                    img = Image(img_buffer)
-
-                    # 计算适合横向 A4 页面的尺寸（保持原始宽高比）
-                    page_width = page_size[0]
-                    page_height = page_size[1]
-
-                    # 计算缩放比例，使图片填满页面（不被挤压）
-                    width_ratio = page_width / img.drawWidth
-                    height_ratio = page_height / img.drawHeight
-                    scale = min(width_ratio, height_ratio)
-
-                    # 应用缩放，让图片尽可能大
-                    img.drawWidth = img.drawWidth * scale
-                    img.drawHeight = img.drawHeight * scale
-
-                    img.hAlign = 'CENTER'
-                    img.vAlign = 'MIDDLE'
-                    story.append(img)
+                    src = PILImage.open(io.BytesIO(image_data)).convert('RGB')
+                    scale = min(panel_width / src.width, panel_height / src.height)
+                    new_w = int(src.width * scale)
+                    new_h = int(src.height * scale)
+                    src = src.resize((new_w, new_h), PILImage.Resampling.LANCZOS)
+                    x_off = (panel_width - new_w) // 2
+                    y_off = (panel_height - new_h) // 2
+                    panel.paste(src, (x_off, y_off))
                 except Exception as e:
-                    logger.warning("添加图片到PDF失败 | url=%s error=%s", image_url, e)
+                    logger.warning("处理图片失败 | url=%s error=%s", image_url, e)
 
-        story.append(PageBreak())
+        # ── 底部渐变遮罩 ───────────────────────────────────────
+        panel_rgba = panel.convert('RGBA')
+        panel_rgba.paste(gradient, (0, panel_height - grad_h), gradient)
+        panel = panel_rgba.convert('RGB')
 
-    # 生成 PDF
-    try:
-        doc.build(story)
-        pdf_data = buffer.getvalue()
-        buffer.close()
-        logger.info("PDF生成成功 | storybook_id=%s pages=%s size=%s",
-                   storybook_id, len(storybook.pages), len(pdf_data))
-        return pdf_data
-    except Exception as e:
-        logger.exception("PDF生成失败 | storybook_id=%s error=%s", storybook_id, e)
-        buffer.close()
+        # ── 白色文字（居中，叠在渐变上）───────────────────────
+        draw = ImageDraw.Draw(panel)
+        font = _get_chinese_font_size(font_size)
+
+        def wrap_text(t: str) -> list[str]:
+            lines, cur = [], ""
+            for ch in t:
+                test = cur + ch
+                w = draw.textbbox((0, 0), test, font=font)[2]
+                if w > max_text_w and cur:
+                    lines.append(cur)
+                    cur = ch
+                else:
+                    cur = test
+            if cur:
+                lines.append(cur)
+            return lines
+
+        lines = wrap_text(text)
+        line_h = draw.textbbox((0, 0), "测", font=font)[3] + int(font_size * 0.45)
+        total_h = len(lines) * line_h
+        # 文字垂直居中于渐变区下半部分
+        grad_top = panel_height - grad_h
+        y = grad_top + (grad_h - total_h) // 2
+        y = max(grad_top + padding // 2, y)
+        for line in lines:
+            lw = draw.textbbox((0, 0), line, font=font)[2]
+            x = (panel_width - lw) // 2
+            # 轻微阴影增强可读性
+            draw.text((x + 1, y + 1), line, font=font, fill=(0, 0, 0, 160))
+            draw.text((x, y), line, font=font, fill=(255, 255, 255))
+            y += line_h
+
+        panels.append(panel)
+
+    if not panels:
         return None
+
+    # ── 拼接所有面板为横向长图（面板间加间距）─────────────────
+    n = len(panels)
+    total_w = panel_width * n + GAP * (n - 1)
+    canvas = PILImage.new('RGB', (total_w, panel_height), BG_COLOR)
+    for i, p in enumerate(panels):
+        canvas.paste(p, (i * (panel_width + GAP), 0))
+
+    out = io.BytesIO()
+    canvas.save(out, format='JPEG', quality=92)
+    logger.info("绘本长图生成成功 | storybook_id=%s panels=%s size=%s",
+                storybook_id, len(panels), out.tell())
+    return out.getvalue()
+
