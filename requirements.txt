@@ -38,5 +38,3 @@ reportlab>=4.2.0  # PDF generation
 # Google Gemini SDK
 google-genai>=1.0.0
 
-# Aliyun OSS
-oss2>=2.18.0
