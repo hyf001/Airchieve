@@ -610,6 +610,13 @@ const EditorView: React.FC<EditorViewProps> = ({
                           >
                             <div className="w-full h-full relative bg-slate-100">
                               <img src={page.image_url} alt={`Page ${idx + 1}`} className="w-full h-full object-cover" />
+                              {page.text && (
+                                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/75 via-black/40 to-transparent px-6 pt-10 pb-4">
+                                  <p className="text-white text-sm md:text-base lg:text-lg font-lexend leading-relaxed text-center drop-shadow">
+                                    {page.text}
+                                  </p>
+                                </div>
+                              )}
                               <Button
                                 variant="ghost" size="icon"
                                 onClick={() => { setEditingPage(idx); setShowFloatingInput(true); }}
