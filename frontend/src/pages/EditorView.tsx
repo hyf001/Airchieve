@@ -1,15 +1,14 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { ChevronLeft, ChevronRight, BookOpen, Loader2, Trash2, Plus, Sparkles, AlertCircle, Download, PenTool, Edit2, Lock, Globe, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BookOpen, Loader2, Trash2, Plus, Sparkles, AlertCircle, Download, Gift, Edit2, Lock, Globe, X } from 'lucide-react';
 import FloatingInputBox from '../components/FloatingInputBox';
 import {
   getStorybook,
   listStorybooks,
   editStorybook,
   editStorybookPage,
-  createStorybook,
-  deleteStorybook,
+deleteStorybook,
   updateStorybookPublicStatus,
   downloadStorybookImage,
   InsufficientPointsError,
@@ -18,7 +17,8 @@ import {
 } from '../services/storybookService';
 import { usePolling } from '../hooks/usePolling';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 // 状态文本映射
 const statusTextMap: Record<string, string> = {
@@ -43,6 +43,7 @@ const EditorView: React.FC<EditorViewProps> = ({
   onCreateNew,
 }) => {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [currentStorybook, setCurrentStorybook] = useState<Storybook | null>(null);
   const [storybookList, setStorybookList] = useState<StorybookListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,6 +58,7 @@ const EditorView: React.FC<EditorViewProps> = ({
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [creationProgress, setCreationProgress] = useState(0);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const creationStartTimeRef = useRef<number | null>(null);
 
   const CREATION_ESTIMATED_MS = 120_000; // 2 分钟
@@ -177,43 +179,15 @@ const EditorView: React.FC<EditorViewProps> = ({
     loadStorybook(id);
   };
 
-  // 重新生成（error 状态时）
-  const handleRegenerate = async () => {
-    if (!currentStorybook?.instruction) return;
-    setError(null);
-    setInsufficientPointsMessage(null);
-    try {
-      const res = await createStorybook({
-        instruction: currentStorybook.instruction,
-        template_id: currentStorybook.template_id ?? undefined,
-      });
-      // 插入新绑本到列表顶部
-      setStorybookList(prev => {
-        if (prev.find(item => item.id === res.id)) return prev;
-        return [{
-          id: res.id,
-          title: res.title,
-          description: null,
-          creator: user ? String(user.id) : '',
-          status: 'init' as const,
-          is_public: false,
-          created_at: new Date().toISOString(),
-          pages: null,
-        }, ...prev];
-      });
-      await loadStorybook(res.id);
-    } catch (err) {
-      if (err instanceof InsufficientPointsError) {
-        setInsufficientPointsMessage(err.message);
-      } else {
-        setError(err instanceof Error ? err.message : '重新生成失败');
-      }
-    }
-  };
-
   const handleDelete = async (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('确定要删除这个绘本吗？')) return;
+    setDeleteConfirmId(id);
+  };
+
+  const confirmDelete = async () => {
+    if (deleteConfirmId === null) return;
+    const id = deleteConfirmId;
+    setDeleteConfirmId(null);
     try {
       await deleteStorybook(id);
       await loadStorybookList();
@@ -222,7 +196,7 @@ const EditorView: React.FC<EditorViewProps> = ({
         setCurrentStorybook(null);
       }
     } catch {
-      alert('删除失败');
+      toast({ variant: "destructive", title: "删除失败" });
     }
   };
 
@@ -234,7 +208,7 @@ const EditorView: React.FC<EditorViewProps> = ({
         prev.map(book => book.id === id ? { ...book, is_public: !currentIsPublic } : book)
       );
     } catch {
-      alert('更新公开状态失败');
+      toast({ variant: "destructive", title: "更新公开状态失败" });
     }
   };
 
@@ -245,7 +219,7 @@ const EditorView: React.FC<EditorViewProps> = ({
     try {
       await downloadStorybookImage(currentStorybook);
     } catch (err) {
-      alert(err instanceof Error ? err.message : '下载失败');
+      toast({ variant: "destructive", title: "下载失败", description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsDownloading(false);
     }
@@ -259,7 +233,6 @@ const EditorView: React.FC<EditorViewProps> = ({
     setInsufficientPointsMessage(null);
     try {
       const res = await editStorybook(currentStorybook.id, { instruction });
-      // 插入新绑本到列表顶部
       setStorybookList(prev => {
         if (prev.find(item => item.id === res.id)) return prev;
         return [{
@@ -294,7 +267,6 @@ const EditorView: React.FC<EditorViewProps> = ({
       await editStorybookPage(currentStorybook.id, editingPage, { instruction });
       setEditingPage(null);
       setShowFloatingInput(false);
-      // 乐观更新状态为 updating，然后启动轮询
       setCurrentStorybook(prev => prev ? { ...prev, status: 'updating' } : prev);
       setStorybookList(prev =>
         prev.map(item => item.id === currentStorybook.id ? { ...item, status: 'updating' } : item)
@@ -345,7 +317,8 @@ const EditorView: React.FC<EditorViewProps> = ({
   }, [nextSpread, prevSpread]);
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-[#E2E8F0]">
+    <>
+    <div className="flex-1 flex flex-col overflow-hidden bg-[#FAF3ED]">
       {/* Header */}
       <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-4 md:px-8 z-30 shrink-0">
         <div className="flex items-center gap-4">
@@ -353,27 +326,17 @@ const EditorView: React.FC<EditorViewProps> = ({
             <ChevronLeft />
           </Button>
           <div>
-            <h1 className="font-lexend font-bold text-slate-900 truncate max-w-[200px] md:max-w-md">
-              {currentStorybook?.title || 'Select a Storybook'}
+            <h1 className="font-semibold text-slate-900 truncate max-w-[200px] md:max-w-md text-base">
+              {currentStorybook?.title || '选择一本绘本'}
             </h1>
-            <div className="flex items-center gap-2 text-[10px] text-indigo-500 font-black uppercase tracking-widest">
-              <span>{pages.length} Pages</span>
-              <span className="text-slate-300 mx-1">•</span>
-              <span>{currentStorybook?.status ? statusTextMap[currentStorybook.status] || currentStorybook.status : 'Unknown'}</span>
+            <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium mt-0.5">
+              <span>{pages.length} 页</span>
+              <span className="text-slate-300">|</span>
+              <span>{currentStorybook?.status ? statusTextMap[currentStorybook.status] || currentStorybook.status : '未知'}</span>
             </div>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <Button
-            onClick={() => { setEditingPage(null); setShowFloatingInput(true); }}
-            disabled={!currentStorybook || currentStorybook.status !== 'finished'}
-            variant="gradient"
-            className="hidden md:flex"
-          >
-            <PenTool size={16} />
-            编辑绘本
-          </Button>
-
           <Button
             onClick={handleDownloadImage}
             disabled={!currentStorybook || currentStorybook.status !== 'finished'}
@@ -381,7 +344,7 @@ const EditorView: React.FC<EditorViewProps> = ({
             className="hidden md:flex"
           >
             <Download size={16} />
-            下载绘本
+            下载作品
           </Button>
 
           <Button
@@ -389,8 +352,8 @@ const EditorView: React.FC<EditorViewProps> = ({
             variant="gradient"
             className="hidden md:flex"
           >
-            <Sparkles size={16} />
-            制作绘本实物
+            <Gift size={16} />
+            制作实物
           </Button>
         </div>
       </header>
@@ -414,18 +377,19 @@ const EditorView: React.FC<EditorViewProps> = ({
       {/* Main Workspace */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Storybook List */}
-        <aside className={`${currentStorybook ? 'hidden lg:flex lg:w-[350px]' : 'flex w-full'} border-r border-slate-200 bg-white flex-col shrink-0 relative z-20 shadow-2xl`}>
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between text-indigo-600 bg-slate-50">
-            <div className="flex items-center gap-2">
-              <BookOpen size={18} />
-              <h2 className="font-black text-xs uppercase tracking-widest">My Storybooks</h2>
+        <aside className={`${currentStorybook ? 'hidden lg:flex lg:w-[320px]' : 'flex w-full'} border-r border-slate-200 bg-white flex-col shrink-0 relative z-20 shadow-lg`}>
+          {/* Sidebar Header */}
+          <div className="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between bg-white">
+            <div className="flex items-center gap-2 text-slate-600">
+              <BookOpen size={16} className="text-slate-400" />
+              <h2 className="font-semibold text-sm">我的故事书</h2>
             </div>
-            <Button variant="ghost" size="icon" onClick={onCreateNew} title="创建新绘本">
+            <Button variant="ghost" size="icon" onClick={onCreateNew} title="创建新绘本" className="text-slate-400 hover:text-slate-600 h-8 w-8">
               <Plus size={16} />
             </Button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/30 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-slate-50/40 custom-scrollbar">
             {storybookList.length === 0 ? (
               <div className="text-center py-10 px-4">
                 <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -438,46 +402,47 @@ const EditorView: React.FC<EditorViewProps> = ({
                 <div
                   key={book.id}
                   onClick={() => handleStorybookSelect(book.id)}
-                  className={`group p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                  className={`group p-3 rounded-xl cursor-pointer transition-all ${
                     currentStorybook?.id === book.id
-                      ? 'border-indigo-500 bg-indigo-50'
-                      : 'border-transparent bg-white hover:border-slate-200 hover:shadow-md'
+                      ? 'bg-white shadow-md shadow-slate-200/80 ring-1 ring-slate-200'
+                      : 'bg-white/70 hover:bg-white hover:shadow-sm hover:shadow-slate-200/60'
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-bold text-sm text-slate-900 truncate">{book.title}</h3>
-                      <p className="text-xs text-slate-400 mt-1">
-                        {new Date(book.created_at).toLocaleDateString()}
+                      <h3 className="font-semibold text-sm text-slate-800 truncate leading-snug">{book.title}</h3>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        {new Date(book.created_at).toLocaleDateString('zh-CN')}
                       </p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <Badge variant={
-                          book.status === 'finished' ? 'success'
-                          : book.status === 'error' ? 'destructive'
-                          : book.status === 'creating' || book.status === 'updating' ? 'info'
-                          : 'muted'
-                        } className="text-[10px] uppercase">
+                      <div className="flex items-center gap-1.5 mt-2">
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          book.status === 'finished' ? 'bg-emerald-50 text-emerald-700'
+                          : book.status === 'error' ? 'bg-red-50 text-red-700'
+                          : 'bg-amber-50 text-amber-700'
+                        }`}>
                           {statusTextMap[book.status] || book.status}
-                        </Badge>
+                        </span>
                         <button
                           onClick={(e) => handleTogglePublic(book.id, book.is_public, e)}
-                          className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all ${
+                          className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
                             book.is_public
-                              ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              ? 'bg-sky-50 text-sky-700 hover:bg-sky-100'
+                              : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                           }`}
                           title={book.is_public ? '点击设为私密' : '点击设为公开'}
                         >
-                          {book.is_public ? <><Globe size={10} /><span>公开</span></> : <><Lock size={10} /><span>私密</span></>}
+                          {book.is_public
+                            ? <><Globe size={9} />&nbsp;已发布</>
+                            : <><Lock size={9} />&nbsp;私稿</>}
                         </button>
                       </div>
                     </div>
                     <Button
                       variant="ghost" size="icon"
                       onClick={(e) => handleDelete(book.id, e)}
-                      className="opacity-0 group-hover:opacity-100 hover:bg-red-50 text-red-400 hover:text-red-600 h-7 w-7 shrink-0"
+                      className="opacity-0 group-hover:opacity-100 hover:bg-red-50 text-red-400 hover:text-red-600 h-6 w-6 shrink-0 -mt-0.5"
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={12} />
                     </Button>
                   </div>
                 </div>
@@ -492,13 +457,13 @@ const EditorView: React.FC<EditorViewProps> = ({
             {/* Download Progress Bar */}
             {isDownloading && (
               <div className="absolute top-0 left-0 right-0 z-50">
-                <div className="h-1.5 bg-indigo-100">
+                <div className="h-1.5 bg-slate-200">
                   <div
-                    className="h-full bg-indigo-500 transition-all duration-500 ease-out"
+                    className="h-full bg-[#00CDD4] transition-all duration-500 ease-out"
                     style={{ width: `${downloadProgress}%` }}
                   />
                 </div>
-                <div className="flex items-center justify-center gap-2 py-2 bg-indigo-50/90 backdrop-blur-sm text-indigo-700 text-sm font-medium">
+                <div className="flex items-center justify-center gap-2 py-2 bg-slate-50/90 backdrop-blur-sm text-slate-600 text-sm font-medium">
                   <Loader2 size={14} className="animate-spin" />
                   正在制作，请稍后…{Math.round(downloadProgress)}%
                 </div>
@@ -545,7 +510,7 @@ const EditorView: React.FC<EditorViewProps> = ({
 
             {loading && (
               <div className="text-center space-y-6">
-                <Loader2 size={48} className="animate-spin text-indigo-600 mx-auto" />
+                <Loader2 size={48} className="animate-spin text-[#00CDD4] mx-auto" />
                 <p className="text-slate-600">加载中...</p>
               </div>
             )}
@@ -559,11 +524,6 @@ const EditorView: React.FC<EditorViewProps> = ({
                     {currentStorybook.error_message || '抱歉，绘本生成过程中遇到了错误。请检查网络连接或稍后重试。'}
                   </p>
                   <div className="flex items-center justify-center gap-3">
-                    {currentStorybook.instruction && (
-                      <Button onClick={handleRegenerate} className="bg-indigo-600 hover:bg-indigo-700 gap-2">
-                        <Sparkles size={18} /> 重新生成
-                      </Button>
-                    )}
                     <Button variant="secondary" onClick={onBack}>返回首页</Button>
                   </div>
                 </div>
@@ -574,8 +534,8 @@ const EditorView: React.FC<EditorViewProps> = ({
               <div className="w-full h-full flex items-center justify-center bg-white">
                 <div className="text-center space-y-6 max-w-sm w-full px-8">
                   <div className="relative inline-block">
-                    <div className="w-24 h-24 border-8 border-indigo-50 border-t-indigo-600 rounded-full animate-spin"></div>
-                    <Sparkles className="absolute inset-0 m-auto text-indigo-600 animate-pulse" size={32} />
+                    <div className="w-24 h-24 border-8 border-slate-100 border-t-[#00CDD4] rounded-full animate-spin"></div>
+                    <Sparkles className="absolute inset-0 m-auto text-[#00CDD4] animate-pulse" size={32} />
                   </div>
                   <div>
                     <h3 className="text-xl font-lexend font-bold text-slate-800 mb-1">正在装帧你的故事…</h3>
@@ -588,7 +548,7 @@ const EditorView: React.FC<EditorViewProps> = ({
                     </div>
                     <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-indigo-500 rounded-full transition-all duration-1000 ease-out"
+                        className="h-full bg-[#00CDD4] rounded-full transition-all duration-1000 ease-out"
                         style={{ width: `${creationProgress}%` }}
                       />
                     </div>
@@ -610,11 +570,6 @@ const EditorView: React.FC<EditorViewProps> = ({
                   <h3 className="text-xl font-lexend font-bold text-slate-800">内容生成失败</h3>
                   <p className="text-slate-400 text-sm leading-relaxed">抱歉，绘本生成过程中遇到了问题，没有生成任何内容。请尝试重新创建或修改提示词。</p>
                   <div className="flex items-center justify-center gap-3">
-                    {currentStorybook.instruction && (
-                      <Button onClick={handleRegenerate} className="bg-indigo-600 hover:bg-indigo-700 gap-2">
-                        <Sparkles size={18} /> 重新生成
-                      </Button>
-                    )}
                     <Button variant="secondary" onClick={onBack}>返回首页</Button>
                   </div>
                 </div>
@@ -623,73 +578,79 @@ const EditorView: React.FC<EditorViewProps> = ({
 
             {!loading && currentStorybook && currentStorybook.status === 'finished' && pages.length > 0 && (
               <>
-                <div className="relative w-full max-w-5xl aspect-[16/9] transition-all duration-500">
+                <div className="relative w-full max-w-4xl">
+                  {/* Left nav */}
                   <Button
                     variant="ghost" size="icon"
                     onClick={prevSpread}
                     disabled={currentSpreadIndex === 0}
-                    className="absolute -left-4 md:-left-16 top-1/2 -translate-y-1/2 bg-white/50 hover:bg-white text-slate-800 rounded-full shadow-xl z-40 disabled:opacity-0 hover:scale-110 h-14 w-14"
+                    className="absolute -left-4 md:-left-14 top-[45%] -translate-y-1/2 bg-white/80 hover:bg-white text-slate-700 rounded-full shadow-lg z-40 disabled:opacity-0 hover:scale-110 h-12 w-12"
                   >
-                    <ChevronLeft size={32} />
+                    <ChevronLeft size={28} />
                   </Button>
 
-                  <div className="w-full h-full relative rounded-xl shadow-[0_50px_100px_-20px_rgba(0,0,0,0.3)] overflow-hidden bg-white">
-                    {pages.map((page, idx) => {
-                      const isActive = idx === currentSpreadIndex;
-                      const isAnimating = idx === animatingPageIndex;
-                      let animationClass = '';
-                      if (isAnimating && pageDirection === 'left') animationClass = 'opacity-100 z-20 page-enter-left';
-                      else if (isAnimating && pageDirection === 'right') animationClass = 'opacity-100 z-20 page-enter-right';
-                      else if (isActive) animationClass = 'z-10 opacity-100';
-                      else animationClass = 'opacity-0 z-0 pointer-events-none';
+                  {/* White card container */}
+                  <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+                    {/* Image area */}
+                    <div className="relative aspect-[16/9] overflow-hidden">
+                      {pages.map((page, idx) => {
+                        const isActive = idx === currentSpreadIndex;
+                        const isAnimating = idx === animatingPageIndex;
+                        let animationClass = '';
+                        if (isAnimating && pageDirection === 'left') animationClass = 'opacity-100 z-20 page-enter-left';
+                        else if (isAnimating && pageDirection === 'right') animationClass = 'opacity-100 z-20 page-enter-right';
+                        else if (isActive) animationClass = 'z-10 opacity-100';
+                        else animationClass = 'opacity-0 z-0 pointer-events-none';
 
-                      return (
-                        <div
-                          key={idx}
-                          className={`absolute inset-0 w-full transition-all duration-700 ease-in-out ${animationClass}`}
-                          style={{ transformStyle: 'preserve-3d', backfaceVisibility: 'hidden' }}
-                        >
-                          <div className="w-full h-full relative bg-gradient-to-br from-indigo-100 to-purple-100">
-                            <img src={page.image_url} alt={`Page ${idx + 1}`} className="w-full h-full object-cover" />
-                            <Button
-                              variant="ghost" size="icon"
-                              onClick={() => { setEditingPage(idx); setShowFloatingInput(true); }}
-                              className="absolute top-4 right-4 bg-white/90 hover:bg-white backdrop-blur rounded-lg text-indigo-600 shadow-lg z-20"
-                              title="编辑此页"
-                            >
-                              <Edit2 size={18} />
-                            </Button>
-                            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/75 via-black/40 to-transparent px-6 pt-10 pb-4">
-                              <p className="text-white text-sm md:text-base lg:text-lg font-lexend leading-relaxed text-center drop-shadow">
-                                {page.text}
-                              </p>
-                            </div>
-                            <div className="absolute bottom-3 right-3 px-2.5 py-0.5 bg-black/50 backdrop-blur rounded-full z-20">
-                              <span className="text-white text-xs font-bold">{idx + 1}</span>
+                        return (
+                          <div
+                            key={idx}
+                            className={`absolute inset-0 w-full transition-all duration-700 ease-in-out ${animationClass}`}
+                            style={{ transformStyle: 'preserve-3d', backfaceVisibility: 'hidden' }}
+                          >
+                            <div className="w-full h-full relative bg-slate-100">
+                              <img src={page.image_url} alt={`Page ${idx + 1}`} className="w-full h-full object-cover" />
+                              <Button
+                                variant="ghost" size="icon"
+                                onClick={() => { setEditingPage(idx); setShowFloatingInput(true); }}
+                                className="absolute top-3 right-3 bg-white/90 hover:bg-white backdrop-blur rounded-lg text-slate-600 shadow-md z-20"
+                                title="编辑此页"
+                              >
+                                <Edit2 size={16} />
+                              </Button>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
+
+                    {/* Card footer: page counter */}
+                    <div className="py-3 flex items-center justify-center border-t border-slate-100">
+                      <span className="text-sm text-slate-500 font-medium">
+                        {currentSpreadIndex + 1} / {pages.length} 页
+                      </span>
+                    </div>
                   </div>
 
+                  {/* Right nav */}
                   <Button
                     variant="ghost" size="icon"
                     onClick={nextSpread}
                     disabled={currentSpreadIndex >= pages.length - 1}
-                    className="absolute -right-4 md:-right-16 top-1/2 -translate-y-1/2 bg-white/50 hover:bg-white text-slate-800 rounded-full shadow-xl z-40 disabled:opacity-0 hover:scale-110 h-14 w-14"
+                    className="absolute -right-4 md:-right-14 top-[45%] -translate-y-1/2 bg-white/80 hover:bg-white text-slate-700 rounded-full shadow-lg z-40 disabled:opacity-0 hover:scale-110 h-12 w-14"
                   >
-                    <ChevronRight size={32} />
+                    <ChevronRight size={28} />
                   </Button>
                 </div>
 
-                <div className="mt-8 flex gap-3">
+                {/* Navigation dots */}
+                <div className="mt-4 flex gap-2">
                   {pages.map((_, idx) => (
                     <button
                       key={idx}
                       onClick={() => setCurrentSpreadIndex(idx)}
-                      className={`h-2 transition-all duration-500 rounded-full ${
-                        currentSpreadIndex === idx ? 'w-12 bg-indigo-600' : 'w-2 bg-slate-300 hover:bg-slate-400'
+                      className={`h-1.5 transition-all duration-500 rounded-full ${
+                        currentSpreadIndex === idx ? 'w-8 bg-[#00CDD4]' : 'w-1.5 bg-slate-300 hover:bg-slate-400'
                       }`}
                     />
                   ))}
@@ -700,6 +661,20 @@ const EditorView: React.FC<EditorViewProps> = ({
         )}
       </div>
     </div>
+
+    <Dialog open={deleteConfirmId !== null} onOpenChange={(open) => { if (!open) setDeleteConfirmId(null); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>确认删除</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-slate-500">确定要删除这个绘本吗？此操作不可恢复。</p>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>取消</Button>
+          <Button variant="destructive" onClick={confirmDelete}>删除</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 };
 

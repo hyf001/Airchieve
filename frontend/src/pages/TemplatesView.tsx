@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
 
 interface TemplatesViewProps {
   onBack?: () => void;
@@ -36,13 +37,14 @@ interface TemplateFormData {
 }
 
 const TemplatesView: React.FC<TemplatesViewProps> = ({ onBack }) => {
+  const { toast } = useToast();
   const [templates, setTemplates] = useState<TemplateListItem[]>([]);
   const [templateStorybooks, setTemplateStorybooks] = useState<Map<number, Storybook>>(new Map());
   const [templateStorybookIds, setTemplateStorybookIds] = useState<Map<number, number>>(new Map());
   const [storybooks, setStorybooks] = useState<StorybookListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingStorybooks, setLoadingStorybooks] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; name: string } | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -105,14 +107,13 @@ const TemplatesView: React.FC<TemplatesViewProps> = ({ onBack }) => {
     const fetchTemplates = async () => {
       try {
         setLoading(true);
-        setError(null);
         const data = await listTemplates({ limit: 100 });
         if (isMounted) {
           setTemplates(data);
           await loadTemplateStorybooks(data);
         }
       } catch (err) {
-        if (isMounted) setError(err instanceof Error ? err.message : '加载模版失败');
+        if (isMounted) toast({ variant: "destructive", title: "加载模版失败", description: err instanceof Error ? err.message : undefined });
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -124,12 +125,11 @@ const TemplatesView: React.FC<TemplatesViewProps> = ({ onBack }) => {
   const loadTemplates = async () => {
     try {
       setLoading(true);
-      setError(null);
       const data = await listTemplates({ limit: 100 });
       setTemplates(data);
       await loadTemplateStorybooks(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载模版失败');
+      toast({ variant: "destructive", title: "加载模版失败", description: err instanceof Error ? err.message : undefined });
     } finally {
       setLoading(false);
     }
@@ -172,29 +172,34 @@ const TemplatesView: React.FC<TemplatesViewProps> = ({ onBack }) => {
       setShowDialog(true);
       loadStorybooks();
     } catch (err) {
-      setError('获取模版详情失败');
+      toast({ variant: "destructive", title: "获取模版详情失败", description: err instanceof Error ? err.message : undefined });
     }
   };
 
   const handleDelete = async (id: number, name: string) => {
-    if (!window.confirm(`确定要删除模版"${name}"吗？此操作不可恢复。`)) return;
+    setDeleteConfirm({ id, name });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
+    const { id } = deleteConfirm;
+    setDeleteConfirm(null);
     try {
       await deleteTemplate(id);
       await loadTemplates();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '删除模版失败');
+      toast({ variant: "destructive", title: "删除模版失败", description: err instanceof Error ? err.message : undefined });
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.instruction.trim()) {
-      setError('模版名称和指令模板不能为空');
+      toast({ variant: "destructive", title: "模版名称和指令模板不能为空" });
       return;
     }
     try {
       setSubmitting(true);
-      setError(null);
       if (editingTemplate) {
         const updateReq: UpdateTemplateRequest = {
           name: formData.name,
@@ -223,7 +228,7 @@ const TemplatesView: React.FC<TemplatesViewProps> = ({ onBack }) => {
       setShowDialog(false);
       await loadTemplates();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '保存模版失败');
+      toast({ variant: "destructive", title: "保存模版失败", description: err instanceof Error ? err.message : undefined });
     } finally {
       setSubmitting(false);
     }
@@ -252,12 +257,6 @@ const TemplatesView: React.FC<TemplatesViewProps> = ({ onBack }) => {
       {/* Content */}
       <main className="flex-1 overflow-auto">
         <div className="max-w-6xl mx-auto px-6 py-8">
-          {error && (
-            <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200">
-              <p className="text-sm text-red-600">{error}</p>
-            </div>
-          )}
-
           {loading ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 size={40} className="text-indigo-600 animate-spin" />
@@ -417,6 +416,19 @@ const TemplatesView: React.FC<TemplatesViewProps> = ({ onBack }) => {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteConfirm !== null} onOpenChange={(open) => { if (!open) setDeleteConfirm(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认删除</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-500">确定要删除模版「{deleteConfirm?.name}」吗？此操作不可恢复。</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>取消</Button>
+            <Button variant="destructive" onClick={confirmDelete}>删除</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

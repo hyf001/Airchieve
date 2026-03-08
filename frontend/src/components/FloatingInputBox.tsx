@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Wand2, Loader2, X, Upload, Palette } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { TemplateListItem } from '../services/templateService';
+import { useToast } from '@/hooks/use-toast';
 
 interface FloatingInputBoxProps {
   placeholder?: string;
@@ -42,6 +43,7 @@ const FloatingInputBox: React.FC<FloatingInputBoxProps> = ({
   const [prompt, setPrompt] = useState('');
   const [localImages, setLocalImages] = useState<string[]>(uploadedImages);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
 
   useEffect(() => { setLocalImages(uploadedImages); }, [uploadedImages]);
   useEffect(() => { if (!visible) setPrompt(''); }, [visible]);
@@ -56,13 +58,21 @@ const FloatingInputBox: React.FC<FloatingInputBoxProps> = ({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    const fileCount = files.length;
+    const MAX_SIZE = 2 * 1024 * 1024; // 2MB
+    const validFiles = Array.from(files).filter((file) => {
+      if (file.size > MAX_SIZE) {
+        toast({ variant: "destructive", title: "图片过大", description: `「${file.name}」超过 2MB 限制，已跳过` });
+        return false;
+      }
+      return true;
+    });
+    if (validFiles.length === 0) { e.target.value = ''; return; }
     const newImages: string[] = [];
-    Array.from(files).forEach((file) => {
+    validFiles.forEach((file) => {
       const reader = new FileReader();
       reader.onloadend = () => {
         newImages.push(reader.result as string);
-        if (newImages.length === fileCount) {
+        if (newImages.length === validFiles.length) {
           setLocalImages((prev) => [...prev, ...newImages]);
           onImageAdd?.(newImages);
         }

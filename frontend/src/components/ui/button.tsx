@@ -14,7 +14,7 @@ const buttonVariants = cva(
         secondary: "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
-        gradient: "bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow hover:from-indigo-600 hover:to-violet-600 hover:shadow-md hover:shadow-indigo-500/30",
+        gradient: "bg-gradient-to-r from-[#0D1B2A] to-[#00CDD4] text-white shadow hover:from-[#081018] hover:to-[#009AA0] hover:shadow-md hover:shadow-cyan-500/30",
         "gradient-emerald": "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow hover:from-emerald-600 hover:to-teal-600 hover:shadow-md hover:shadow-emerald-500/30",
         "gradient-amber": "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow hover:from-amber-600 hover:to-orange-600 hover:shadow-md hover:shadow-amber-500/30",
         "gradient-rose": "bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow hover:from-rose-600 hover:to-pink-600 hover:shadow-md hover:shadow-rose-500/30",

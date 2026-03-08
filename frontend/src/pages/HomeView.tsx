@@ -7,6 +7,7 @@ import StorybookPreview from '../components/StorybookPreview';
 import FloatingInputBox from '../components/FloatingInputBox';
 import { useAuth } from '../contexts/AuthContext';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { useToast } from '@/hooks/use-toast';
 
 interface HomeViewProps {
   onStart?: (storybookId: number) => void;
@@ -22,6 +23,7 @@ const MEMBERSHIP_LABEL: Record<string, string> = {
 
 const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTemplates, onShowProfile, onShowAdmin }) => {
   const { user, logout, openLoginModal } = useAuth();
+  const { toast } = useToast();
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateListItem | null>(null);
   const [templates, setTemplates] = useState<TemplateListItem[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
@@ -31,7 +33,6 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
   const [loadingPublicBooks, setLoadingPublicBooks] = useState(true);
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [isCreating, setIsCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [generationStatus, setGenerationStatus] = useState<string | null>(null);
   const carouselSectionRef = useRef<HTMLDivElement>(null);
   const carouselRef = useRef<HTMLDivElement>(null);
@@ -45,14 +46,13 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
       const params = pendingCreateParams;
       setPendingCreateParams(null);
       setIsCreating(true);
-      setError(null);
       createStorybook(params)
         .then((res) => { onStart?.(res.id); })
         .catch((err) => {
           if (err instanceof InsufficientPointsError) {
-            setError(`积分不足：${err.message}`);
+            toast({ variant: "destructive", title: "积分不足", description: err.message });
           } else {
-            setError(err instanceof Error ? err.message : '创建失败，请重试');
+            toast({ variant: "destructive", title: "创建失败", description: err instanceof Error ? err.message : '请重试' });
           }
         })
         .finally(() => setIsCreating(false));
@@ -116,7 +116,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
         await loadTemplateStorybooks(data);
       } catch (err) {
         console.error('Failed to load templates:', err);
-        setError('无法加载模版列表');
+        toast({ variant: "destructive", title: "无法加载模版列表" });
       } finally {
         setLoadingTemplates(false);
       }
@@ -158,7 +158,6 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
     }
 
     setIsCreating(true);
-    setError(null);
     setGenerationStatus('正在创建绘本...');
 
     try {
@@ -170,9 +169,9 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
       onStart?.(res.id);
     } catch (err) {
       if (err instanceof InsufficientPointsError) {
-        setError(`积分不足：${err.message}`);
+        toast({ variant: "destructive", title: "积分不足", description: err.message });
       } else {
-        setError(err instanceof Error ? err.message : '创建失败，请重试');
+        toast({ variant: "destructive", title: "创建失败", description: err instanceof Error ? err.message : '请重试' });
       }
     } finally {
       setIsCreating(false);
@@ -253,7 +252,6 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
             collapsedPlaceholder="今天你想创作什么故事？"
             onSubmit={handleStart}
             isLoading={isCreating}
-            error={error}
             loadingMessage={generationStatus || '处理中...'}
             selectedTemplate={selectedTemplate}
             onTemplateSelect={setSelectedTemplate}

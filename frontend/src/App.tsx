@@ -7,6 +7,8 @@ import TemplatesView from './pages/TemplatesView';
 import UserProfileView from './pages/UserProfileView';
 import UserManagementView from './pages/UserManagementView';
 import { Loader2 } from 'lucide-react';
+import { ToastContextProvider } from './components/ui/toast-provider';
+import { Toaster } from './components/ui/toaster';
 
 // ============ Inner App（需要 AuthProvider 上下文） ============
 
@@ -96,9 +98,12 @@ const InnerApp: React.FC = () => {
 // ============ Root App ============
 
 const App: React.FC = () => (
-  <AuthProvider>
-    <InnerApp />
-  </AuthProvider>
+  <ToastContextProvider>
+    <AuthProvider>
+      <InnerApp />
+      <Toaster />
+    </AuthProvider>
+  </ToastContextProvider>
 );
 
 export default App;
