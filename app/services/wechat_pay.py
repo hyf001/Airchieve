@@ -33,9 +33,9 @@ WECHAT_PAY_BASE = "https://api.mch.weixin.qq.com"
 # ---------------------------------------------------------------------------
 
 def _load_private_key():
-    """从配置加载私钥对象（PEM 格式，.env 中换行用 \\n 存储）"""
-    pem = settings.WECHAT_PAY_PRIVATE_KEY.replace("\\n", "\n").encode()
-    return serialization.load_pem_private_key(pem, password=None)
+    """从文件加载私钥对象（PEM 格式，路径由 WECHAT_PAY_PRIVATE_KEY_PATH 配置）"""
+    with open(settings.WECHAT_PAY_PRIVATE_KEY_PATH, "rb") as f:
+        return serialization.load_pem_private_key(f.read(), password=None)
 
 
 def _build_auth_header(method: str, url_path: str, body: str = "") -> str:

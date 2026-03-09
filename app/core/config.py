@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     WECHAT_PAY_MCHID: str = ""            # 商户号（10位数字）
     WECHAT_PAY_API_KEY_V3: str = ""       # APIv3 密钥（32字节）
     WECHAT_PAY_CERT_SERIAL_NO: str = ""   # 商户 API 证书序列号
-    WECHAT_PAY_PRIVATE_KEY: str = ""      # 商户私钥 PEM（多行用 \n 连接，存于 .env）
+    WECHAT_PAY_PRIVATE_KEY_PATH: str = ""  # 商户私钥 PEM 文件路径，如 /etc/wechat/apiclient_key.pem
     WECHAT_PAY_NOTIFY_URL: str = ""       # 回调基础 URL，如 https://example.com/api/v1/payment/notify
 
 
