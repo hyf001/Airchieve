@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ChevronLeft, Search, ChevronLeft as PrevIcon, ChevronRight as NextIcon, Shield, BookOpen, Loader2 } from 'lucide-react';
+import { ChevronLeft, Search, ChevronLeft as PrevIcon, ChevronRight as NextIcon, Shield, BookOpen } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   UserOut,
@@ -10,6 +10,7 @@ import {
 } from '../services/authService';
 import { listStorybooks, StorybookListItem, StorybookStatus } from '../services/storybookService';
 import StorybookPreview from '../components/StorybookPreview';
+import LoadingSpinner from '../components/LoadingSpinner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -271,9 +272,7 @@ const WorksModal: React.FC<WorksModalProps> = ({ user, onClose }) => {
           )}
 
           {loading && (
-            <div className="flex justify-center py-6">
-              <Loader2 size={20} className="text-indigo-400 animate-spin" />
-            </div>
+            <LoadingSpinner size={20} color="text-indigo-400" className="py-6" />
           )}
 
           {!loading && hasMore && items.length > 0 && (

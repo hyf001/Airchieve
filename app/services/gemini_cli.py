@@ -412,3 +412,103 @@ class GeminiCli(LLMClientBase):
 
         # 解析响应
         return _parse_response_to_single_page(response, current_page)
+
+    async def edit_image_only(
+        self,
+        instruction: str,
+        current_image_url: str,
+    ) -> str:
+        """仅生成新图片（不修改文字），返回 base64 data URL。"""
+        client = _get_client()
+
+        system_instruction = (
+            "You are a professional illustrator specializing in image editing. "
+            "You will receive an existing illustration and an editing instruction. "
+            "Your task is to EDIT and MODIFY the provided image according to the instruction — "
+            "do NOT generate a completely new image from scratch. "
+            "Preserve the original composition, characters, art style, color palette, and visual consistency as much as possible, "
+            "only applying the specific changes requested. "
+            "Output a full-bleed cinematic illustration. "
+            "Images must contain NO text, letters, or words whatsoever."
+        )
+        user_prompt = (
+            f"Here is the existing illustration (attached above). "
+            f"Please EDIT it according to this instruction: {instruction}\n\n"
+            f"Modify only what is asked — keep everything else as close to the original as possible."
+        )
+
+        parts = [types.Part(text=user_prompt)]
+        if current_image_url:
+            parts.extend(_build_image_parts([current_image_url]))
+
+        response = await client.aio.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=types.Content(parts=parts),
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                image_config=types.ImageConfig(aspect_ratio="16:9"),
+            ),
+        )
+
+        for candidate in response.candidates or []:
+            if not candidate.content:
+                continue
+            for part in candidate.content.parts or []:
+                if part.inline_data and part.inline_data.mime_type and part.inline_data.mime_type.startswith("image/"):
+                    return _inline_data_to_data_url(part.inline_data)
+
+        raise ValueError("图片生成失败，未获取到图片内容")
+
+    async def regenerate_pages(
+        self,
+        pages: List[StorybookPage],
+        count: int = 1,
+        instruction: str = "",
+    ) -> List[StorybookPage]:
+        """基于选中的参考页面再生成 count 张新页面。"""
+        client = _get_client()
+        ref_count = len(pages)
+
+        system_instruction = (
+            "You are a professional visual storyteller and illustrator. "
+            f"You will receive {ref_count} existing story panel(s) (text + illustrations) as reference. "
+            f"Your task is to generate exactly {count} NEW panel(s) inspired by and visually consistent with the provided panels — "
+            "do NOT simply copy or describe the originals. "
+            "Base the new illustrations on the visual style, characters, and composition of the provided images. "
+            f"Each panel must have a short narrative text (1-2 sentences suitable for children) "
+            "and a full-bleed cinematic illustration. "
+            "LANGUAGE: Use the SAME language as the original panels. "
+            "Images must contain NO text, letters, or words whatsoever."
+        )
+
+        panels_desc = "\n".join(
+            f"Panel {i + 1} text: {p['text']}" for i, p in enumerate(pages)
+        )
+        regen_instruction = instruction if instruction else "请基于这些页面再生成新的内容"
+        user_prompt = (
+            f"Reference panels:\n{panels_desc}\n\n"
+            f"Regeneration instruction: {regen_instruction}\n\n"
+            f"The reference images are attached above. "
+            f"Please generate exactly {count} new panel(s). "
+            "Maintain visual consistency with the reference images. "
+            "Output text and image alternately for each panel."
+        )
+
+        parts = [types.Part(text=user_prompt)]
+        image_urls = [p.get("image_url", "") for p in pages if p.get("image_url")]
+        if image_urls:
+            parts.extend(_build_image_parts(image_urls))
+
+        response = await client.aio.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=types.Content(parts=parts),
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                image_config=types.ImageConfig(aspect_ratio="16:9"),
+            ),
+        )
+
+        result = _parse_response_to_pages(response)
+        while len(result) < count:
+            result.append(dict(pages[len(result) % ref_count]))  # type: ignore
+        return result[:count]

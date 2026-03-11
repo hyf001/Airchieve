@@ -1,24 +1,28 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { ChevronLeft, ChevronRight, BookOpen, Loader2, Trash2, Plus, Sparkles, AlertCircle, Download, Gift, Edit2, Lock, Globe, X } from 'lucide-react';
-import FloatingInputBox from '../components/FloatingInputBox';
+import { ChevronLeft, ChevronRight, BookOpen, Loader2, Trash2, Plus, Sparkles, AlertCircle, Download, Gift, Lock, Globe, Layers, ArrowUpDown } from 'lucide-react';
+import StorybookPageCard from '../components/StorybookPageCard';
 import {
   getStorybook,
   listStorybooks,
-  editStorybook,
-  editStorybookPage,
-deleteStorybook,
+  deleteStorybook,
+  deletePage,
+  reorderPages,
+  regeneratePages,
   updateStorybookPublicStatus,
   downloadStorybookImage,
   InsufficientPointsError,
   Storybook,
   StorybookListItem,
+  StorybookPage,
 } from '../services/storybookService';
 import { usePolling } from '../hooks/usePolling';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import ConfirmDialog from '../components/ConfirmDialog';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 // 状态文本映射
 const statusTextMap: Record<string, string> = {
@@ -49,16 +53,25 @@ const EditorView: React.FC<EditorViewProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentSpreadIndex, setCurrentSpreadIndex] = useState(0);
-  const [editingPage, setEditingPage] = useState<number | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
   const [pageDirection, setPageDirection] = useState<'left' | 'right' | null>(null);
   const [animatingPageIndex, setAnimatingPageIndex] = useState<number | null>(null);
-  const [showFloatingInput, setShowFloatingInput] = useState(false);
-  const [insufficientPointsMessage, setInsufficientPointsMessage] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [creationProgress, setCreationProgress] = useState(0);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  // 删除页确认
+  const [deletePageConfirm, setDeletePageConfirm] = useState<number | null>(null);
+  // 再生成模式
+  const [regenMode, setRegenMode] = useState(false);
+  const [regenSelected, setRegenSelected] = useState<number[]>([]);
+  const [regenCount, setRegenCount] = useState(1);
+  const [regenInstruction, setRegenInstruction] = useState('');
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  // 排序模式
+  const [reorderOpen, setReorderOpen] = useState(false);
+  const [reorderDraft, setReorderDraft] = useState<number[]>([]);
+  const [isReordering, setIsReordering] = useState(false);
+  const dragIndexRef = useRef<number | null>(null);
   const creationStartTimeRef = useRef<number | null>(null);
 
   const CREATION_ESTIMATED_MS = 120_000; // 2 分钟
@@ -225,61 +238,105 @@ const EditorView: React.FC<EditorViewProps> = ({
     }
   };
 
-  // 编辑整本绘本（创建新版本）
-  const handleEditStorybook = async (instruction: string) => {
-    if (!currentStorybook || !instruction.trim() || isEditing) return;
-    setIsEditing(true);
-    setError(null);
-    setInsufficientPointsMessage(null);
+  // StorybookPageCard 保存回调：更新本地 storybook 数据
+  const handlePageSaved = useCallback((index: number, newPage: StorybookPage) => {
+    setCurrentStorybook(prev => {
+      if (!prev || !prev.pages) return prev;
+      const pages = [...prev.pages];
+      pages[index] = newPage;
+      return { ...prev, pages };
+    });
+  }, []);
+
+  // 删除页 - 弹窗确认
+  const handleDeletePageRequest = useCallback((index: number) => {
+    setDeletePageConfirm(index);
+  }, []);
+
+  const confirmDeletePage = async () => {
+    if (!currentStorybook || deletePageConfirm === null) return;
     try {
-      const res = await editStorybook(currentStorybook.id, { instruction });
-      setStorybookList(prev => {
-        if (prev.find(item => item.id === res.id)) return prev;
-        return [{
-          id: res.id,
-          title: res.title,
-          description: null,
-          creator: user ? String(user.id) : '',
-          status: 'init' as const,
-          is_public: false,
-          created_at: new Date().toISOString(),
-          pages: null,
-        }, ...prev];
-      });
-      await loadStorybook(res.id);
+      const updated = await deletePage(currentStorybook.id, deletePageConfirm);
+      setCurrentStorybook(updated);
+      setCurrentSpreadIndex(prev => Math.min(prev, (updated.pages?.length ?? 1) - 1));
     } catch (err) {
-      if (err instanceof InsufficientPointsError) {
-        setInsufficientPointsMessage(err.message);
-      } else {
-        setError(err instanceof Error ? err.message : '编辑绘本失败');
-      }
+      toast({ variant: 'destructive', title: '删除失败', description: err instanceof Error ? err.message : undefined });
     } finally {
-      setIsEditing(false);
+      setDeletePageConfirm(null);
     }
   };
 
-  // 编辑单页
-  const handleEditPage = async (instruction: string) => {
-    if (!currentStorybook || !instruction.trim() || isEditing || editingPage === null) return;
-    setIsEditing(true);
-    setInsufficientPointsMessage(null);
+  // 排序 - 打开弹窗
+  const handleOpenReorder = useCallback(() => {
+    const ps = currentStorybook?.pages || [];
+    setReorderDraft(ps.map((_, i) => i));
+    setReorderOpen(true);
+  }, [currentStorybook?.pages]);
+
+  const handleDragStart = useCallback((pos: number) => {
+    dragIndexRef.current = pos;
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, pos: number) => {
+    e.preventDefault();
+    const from = dragIndexRef.current;
+    if (from === null || from === pos) return;
+    setReorderDraft(prev => {
+      const next = [...prev];
+      const [item] = next.splice(from, 1);
+      next.splice(pos, 0, item);
+      dragIndexRef.current = pos;
+      return next;
+    });
+  }, []);
+
+  const handleConfirmReorder = async () => {
+    if (!currentStorybook || isReordering) return;
+    setIsReordering(true);
     try {
-      await editStorybookPage(currentStorybook.id, editingPage, { instruction });
-      setEditingPage(null);
-      setShowFloatingInput(false);
+      const updated = await reorderPages(currentStorybook.id, reorderDraft);
+      setCurrentStorybook(updated);
+      setCurrentSpreadIndex(0);
+      setReorderOpen(false);
+    } catch (err) {
+      toast({ variant: 'destructive', title: '排序失败', description: err instanceof Error ? err.message : undefined });
+    } finally {
+      setIsReordering(false);
+    }
+  };
+
+  // 再生成 - 选择/取消选择
+  const handleRegenToggle = useCallback((index: number) => {
+    setRegenSelected(prev => {
+      if (prev.includes(index)) return prev.filter(i => i !== index);
+      if (prev.length >= 5) return prev;
+      return [...prev, index];
+    });
+  }, []);
+
+  // 再生成 - 确认执行
+  const handleConfirmRegen = async () => {
+    if (!currentStorybook || regenSelected.length === 0 || isRegenerating) return;
+    setIsRegenerating(true);
+    try {
+      await regeneratePages(currentStorybook.id, regenSelected, regenCount, regenInstruction || undefined);
       setCurrentStorybook(prev => prev ? { ...prev, status: 'updating' } : prev);
       setStorybookList(prev =>
         prev.map(item => item.id === currentStorybook.id ? { ...item, status: 'updating' } : item)
       );
+      setRegenMode(false);
+      setRegenSelected([]);
+      setRegenCount(1);
+      setRegenInstruction('');
       startPolling(currentStorybook.id);
     } catch (err) {
       if (err instanceof InsufficientPointsError) {
-        setInsufficientPointsMessage(err.message);
+        toast({ variant: 'destructive', title: '积分不足', description: err.message });
       } else {
-        setError(err instanceof Error ? err.message : '编辑失败');
+        toast({ variant: 'destructive', title: '再生成失败', description: err instanceof Error ? err.message : undefined });
       }
     } finally {
-      setIsEditing(false);
+      setIsRegenerating(false);
     }
   };
 
@@ -337,6 +394,26 @@ const EditorView: React.FC<EditorViewProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {currentStorybook?.status === 'finished' && pages.length > 0 && (
+            <>
+              <Button
+                variant="outline" size="sm"
+                onClick={handleOpenReorder}
+                className="hidden md:flex gap-1.5 text-slate-600"
+              >
+                <ArrowUpDown size={14} />
+                排序
+              </Button>
+              <Button
+                variant="outline" size="sm"
+                onClick={() => { setRegenMode(true); setRegenSelected([]); setRegenCount(1); setRegenInstruction(''); }}
+                className="hidden md:flex gap-1.5 text-slate-600"
+              >
+                <Layers size={14} />
+                再生成
+              </Button>
+            </>
+          )}
           <Button
             onClick={handleDownloadImage}
             disabled={!currentStorybook || currentStorybook.status !== 'finished'}
@@ -357,22 +434,6 @@ const EditorView: React.FC<EditorViewProps> = ({
           </Button>
         </div>
       </header>
-
-      {/* Insufficient Points Banner */}
-      {insufficientPointsMessage && (
-        <div className="mx-4 mt-3 bg-amber-50 border border-amber-200 px-4 py-3 rounded-xl flex items-center justify-between gap-4 z-50 shadow-md">
-          <div className="flex items-center gap-3">
-            <AlertCircle className="text-amber-500 shrink-0" size={20} />
-            <div>
-              <p className="font-bold text-sm text-amber-900">积分不足</p>
-              <p className="text-xs text-amber-700">{insufficientPointsMessage}</p>
-            </div>
-          </div>
-          <Button variant="ghost" size="icon" onClick={() => setInsufficientPointsMessage(null)} className="text-amber-400 hover:text-amber-600 shrink-0">
-            <X size={16} />
-          </Button>
-        </div>
-      )}
 
       {/* Main Workspace */}
       <div className="flex-1 flex overflow-hidden">
@@ -470,34 +531,6 @@ const EditorView: React.FC<EditorViewProps> = ({
               </div>
             )}
             {/* Floating Input Box */}
-            {showFloatingInput && (
-              <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm">
-                <FloatingInputBox
-                  visible={showFloatingInput}
-                  placeholder={
-                    editingPage !== null
-                      ? "描述你想要的修改... (例如: 把兔子画得更可爱一些)"
-                      : "描述你想要的修改... (例如: 让故事更感人一些)"
-                  }
-                  collapsedPlaceholder={editingPage !== null ? `编辑第 ${editingPage + 1} 页...` : "编辑绘本..."}
-                  onSubmit={(text) => {
-                    if (editingPage !== null) {
-                      handleEditPage(text);
-                    } else {
-                      handleEditStorybook(text);
-                    }
-                  }}
-                  onCancel={() => { setEditingPage(null); setShowFloatingInput(false); }}
-                  isLoading={isEditing}
-                  error={error}
-                  loadingMessage={editingPage !== null ? "编辑页面中..." : "编辑绘本中..."}
-                  mode={editingPage !== null ? `编辑第 ${editingPage + 1} 页` : "编辑绘本"}
-                  disabled={!currentStorybook || currentStorybook.status !== 'finished'}
-                  showCancelButton={true}
-                />
-              </div>
-            )}
-
             {error && (
               <div className="absolute top-8 bg-white text-slate-900 px-6 py-4 rounded-2xl border-l-4 border-amber-500 font-medium text-sm z-50 shadow-2xl flex items-center gap-4 animate-in slide-in-from-top-4 duration-500">
                 <AlertCircle className="text-amber-500 shrink-0" size={24} />
@@ -509,10 +542,7 @@ const EditorView: React.FC<EditorViewProps> = ({
             )}
 
             {loading && (
-              <div className="text-center space-y-6">
-                <Loader2 size={48} className="animate-spin text-[#00CDD4] mx-auto" />
-                <p className="text-slate-600">加载中...</p>
-              </div>
+              <LoadingSpinner size={48} text="加载中..." className="py-8" />
             )}
 
             {!loading && currentStorybook && currentStorybook.status === 'error' && (
@@ -578,90 +608,142 @@ const EditorView: React.FC<EditorViewProps> = ({
 
             {!loading && currentStorybook && currentStorybook.status === 'finished' && pages.length > 0 && (
               <>
-                <div className="relative w-full max-w-4xl">
-                  {/* Left nav */}
-                  <Button
-                    variant="ghost" size="icon"
-                    onClick={prevSpread}
-                    disabled={currentSpreadIndex === 0}
-                    className="absolute -left-4 md:-left-14 top-[45%] -translate-y-1/2 bg-white/80 hover:bg-white text-slate-700 rounded-full shadow-lg z-40 disabled:opacity-0 hover:scale-110 h-12 w-12"
-                  >
-                    <ChevronLeft size={28} />
-                  </Button>
-
-                  {/* White card container */}
-                  <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-                    {/* Image area */}
-                    <div className="relative aspect-[16/9] overflow-hidden">
-                      {pages.map((page, idx) => {
-                        const isActive = idx === currentSpreadIndex;
-                        const isAnimating = idx === animatingPageIndex;
-                        let animationClass = '';
-                        if (isAnimating && pageDirection === 'left') animationClass = 'opacity-100 z-20 page-enter-left';
-                        else if (isAnimating && pageDirection === 'right') animationClass = 'opacity-100 z-20 page-enter-right';
-                        else if (isActive) animationClass = 'z-10 opacity-100';
-                        else animationClass = 'opacity-0 z-0 pointer-events-none';
-
-                        return (
-                          <div
-                            key={idx}
-                            className={`absolute inset-0 w-full transition-all duration-700 ease-in-out ${animationClass}`}
-                            style={{ transformStyle: 'preserve-3d', backfaceVisibility: 'hidden' }}
-                          >
-                            <div className="w-full h-full relative bg-slate-100">
-                              <img src={page.image_url} alt={`Page ${idx + 1}`} className="w-full h-full object-cover" />
-                              {page.text && (
-                                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/75 via-black/40 to-transparent px-6 pt-10 pb-4">
-                                  <p className="text-white text-sm md:text-base lg:text-lg font-lexend leading-relaxed text-center drop-shadow">
-                                    {page.text}
-                                  </p>
-                                </div>
-                              )}
-                              <Button
-                                variant="ghost" size="icon"
-                                onClick={() => { setEditingPage(idx); setShowFloatingInput(true); }}
-                                className="absolute top-3 right-3 bg-white/90 hover:bg-white backdrop-blur rounded-lg text-slate-600 shadow-md z-20"
-                                title="编辑此页"
-                              >
-                                <Edit2 size={16} />
-                              </Button>
-                            </div>
-                          </div>
-                        );
-                      })}
+                {/* ── 再生成选择模式 ── */}
+                {regenMode ? (
+                  <div className="w-full max-w-4xl space-y-4">
+                    <div className="text-center space-y-1">
+                      <p className="text-slate-700 font-medium">选择参考页面，再生成新页面</p>
+                      <p className="text-slate-400 text-sm">已选 {regenSelected.length} / 5 页</p>
                     </div>
-
-                    {/* Card footer: page counter */}
-                    <div className="py-3 flex items-center justify-center border-t border-slate-100">
-                      <span className="text-sm text-slate-500 font-medium">
-                        {currentSpreadIndex + 1} / {pages.length} 页
-                      </span>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {pages.map((page, idx) => (
+                        <StorybookPageCard
+                          key={idx}
+                          page={page}
+                          index={idx}
+                          storybookId={currentStorybook.id}
+                          onSaved={handlePageSaved}
+                          onDeleteRequest={handleDeletePageRequest}
+                          regenSelectMode={true}
+                          regenSelected={regenSelected.includes(idx)}
+                          onRegenToggle={handleRegenToggle}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex flex-col items-center gap-3">
+                      <textarea
+                        value={regenInstruction}
+                        onChange={e => setRegenInstruction(e.target.value)}
+                        placeholder="再生成指令（可选），例如：让画面更温暖一些"
+                        rows={2}
+                        className="w-full max-w-lg border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none resize-none focus:ring-2 focus:ring-[#00CDD4]/30 focus:border-[#00CDD4]"
+                      />
+                      <div className="flex justify-center gap-3 items-center">
+                        <Button variant="outline" onClick={() => { setRegenMode(false); setRegenSelected([]); setRegenCount(1); setRegenInstruction(''); }}>
+                          取消
+                        </Button>
+                        <div className="flex items-center gap-2 text-sm text-slate-600">
+                          <span>生成</span>
+                          <select
+                            value={regenCount}
+                            onChange={e => setRegenCount(Number(e.target.value))}
+                            className="border border-slate-200 rounded-md px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-[#00CDD4]/30 focus:border-[#00CDD4]"
+                          >
+                            {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+                          </select>
+                          <span>张</span>
+                        </div>
+                        <Button
+                          onClick={handleConfirmRegen}
+                          disabled={regenSelected.length === 0 || isRegenerating}
+                          className="bg-[#00CDD4] hover:bg-[#00b8be] text-white"
+                        >
+                          {isRegenerating ? <Loader2 size={14} className="animate-spin mr-1.5" /> : null}
+                          再生成
+                        </Button>
+                      </div>
                     </div>
                   </div>
+                ) : (
+                  <>
+                    <div className="relative w-full max-w-4xl">
+                      {/* Left nav */}
+                      <Button
+                        variant="ghost" size="icon"
+                        onClick={prevSpread}
+                        disabled={currentSpreadIndex === 0}
+                        className="absolute -left-4 md:-left-14 top-[45%] -translate-y-1/2 bg-white/80 hover:bg-white text-slate-700 rounded-full shadow-lg z-40 disabled:opacity-0 hover:scale-110 h-12 w-12"
+                      >
+                        <ChevronLeft size={28} />
+                      </Button>
 
-                  {/* Right nav */}
-                  <Button
-                    variant="ghost" size="icon"
-                    onClick={nextSpread}
-                    disabled={currentSpreadIndex >= pages.length - 1}
-                    className="absolute -right-4 md:-right-14 top-[45%] -translate-y-1/2 bg-white/80 hover:bg-white text-slate-700 rounded-full shadow-lg z-40 disabled:opacity-0 hover:scale-110 h-12 w-14"
-                  >
-                    <ChevronRight size={28} />
-                  </Button>
-                </div>
+                      {/* White card container */}
+                      <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+                        {/* Image + edit area */}
+                        <div className="relative aspect-[16/9] overflow-hidden bg-slate-100">
+                          {pages.map((page, idx) => {
+                            const isActive = idx === currentSpreadIndex;
+                            const isAnimating = idx === animatingPageIndex;
+                            let animationClass = '';
+                            if (isAnimating && pageDirection === 'left') animationClass = 'opacity-100 z-20 page-enter-left';
+                            else if (isAnimating && pageDirection === 'right') animationClass = 'opacity-100 z-20 page-enter-right';
+                            else if (isActive) animationClass = 'z-10 opacity-100';
+                            else animationClass = 'opacity-0 z-0 pointer-events-none';
 
-                {/* Navigation dots */}
-                <div className="mt-4 flex gap-2">
-                  {pages.map((_, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setCurrentSpreadIndex(idx)}
-                      className={`h-1.5 transition-all duration-500 rounded-full ${
-                        currentSpreadIndex === idx ? 'w-8 bg-[#00CDD4]' : 'w-1.5 bg-slate-300 hover:bg-slate-400'
-                      }`}
-                    />
-                  ))}
-                </div>
+                            return (
+                              <div
+                                key={idx}
+                                className={`absolute inset-0 w-full transition-all duration-700 ease-in-out ${animationClass}`}
+                                style={{ transformStyle: 'preserve-3d', backfaceVisibility: 'hidden' }}
+                              >
+                                <StorybookPageCard
+                                  page={page}
+                                  index={idx}
+                                  storybookId={currentStorybook.id}
+                                  onSaved={handlePageSaved}
+                                  onDeleteRequest={handleDeletePageRequest}
+                                  regenSelectMode={false}
+                                  regenSelected={false}
+                                  onRegenToggle={handleRegenToggle}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Card footer: page counter only */}
+                        <div className="py-2.5 px-4 flex items-center justify-center border-t border-slate-100">
+                          <span className="text-sm text-slate-500 font-medium">
+                            {currentSpreadIndex + 1} / {pages.length} 页
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Right nav */}
+                      <Button
+                        variant="ghost" size="icon"
+                        onClick={nextSpread}
+                        disabled={currentSpreadIndex >= pages.length - 1}
+                        className="absolute -right-4 md:-right-14 top-[45%] -translate-y-1/2 bg-white/80 hover:bg-white text-slate-700 rounded-full shadow-lg z-40 disabled:opacity-0 hover:scale-110 h-12 w-14"
+                      >
+                        <ChevronRight size={28} />
+                      </Button>
+                    </div>
+
+                    {/* Navigation dots */}
+                    <div className="mt-4 flex gap-2">
+                      {pages.map((_, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setCurrentSpreadIndex(idx)}
+                          className={`h-1.5 transition-all duration-500 rounded-full ${
+                            currentSpreadIndex === idx ? 'w-8 bg-[#00CDD4]' : 'w-1.5 bg-slate-300 hover:bg-slate-400'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
               </>
             )}
           </main>
@@ -669,20 +751,99 @@ const EditorView: React.FC<EditorViewProps> = ({
       </div>
     </div>
 
-    <Dialog open={deleteConfirmId !== null} onOpenChange={(open) => { if (!open) setDeleteConfirmId(null); }}>
-      <DialogContent>
+    <ConfirmDialog
+      open={deleteConfirmId !== null}
+      title="确认删除"
+      description="确定要删除这个绘本吗？此操作不可恢复。"
+      onConfirm={confirmDelete}
+      onCancel={() => setDeleteConfirmId(null)}
+    />
+
+    <ConfirmDialog
+      open={deletePageConfirm !== null}
+      title="确认删除此页"
+      description={`确定要删除第 ${(deletePageConfirm ?? 0) + 1} 页吗？此操作不可恢复。`}
+      onConfirm={confirmDeletePage}
+      onCancel={() => setDeletePageConfirm(null)}
+    />
+
+    {/* 排序弹窗 */}
+    <Dialog open={reorderOpen} onOpenChange={(open) => { if (!open) setReorderOpen(false); }}>
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>确认删除</DialogTitle>
+          <DialogTitle>调整页面顺序</DialogTitle>
         </DialogHeader>
-        <p className="text-sm text-slate-500">确定要删除这个绘本吗？此操作不可恢复。</p>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>取消</Button>
-          <Button variant="destructive" onClick={confirmDelete}>删除</Button>
-        </DialogFooter>
+        <p className="text-sm text-slate-500 -mt-1">拖动缩略图调整顺序，点击确认保存。</p>
+        <div className="flex gap-3 overflow-x-auto pb-2 pt-1 min-h-[120px]">
+          {reorderDraft.map((origIdx, pos) => {
+            const page = pages[origIdx];
+            if (!page) return null;
+            return (
+              <div
+                key={origIdx}
+                draggable
+                onDragStart={() => handleDragStart(pos)}
+                onDragOver={(e) => handleDragOver(e, pos)}
+                className="shrink-0 w-36 cursor-grab active:cursor-grabbing rounded-xl overflow-hidden ring-2 ring-slate-200 hover:ring-[#00CDD4] transition-all select-none"
+              >
+                <div className="relative aspect-[16/9]">
+                  <img src={page.image_url} alt={`第 ${pos + 1} 页`} className="w-full h-full object-cover" />
+                  <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] text-center py-0.5">
+                    第 {pos + 1} 页
+                  </div>
+                </div>
+                <div className="flex justify-between bg-slate-50 border-t border-slate-100">
+                  <button
+                    onClick={() => {
+                      if (pos === 0) return;
+                      setReorderDraft(prev => {
+                        const next = [...prev];
+                        [next[pos - 1], next[pos]] = [next[pos], next[pos - 1]];
+                        return next;
+                      });
+                    }}
+                    disabled={pos === 0}
+                    className="flex-1 flex justify-center py-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 transition-colors"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (pos === reorderDraft.length - 1) return;
+                      setReorderDraft(prev => {
+                        const next = [...prev];
+                        [next[pos], next[pos + 1]] = [next[pos + 1], next[pos]];
+                        return next;
+                      });
+                    }}
+                    disabled={pos === reorderDraft.length - 1}
+                    className="flex-1 flex justify-center py-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 transition-colors"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button variant="outline" onClick={() => setReorderOpen(false)} disabled={isReordering}>
+            取消
+          </Button>
+          <Button
+            onClick={handleConfirmReorder}
+            disabled={isReordering}
+            className="bg-[#00CDD4] hover:bg-[#00b8be] text-white"
+          >
+            {isReordering && <Loader2 size={14} className="animate-spin mr-1" />}
+            确认排序
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
-    </>
+</>
   );
 };
 
 export default EditorView;
+

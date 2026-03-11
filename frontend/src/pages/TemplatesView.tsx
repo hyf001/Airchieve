@@ -14,6 +14,8 @@ import {
 import { listStorybooks, getStorybook, StorybookListItem, Storybook } from '../services/storybookService';
 import StorybookPreview from '../components/StorybookPreview';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import ConfirmDialog from '../components/ConfirmDialog';
+import LoadingSpinner from '../components/LoadingSpinner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -258,9 +260,7 @@ const TemplatesView: React.FC<TemplatesViewProps> = ({ onBack }) => {
       <main className="flex-1 overflow-auto">
         <div className="max-w-6xl mx-auto px-6 py-8">
           {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 size={40} className="text-indigo-600 animate-spin" />
-            </div>
+            <LoadingSpinner size={40} color="text-indigo-600" className="py-20" />
           ) : templates.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center mb-4">
@@ -419,18 +419,13 @@ const TemplatesView: React.FC<TemplatesViewProps> = ({ onBack }) => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={deleteConfirm !== null} onOpenChange={(open) => { if (!open) setDeleteConfirm(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>确认删除</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-slate-500">确定要删除模版「{deleteConfirm?.name}」吗？此操作不可恢复。</p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>取消</Button>
-            <Button variant="destructive" onClick={confirmDelete}>删除</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={deleteConfirm !== null}
+        title="确认删除"
+        description={`确定要删除模版「${deleteConfirm?.name}」吗？此操作不可恢复。`}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteConfirm(null)}
+      />
     </div>
   );
 };

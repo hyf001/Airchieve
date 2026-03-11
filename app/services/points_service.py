@@ -106,7 +106,7 @@ async def consume_for_creation(user_id: int, page_count: int) -> None:
 
 async def check_creation_points(user_id: int) -> None:
     """
-    检查用户是否可以创作/修改整本绘本（仅检查，不扣费）。
+    检查用户是否可以创作/编辑（仅检查，不扣费）。
     有免费次数，或积分余额 > 0 即可。
 
     Raises:
@@ -129,35 +129,13 @@ async def check_creation_points(user_id: int) -> None:
             )
 
 
-async def check_page_edit_points(user_id: int) -> None:
-    """
-    检查用户是否可以编辑单页（仅检查，不扣费）。
-    积分余额 > 0 即可。
-
-    Raises:
-        InsufficientPointsError: 积分 <= 0
-    """
-    async with async_session_maker() as session:
-        user = (
-            await session.execute(select(User).where(User.id == user_id))
-        ).scalar_one_or_none()
-
-        if user is None:
-            raise ValueError("用户不存在")
-
-        if user.points_balance <= 0:
-            raise InsufficientPointsError(
-                f"积分不足，当前余额 {user.points_balance}，请充值后继续使用"
-            )
-
-
 # ---------------------------------------------------------------------------
 # 单页编辑消耗
 # ---------------------------------------------------------------------------
 
-async def consume_for_page_edit(user_id: int) -> None:
+async def consume_for_page_edit(user_id: int, count: int = 1) -> None:
     """
-    绘本单页编辑扣费：消耗 PAGE_EDIT_COST 积分（允许扣至负数）。
+    绘本页编辑/生成扣费：消耗 PAGE_EDIT_COST * count 积分（允许扣至负数）。
 
     Raises:
         ValueError: 用户不存在
@@ -174,9 +152,9 @@ async def consume_for_page_edit(user_id: int) -> None:
 
         await _apply_points_delta(
             session, user,
-            delta=-PAGE_EDIT_COST,
+            delta=-(PAGE_EDIT_COST * count),
             log_type=PointsLogType.creation_cost,
-            description="绘本单页编辑消耗",
+            description=f"绘本页生成消耗（{count} 页）",
         )
         await session.commit()
 

@@ -1,10 +1,11 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Sparkles, ChevronLeft, ChevronRight, Loader2, FileText, BookOpen, LogOut, Coins, Crown, User, Shield } from 'lucide-react';
+import { Sparkles, ChevronLeft, ChevronRight, FileText, BookOpen, LogOut, Coins, Crown, User, Shield } from 'lucide-react';
 import { CreateStorybookRequest, createStorybook, InsufficientPointsError, listStorybooks, getStorybook, StorybookListItem, Storybook } from '../services/storybookService';
 import { listTemplates, TemplateListItem, Template } from '../services/templateService';
 import StorybookPreview from '../components/StorybookPreview';
 import FloatingInputBox from '../components/FloatingInputBox';
+import LoadingSpinner from '../components/LoadingSpinner';
 import { useAuth } from '../contexts/AuthContext';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
@@ -293,9 +294,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
                 style={{ overflowY: 'visible' }}
               >
                 {loadingTemplates ? (
-                  <div className="flex items-center justify-center w-full py-12">
-                    <Loader2 size={32} className="text-teal-400 animate-spin" />
-                  </div>
+                  <LoadingSpinner size={32} color="text-teal-400" className="w-full py-12" />
                 ) : templates.length === 0 ? (
                   <div className="flex items-center justify-center w-full py-12 text-slate-400">
                     暂无可用模版
@@ -377,9 +376,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
           <p className="text-slate-400 mb-10 text-sm">看看其他人都在用毛毛虫创作什么故事</p>
 
           {loadingPublicBooks ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 size={32} className="text-teal-400 animate-spin" />
-            </div>
+            <LoadingSpinner size={32} color="text-teal-400" className="py-12" />
           ) : publicStorybooks.length === 0 ? (
             <div className="py-12 text-slate-500">
               <p className="text-lg">还没有公开的作品</p>

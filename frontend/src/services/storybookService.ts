@@ -59,11 +59,6 @@ export interface CreateStorybookRequest {
   images?: string[];
 }
 
-export interface EditStorybookRequest {
-  instruction: string;
-  images?: string[];
-}
-
 export interface StorybookCreateResponse {
   id: number;
   title: string;
@@ -71,6 +66,11 @@ export interface StorybookCreateResponse {
 }
 
 export interface EditPageAsyncResponse {
+  storybook_id: number;
+  status: StorybookStatus;
+}
+
+export interface RegeneratePageAsyncResponse {
   storybook_id: number;
   status: StorybookStatus;
 }
@@ -136,27 +136,6 @@ export const getStorybook = async (storybookId: number): Promise<Storybook> => {
 };
 
 /**
- * 编辑绘本（异步，创建新版本，返回新绘本 ID）
- */
-export const editStorybook = async (
-  storybookId: number,
-  req: EditStorybookRequest
-): Promise<StorybookCreateResponse> => {
-  const res = await fetch(`${API_BASE}/${storybookId}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-    body: JSON.stringify({
-      instruction: req.instruction,
-      images: req.images || [],
-    }),
-  });
-  if (!res.ok) {
-    await handleWriteError(res, "编辑绘本失败");
-  }
-  return res.json() as Promise<StorybookCreateResponse>;
-};
-
-/**
  * 编辑绘本单页（异步，返回 storybook_id + status: "updating"）
  * 客户端轮询 GET /{storybook_id} 直到 status !== "updating"
  */
@@ -174,6 +153,101 @@ export const editStorybookPage = async (
     await handleWriteError(res, "编辑页面失败");
   }
   return res.json() as Promise<EditPageAsyncResponse>;
+};
+
+/**
+ * 编辑图片（仅生成图片，不写库）
+ * 返回 base64 data URL，前端缓存，用户保存时再调 savePage
+ */
+export const editPageImage = async (
+  imageUrl: string,
+  instruction: string
+): Promise<string> => {
+  const res = await fetch(`${API_BASE}/image/edit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify({ instruction, image: imageUrl }),
+  });
+  if (!res.ok) {
+    await handleWriteError(res, "图片生成失败");
+  }
+  const data = await res.json() as { image: string };
+  return data.image;
+};
+
+/**
+ * 直接保存页面内容（文字 + 图片），不触发 AI
+ */
+export const savePage = async (
+  storybookId: number,
+  pageIndex: number,
+  text: string,
+  imageUrl: string
+): Promise<StorybookPage> => {
+  const res = await fetch(`${API_BASE}/${storybookId}/pages/${pageIndex}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify({ text, image_url: imageUrl }),
+  });
+  if (!res.ok) {
+    await handleWriteError(res, "保存页面失败");
+  }
+  return res.json() as Promise<StorybookPage>;
+};
+
+/**
+ * 删除绘本页（至少保留 1 页），返回更新后的绘本
+ */
+export const deletePage = async (
+  storybookId: number,
+  pageIndex: number
+): Promise<Storybook> => {
+  const res = await fetch(`${API_BASE}/${storybookId}/pages/${pageIndex}`, {
+    method: "DELETE",
+    headers: { ...getAuthHeaders() },
+  });
+  if (!res.ok) {
+    await handleWriteError(res, "删除页面失败");
+  }
+  return res.json() as Promise<Storybook>;
+};
+
+/**
+ * 重新排列页面顺序，返回更新后的绘本
+ */
+export const reorderPages = async (
+  storybookId: number,
+  order: number[]
+): Promise<Storybook> => {
+  const res = await fetch(`${API_BASE}/${storybookId}/pages/reorder`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify({ order }),
+  });
+  if (!res.ok) {
+    await handleWriteError(res, "排序失败");
+  }
+  return res.json() as Promise<Storybook>;
+};
+
+/**
+ * 融合两页，生成新页追加到末尾（异步，轮询）
+ */
+export const regeneratePages = async (
+  storybookId: number,
+  pageIndices: number[],
+  count: number,
+  instruction?: string
+): Promise<RegeneratePageAsyncResponse> => {
+  const res = await fetch(`${API_BASE}/${storybookId}/pages/merge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify({ page_indices: pageIndices, count, instruction }),
+  });
+  if (!res.ok) {
+    await handleWriteError(res, "融合页面失败");
+  }
+  return res.json() as Promise<RegeneratePageAsyncResponse>;
 };
 
 /**

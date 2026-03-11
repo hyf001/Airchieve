@@ -66,6 +66,43 @@ class LLMClientBase(ABC):
         pass
 
     @abstractmethod
+    async def edit_image_only(
+        self,
+        instruction: str,
+        current_image_url: str,
+    ) -> str:
+        """
+        仅编辑图片，不修改文字。
+
+        Args:
+            instruction: 图片编辑指令
+            current_image_url: 当前图片 URL 或 base64 data URL
+
+        Returns:
+            str: 生成的新图片 base64 data URL
+        """
+        pass
+
+    @abstractmethod
+    async def regenerate_pages(
+        self,
+        pages: List[StorybookPage],
+        count: int = 1,
+        instruction: str = "",
+    ) -> List[StorybookPage]:
+        """
+        基于选中的页面再生成新页面。
+
+        Args:
+            pages: 选中的 1-5 个原始页面
+            instruction: 再生成指令（可选）
+
+        Returns:
+            List[StorybookPage]: 新生成的页面列表（数量与输入相同）
+        """
+        pass
+
+    @abstractmethod
     async def edit_page(
         self,
         page_index: int,
