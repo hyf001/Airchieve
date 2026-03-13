@@ -56,13 +56,10 @@ async def _generate_storybook_content(
     instruction: str,
     system_prompt: Optional[str] = None,
     images: Optional[List[str]] = None,
-    is_edit: bool = False,
-    original_pages: Optional[List[StorybookPage]] = None
 ) -> None:
-    """通用的绘本内容生成流程（支持创建和编辑）"""
-    mode = "编辑" if is_edit else "创建"
+    """通用的绘本内容生成流程"""
     start_time = time.time()
-    logger.info("开始生成绘本内容 | storybook_id=%s mode=%s", storybook_id, mode)
+    logger.info("开始生成绘本内容 | storybook_id=%s", storybook_id)
 
     # 更新状态为 creating
     async with async_session_maker() as session:
@@ -77,14 +74,7 @@ async def _generate_storybook_content(
     try:
         llm_client = GeminiCli()
 
-        if is_edit and original_pages:
-            pages = await llm_client.edit_story(
-                instruction=instruction,
-                current_pages=original_pages,
-                system_prompt=system_prompt
-            )
-        else:
-            pages = await llm_client.create_story(
+        pages = await llm_client.create_story(
                 instruction=instruction,
                 system_prompt=system_prompt,
                 images=images
@@ -130,7 +120,7 @@ async def create_storybook_async(
     instruction: str,
     user_id: int,
     template_id: Optional[int] = None,
-) -> tuple[int, str, Optional[str]]:
+) -> tuple[int, str, Optional[str], str]:
     """
     同步阶段：检查积分、解析模版、创建绘本记录。
     返回 (storybook_id, title, systemprompt) 供后台任务使用。
@@ -168,7 +158,7 @@ async def create_storybook_async(
         title = new_storybook.title
 
     logger.info("绘本记录已创建（异步模式）| storybook_id=%s", storybook_id)
-    return storybook_id, title, systemprompt
+    return storybook_id, title, systemprompt, style_prefix
 
 
 async def run_create_storybook_background(
@@ -177,17 +167,18 @@ async def run_create_storybook_background(
     user_id: int,
     systemprompt: Optional[str],
     images: Optional[List[str]],
+    style_prefix: str = "",
 ) -> None:
     """后台任务：执行绘本内容生成，生成完成后按页数扣除积分。"""
     logger.info("创建绘本后台任务开始 | storybook_id=%s", storybook_id)
+    combined_instruction = f"{style_prefix} {instruction}".strip() if style_prefix else instruction
     try:
         await asyncio.wait_for(
             _generate_storybook_content(
                 storybook_id=storybook_id,
-                instruction=instruction,
+                instruction=combined_instruction,
                 system_prompt=systemprompt,
                 images=images,
-                is_edit=False,
             ),
             timeout=900,
         )
@@ -208,99 +199,6 @@ async def run_create_storybook_background(
                 await session.commit()
     except Exception as e:
         logger.exception("创建绘本后台任务异常 | storybook_id=%s error=%s", storybook_id, e)
-
-
-# ============ 异步编辑单页（轮询模式） ============
-
-async def run_edit_page_background(
-    storybook_id: int,
-    page_index: int,
-    instruction: str,
-    user_id: int,
-) -> None:
-    """后台任务：执行单页编辑，更新绘本状态，成功后扣除积分。"""
-    logger.info("单页编辑后台任务开始 | storybook_id=%s page_index=%s", storybook_id, page_index)
-    try:
-        await asyncio.wait_for(
-            _do_edit_page(storybook_id, page_index, instruction, user_id),
-            timeout=900,
-        )
-    except asyncio.TimeoutError:
-        logger.error("单页编辑超时 | storybook_id=%s page_index=%s", storybook_id, page_index)
-        async with async_session_maker() as session:
-            result = await session.execute(select(Storybook).where(Storybook.id == storybook_id))
-            storybook = result.scalar_one_or_none()
-            if storybook:
-                storybook.status = "error"
-                storybook.error_message = "生成超时，请重试"
-                await session.commit()
-    except Exception as e:
-        logger.exception("单页编辑后台任务失败 | storybook_id=%s error=%s", storybook_id, e)
-        async with async_session_maker() as session:
-            result = await session.execute(select(Storybook).where(Storybook.id == storybook_id))
-            storybook = result.scalar_one_or_none()
-            if storybook:
-                storybook.status = "error"
-                storybook.error_message = str(e)[:500]
-                await session.commit()
-
-
-async def _do_edit_page(
-    storybook_id: int,
-    page_index: int,
-    instruction: str,
-    user_id: int,
-) -> None:
-    """单页编辑的实际逻辑，供 wait_for 包裹。"""
-    async with async_session_maker() as session:
-        result = await session.execute(
-            select(Storybook).where(Storybook.id == storybook_id)
-        )
-        storybook = result.scalar_one_or_none()
-        if not storybook or not storybook.pages:
-            logger.warning("单页编辑失败，绘本不存在或无页面 | storybook_id=%s", storybook_id)
-            return
-
-        current_page = storybook.pages[page_index]
-        template_id = storybook.template_id
-        systemprompt: Optional[str] = None
-
-        if template_id:
-            from app.models.template import Template
-            result = await session.execute(
-                select(Template).where(Template.id == template_id)
-            )
-            template = result.scalar_one_or_none()
-            if template and template.is_active:
-                systemprompt = template.systemprompt
-
-    # LLM 编辑单页
-    llm_client = GeminiCli()
-    new_page = await llm_client.edit_page(
-        page_index=page_index,
-        instruction=instruction,
-        current_page=current_page,
-        system_prompt=systemprompt,
-    )
-
-    # 更新页面内容并恢复状态
-    async with async_session_maker() as session:
-        result = await session.execute(
-            select(Storybook).where(Storybook.id == storybook_id)
-        )
-        storybook = result.scalar_one_or_none()
-        if storybook and storybook.pages:
-            storybook.pages[page_index] = new_page
-            storybook.status = "finished"
-            storybook.error_message = None
-            await session.commit()
-            logger.info("单页编辑完成 | storybook_id=%s page_index=%s", storybook_id, page_index)
-
-    try:
-        await consume_for_page_edit(user_id)
-    except Exception as e:
-        logger.warning("单页编辑积分扣费失败 | user_id=%s error=%s", user_id, e)
-
 
 # ============ 图片编辑（仅生成，不写库） ============
 

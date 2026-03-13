@@ -2,9 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Wand2, Loader2, X, Upload, Palette } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { TemplateListItem } from '../services/templateService';
-import { useToast } from '@/hooks/use-toast';
 
-interface FloatingInputBoxProps {
+interface InstructionInputBoxProps {
   placeholder?: string;
   collapsedPlaceholder?: string;
   onSubmit: (text: string) => void;
@@ -23,7 +22,7 @@ interface FloatingInputBoxProps {
   onImageRemove?: (index: number) => void;
 }
 
-const FloatingInputBox: React.FC<FloatingInputBoxProps> = ({
+const InstructionInputBox: React.FC<InstructionInputBoxProps> = ({
   placeholder = "描述你想要的修改...",
   onSubmit,
   onCancel,
@@ -43,7 +42,6 @@ const FloatingInputBox: React.FC<FloatingInputBoxProps> = ({
   const [prompt, setPrompt] = useState('');
   const [localImages, setLocalImages] = useState<string[]>(uploadedImages);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { toast } = useToast();
 
   useEffect(() => { setLocalImages(uploadedImages); }, [uploadedImages]);
   useEffect(() => { if (!visible) setPrompt(''); }, [visible]);
@@ -55,29 +53,45 @@ const FloatingInputBox: React.FC<FloatingInputBoxProps> = ({
   };
 
 
+  const compressImage = (file: File): Promise<string> => {
+    const MAX_SIZE = 2 * 1024 * 1024; // 2MB
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUrl = reader.result as string;
+        // 未超限直接返回
+        if (file.size <= MAX_SIZE) { resolve(dataUrl); return; }
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d')!;
+          ctx.drawImage(img, 0, 0);
+          // 逐步降低质量直到小于 2MB
+          let quality = 0.9;
+          let result = canvas.toDataURL('image/jpeg', quality);
+          while (result.length * 0.75 > MAX_SIZE && quality > 0.1) {
+            quality -= 0.1;
+            result = canvas.toDataURL('image/jpeg', quality);
+          }
+          resolve(result);
+        };
+        img.onerror = reject;
+        img.src = dataUrl;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    const MAX_SIZE = 2 * 1024 * 1024; // 2MB
-    const validFiles = Array.from(files).filter((file) => {
-      if (file.size > MAX_SIZE) {
-        toast({ variant: "destructive", title: "图片过大", description: `「${file.name}」超过 2MB 限制，已跳过` });
-        return false;
-      }
-      return true;
-    });
-    if (validFiles.length === 0) { e.target.value = ''; return; }
-    const newImages: string[] = [];
-    validFiles.forEach((file) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        newImages.push(reader.result as string);
-        if (newImages.length === validFiles.length) {
-          setLocalImages((prev) => [...prev, ...newImages]);
-          onImageAdd?.(newImages);
-        }
-      };
-      reader.readAsDataURL(file);
+    const allFiles = Array.from(files);
+    Promise.all(allFiles.map((file) => compressImage(file))).then((newImages) => {
+      setLocalImages((prev) => [...prev, ...newImages]);
+      onImageAdd?.(newImages);
     });
     e.target.value = '';
   };
@@ -145,7 +159,7 @@ const FloatingInputBox: React.FC<FloatingInputBoxProps> = ({
             rows={4}
             className="resize-none bg-transparent border-0 shadow-none focus-visible:ring-0
                        text-[15px] leading-relaxed text-slate-800
-                       placeholder:text-slate-400/70 p-0"
+                       placeholder:text-slate-500 placeholder:font-medium p-0"
             placeholder={placeholder}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
@@ -250,4 +264,4 @@ const FloatingInputBox: React.FC<FloatingInputBoxProps> = ({
   );
 };
 
-export default FloatingInputBox;
+export default InstructionInputBox;

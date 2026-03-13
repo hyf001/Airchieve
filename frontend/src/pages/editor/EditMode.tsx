@@ -220,7 +220,7 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
                     onChange={e => setImageInstruction(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleGenerateImage(); } }}
                     placeholder="描述图片修改，例如：把天空改成夜晚…"
-                    className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-[#00CDD4]/30 focus:border-[#00CDD4]"
+                    className="flex-1 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-[#00CDD4]/30 focus:border-[#00CDD4] placeholder:text-slate-400"
                     disabled={isGeneratingImage}
                     autoFocus
                   />
@@ -243,7 +243,7 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
               value={draftText}
               onChange={e => setDraftText(e.target.value)}
               rows={3}
-              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 resize-none outline-none focus:ring-2 focus:ring-[#00CDD4]/30 focus:border-[#00CDD4] leading-relaxed"
+              className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 resize-none outline-none focus:ring-2 focus:ring-[#00CDD4]/30 focus:border-[#00CDD4] leading-relaxed placeholder:text-slate-400"
               placeholder="页面文字…"
             />
 

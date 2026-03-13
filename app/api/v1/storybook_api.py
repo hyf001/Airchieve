@@ -15,7 +15,6 @@ from app.models.user import User
 from app.services.storybook_service import (
     create_storybook_async,
     run_create_storybook_background,
-    run_edit_page_background,
     get_storybook,
     update_storybook_pages,
     list_storybooks as list_storybooks_service,
@@ -79,11 +78,6 @@ class StorybookListResponse(BaseModel):
         from_attributes = True
 
 
-class EditStorybookPageRequest(BaseModel):
-    """编辑绘本单页请求"""
-    instruction: str = Field(..., min_length=1, max_length=1000, description="编辑指令")
-
-
 class EditImageRequest(BaseModel):
     """图片编辑请求（仅生成图片，不写库）"""
     instruction: str = Field(..., min_length=1, max_length=1000, description="图片编辑指令")
@@ -123,12 +117,6 @@ class StorybookCreateResponse(BaseModel):
     """创建/编辑绘本的异步响应"""
     id: int
     title: str
-    status: str
-
-
-class EditPageAsyncResponse(BaseModel):
-    """编辑单页的异步响应"""
-    storybook_id: int
     status: str
 
 
@@ -173,7 +161,7 @@ async def create_storybook_endpoint(
     init → creating → finished / error
     """
     try:
-        storybook_id, title, systemprompt = await create_storybook_async(
+        storybook_id, title, systemprompt, style_prefix = await create_storybook_async(
             instruction=req.instruction,
             template_id=req.template_id,
             user_id=current_user.id,
@@ -191,6 +179,7 @@ async def create_storybook_endpoint(
         current_user.id,
         systemprompt,
         req.images,
+        style_prefix,
     )
 
     return StorybookCreateResponse(id=storybook_id, title=title, status="init")
@@ -261,60 +250,6 @@ async def reorder_pages_endpoint(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     return storybook
-
-
-@router.patch("/{storybook_id}/pages/{page_index}", status_code=status.HTTP_202_ACCEPTED, response_model=EditPageAsyncResponse)
-async def edit_storybook_page_endpoint(
-    storybook_id: int,
-    page_index: int,
-    req: EditStorybookPageRequest,
-    background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    编辑绘本单页（异步，轮询模式）
-
-    立即返回 {storybook_id, status: "updating"}，后台执行生成。
-    客户端轮询 GET /{storybook_id} 直到 status 变为 finished / error。
-    """
-    from sqlalchemy import select
-
-    storybook = await get_storybook(storybook_id)
-    if not storybook:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="绘本不存在")
-
-    if not storybook.pages or page_index < 0 or page_index >= len(storybook.pages):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"无效的页码: {page_index}"
-        )
-
-    try:
-        await check_creation_points(current_user.id)
-    except InsufficientPointsError as e:
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail={"code": INSUFFICIENT_POINTS_CODE, "message": str(e)},
-        )
-
-    # 同步设置状态为 updating
-    result = await db.execute(select(Storybook).where(Storybook.id == storybook_id))
-    sb = result.scalar_one_or_none()
-    if sb:
-        sb.status = "updating"
-        sb.error_message = None
-        await db.commit()
-
-    background_tasks.add_task(
-        run_edit_page_background,
-        storybook_id,
-        page_index,
-        req.instruction,
-        current_user.id,
-    )
-
-    return EditPageAsyncResponse(storybook_id=storybook_id, status="updating")
 
 
 @router.delete("/{storybook_id}", status_code=status.HTTP_204_NO_CONTENT)

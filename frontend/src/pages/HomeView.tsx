@@ -4,7 +4,7 @@ import { Sparkles, ChevronLeft, ChevronRight, FileText, BookOpen, LogOut, Coins,
 import { CreateStorybookRequest, createStorybook, InsufficientPointsError, listStorybooks, getStorybook, StorybookListItem, Storybook } from '../services/storybookService';
 import { listTemplates, TemplateListItem, Template } from '../services/templateService';
 import StorybookPreview from '../components/StorybookPreview';
-import FloatingInputBox from '../components/FloatingInputBox';
+import InstructionInputBox from '../components/InstructionInputBox';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { useAuth } from '../contexts/AuthContext';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -247,8 +247,8 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
         </p>
 
         {/* Input Box */}
-        <div className="sticky top-4 z-40 w-full max-w-2xl mx-auto mb-14">
-          <FloatingInputBox
+        <div className="w-full max-w-2xl mx-auto mb-14">
+          <InstructionInputBox
             placeholder="描述你的故事创意... 比如：一只名叫 Nutty 的小松鼠在一棵老橡树中发现了一扇神秘的门..."
             collapsedPlaceholder="今天你想创作什么故事？"
             onSubmit={handleStart}

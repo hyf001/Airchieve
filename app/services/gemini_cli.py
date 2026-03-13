@@ -10,8 +10,11 @@ from google import genai
 from google.genai import types
 
 from app.core.config import settings
+from app.core.utils.logger import get_logger
 from app.services.llm_cli import LLMClientBase
 from app.models.storybook import StorybookPage
+
+logger = get_logger(__name__)
 
 
 def _get_client() -> genai.Client:
@@ -101,9 +104,21 @@ def _parse_response_to_pages(response) -> List[StorybookPage]:
     pages: List[StorybookPage] = []
     current_text = ""
 
-    for candidate in response.candidates or []:
+    if not response.candidates:
+        prompt_feedback = getattr(response, 'prompt_feedback', None)
+        raise ValueError(f"Gemini 未返回任何候选内容，prompt_feedback={prompt_feedback}")
+
+    for candidate in response.candidates:
+        finish_reason = getattr(candidate, 'finish_reason', None)
+        finish_reason_str = str(finish_reason) if finish_reason is not None else "None"
+        logger.info("Gemini candidate finish_reason=%s", finish_reason_str)
+
+        if "IMAGE_SAFETY" in finish_reason_str:
+            raise ValueError("图片内容因安全策略被拒绝，请修改描述后重试")
+
         if not candidate.content:
-            continue
+            raise ValueError(f"Gemini 返回内容为空，finish_reason={finish_reason_str}，可能被安全过滤或触发内容限制")
+
         for part in candidate.content.parts or []:
             # 处理文本部分
             if part.text:
@@ -160,9 +175,21 @@ def _parse_response_to_single_page(response, fallback_page: StorybookPage) -> St
     new_text = ""
     new_image_url = ""
 
-    for candidate in response.candidates or []:
+    if not response.candidates:
+        prompt_feedback = getattr(response, 'prompt_feedback', None)
+        raise ValueError(f"Gemini 未返回任何候选内容，prompt_feedback={prompt_feedback}")
+
+    for candidate in response.candidates:
+        finish_reason = getattr(candidate, 'finish_reason', None)
+        finish_reason_str = str(finish_reason) if finish_reason is not None else "None"
+        logger.info("Gemini candidate finish_reason=%s", finish_reason_str)
+
+        if "IMAGE_SAFETY" in finish_reason_str:
+            raise ValueError("图片内容因安全策略被拒绝，请修改描述后重试")
+
         if not candidate.content:
-            continue
+            raise ValueError(f"Gemini 返回内容为空，finish_reason={finish_reason_str}，可能被安全过滤或触发内容限制")
+
         for part in candidate.content.parts or []:
             if part.text:
                 text = part.text
@@ -257,161 +284,13 @@ class GeminiCli(LLMClientBase):
             contents=types.Content(parts=parts),
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
+                response_modalities=["TEXT", "IMAGE"],
                 image_config=types.ImageConfig(aspect_ratio="16:9"),
             ),
         )
 
         # 解析响应
         return _parse_response_to_pages(response)
-
-    async def edit_story(
-        self,
-        instruction: str,
-        current_pages: List[StorybookPage],
-        system_prompt: Optional[str] = None
-    ) -> List[StorybookPage]:
-        """
-        编辑故事
-
-        根据编辑指令对整个故事进行修改。将原故事的图文信息+用户prompt一起传给gemini重新生成。
-
-        Args:
-            instruction: 编辑指令
-            current_pages: 当前故事的所有页面
-            system_prompt: 系统提示词（可选），用于指定绘本风格、约束条件等
-
-        Returns:
-            List[StorybookPage]: 编辑后的页面列表
-        """
-        client = _get_client()
-
-        # System Prompt：定义系统角色和基本规则
-        # 如果提供了自定义 system_prompt，使用它；否则使用默认的
-        if system_prompt:
-            system_instruction = system_prompt
-        else:
-            system_instruction = (
-                "You are a professional visual storyteller and illustrator. "
-                "Your task is to regenerate a complete series of 10 sequential illustration panels based on the existing story and user's editing request. "
-                "For each panel, you must provide:\n"
-                "1. A short, engaging narrative text (1-2 sentences suitable for children)\n"
-                "2. An illustration image that matches the text\n\n"
-                "CRITICAL REQUIREMENTS:\n"
-                "- LANGUAGE: Generate the narrative text in the SAME language as the user's editing instruction. "
-                "If the user writes in Chinese, respond in Chinese. If in English, respond in English, etc.\n"
-                "- Maintain visual consistency: Keep the main character's appearance identical across all panels\n"
-                "- Use a consistent art style and color palette throughout the series\n"
-                "- Each image should look like a standalone scene illustration, NOT a book page — no page borders, no book decorations, no margins\n"
-                "- Ensure cinematic, full-bleed illustrations with clean backgrounds and consistent lighting\n"
-                "- Consider the original story context and images provided\n"
-                "- Generate images inline with the text, alternating between text and image for each panel\n"
-                "- Images must contain NO text, letters, or words whatsoever; text and images are completely separate"
-            )
-
-        # User Prompt：当前故事内容 + 编辑要求
-        user_prompt = f"Current story (10 panels):\n\n"
-        for i, page in enumerate(current_pages):
-            user_prompt += f"Panel {i+1}:\nText: {page['text']}\n\n"
-
-        user_prompt += (
-            f"\n\nUser editing request: {instruction}\n\n"
-            f"Please regenerate the entire 10-panel illustrated story series based on the editing request. "
-            f"Generate all 10 panels now, with text and images alternating. Each image should be a full scene illustration without any book-style framing."
-        )
-
-        # 构建请求内容：文本 + 原故事图片作为上下文
-        parts = [types.Part(text=user_prompt)]
-
-        # 将原故事的图片作为上下文
-        image_urls = [page.get('image_url', '') for page in current_pages if page.get('image_url')]
-        parts.extend(_build_image_parts(image_urls))
-
-        # 调用 Gemini API
-        response = await client.aio.models.generate_content(
-            model=settings.GEMINI_MODEL,
-            contents=types.Content(parts=parts),
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                image_config=types.ImageConfig(aspect_ratio="16:9"),
-            ),
-        )
-
-        # 解析响应
-        return _parse_response_to_pages(response)
-
-    async def edit_page(
-        self,
-        page_index: int,
-        instruction: str,
-        current_page: StorybookPage,
-        system_prompt: Optional[str] = None
-    ) -> StorybookPage:
-        """
-        编辑故事页
-
-        对指定单页内容进行编辑。将当前页的图文信息+用户prompt一起传给gemini重新生成。
-
-        Args:
-            page_index: 页码索引
-            instruction: 编辑指令
-            current_page: 当前页的内容
-            system_prompt: 系统提示词（可选），用于指定绘本风格、约束条件等
-
-        Returns:
-            StorybookPage: 编辑后的页面内容
-        """
-        client = _get_client()
-
-        # System Prompt：定义系统角色和基本规则
-        # 如果提供了自定义 system_prompt，使用它；否则使用默认的
-        if system_prompt:
-            system_instruction = system_prompt
-        else:
-            system_instruction = (
-                "You are a professional visual storyteller and illustrator. "
-                "Your task is to regenerate a single illustration panel based on the existing content and user's editing request. "
-                "You must provide:\n"
-                "1. A short, engaging narrative text (1-2 sentences suitable for children)\n"
-                "2. An illustration image that matches the text\n\n"
-                "CRITICAL REQUIREMENTS:\n"
-                "- LANGUAGE: Generate the text in the SAME language as the user's editing instruction. "
-                "If the user writes in Chinese, respond in Chinese. If in English, respond in English, etc.\n"
-                "- Keep visual consistency with the original style\n"
-                "- Maintain the character's appearance if applicable\n"
-                "- The image should look like a standalone scene illustration, NOT a book page — no page borders, no book decorations, no margins\n"
-                "- Ensure cinematic, full-bleed illustration with clean background and good lighting\n"
-                "- Generate the image inline with the text\n"
-                "- Images must contain NO text, letters, or words whatsoever; text and images are completely separate"
-            )
-
-        # User Prompt：当前页内容 + 编辑要求
-        user_prompt = (
-            f"Current panel {page_index + 1}:\n"
-            f"Text: {current_page['text']}\n\n"
-            f"User editing request: {instruction}\n\n"
-            f"Please regenerate this panel with new text and a full scene illustration without any book-style framing."
-        )
-
-        # 构建请求内容：文本 + 当前页图片作为上下文
-        parts = [types.Part(text=user_prompt)]
-
-        # 如果当前页有图片，将其作为上下文
-        image_url = current_page.get('image_url', '')
-        if image_url:
-            parts.extend(_build_image_parts([image_url]))
-
-        # 调用 Gemini API
-        response = await client.aio.models.generate_content(
-            model=settings.GEMINI_MODEL,
-            contents=types.Content(parts=parts),
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                image_config=types.ImageConfig(aspect_ratio="16:9"),
-            ),
-        )
-
-        # 解析响应
-        return _parse_response_to_single_page(response, current_page)
 
     async def edit_image_only(
         self,
@@ -432,9 +311,10 @@ class GeminiCli(LLMClientBase):
             "Images must contain NO text, letters, or words whatsoever."
         )
         user_prompt = (
-            f"Here is the existing illustration (attached above). "
-            f"Please EDIT it according to this instruction: {instruction}\n\n"
-            f"Modify only what is asked — keep everything else as close to the original as possible."
+            f"Here is the existing illustration (attached). "
+            f"Edit it according to this instruction: {instruction}\n\n"
+            f"Modify only what is asked, preserve everything else. "
+            f"Output: full-bleed cinematic illustration, NO text or letters in image."
         )
 
         parts = [types.Part(text=user_prompt)]
@@ -451,6 +331,10 @@ class GeminiCli(LLMClientBase):
         )
 
         for candidate in response.candidates or []:
+            finish_reason = getattr(candidate, 'finish_reason', None)
+            finish_reason_str = str(finish_reason) if finish_reason is not None else "None"
+            if "IMAGE_SAFETY" in finish_reason_str:
+                raise ValueError("图片内容因安全策略被拒绝，请修改描述后重试")
             if not candidate.content:
                 continue
             for part in candidate.content.parts or []:
@@ -488,10 +372,8 @@ class GeminiCli(LLMClientBase):
         user_prompt = (
             f"Reference panels:\n{panels_desc}\n\n"
             f"Regeneration instruction: {regen_instruction}\n\n"
-            f"The reference images are attached above. "
-            f"Please generate exactly {count} new panel(s). "
-            "Maintain visual consistency with the reference images. "
-            "Output text and image alternately for each panel."
+            f"The reference images are attached. Generate exactly {count} new panel(s). "
+            f"Each image must be: full-bleed cinematic scene, no borders/frames, NO text or letters in image, visually consistent with reference."
         )
 
         parts = [types.Part(text=user_prompt)]
@@ -504,6 +386,7 @@ class GeminiCli(LLMClientBase):
             contents=types.Content(parts=parts),
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
+                response_modalities=["TEXT", "IMAGE"],
                 image_config=types.ImageConfig(aspect_ratio="16:9"),
             ),
         )

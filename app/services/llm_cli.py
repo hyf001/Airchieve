@@ -41,31 +41,6 @@ class LLMClientBase(ABC):
         pass
 
     @abstractmethod
-    async def edit_story(
-        self,
-        instruction: str,
-        current_pages: List[StorybookPage],
-        system_prompt: Optional[str] = None
-    ) -> List[StorybookPage]:
-        """
-        编辑故事
-
-        根据编辑指令，对整个故事进行修改。可以调整整体情节、增加/删除页面、改变故事走向等。
-
-        Args:
-            instruction: 编辑指令，例如"让故事更感人一些"、"在结尾加上一个反转"
-            current_pages: 当前故事的所有页面
-            system_prompt: 系统提示词（可选），用于指定绘本风格、约束条件等
-
-        Returns:
-            List[StorybookPage]: 编辑后的页面列表
-
-        Raises:
-            Exception: 当编辑失败时抛出异常
-        """
-        pass
-
-    @abstractmethod
     async def edit_image_only(
         self,
         instruction: str,
@@ -102,33 +77,3 @@ class LLMClientBase(ABC):
         """
         pass
 
-    @abstractmethod
-    async def edit_page(
-        self,
-        page_index: int,
-        instruction: str,
-        current_page: StorybookPage,
-        system_prompt: Optional[str] = None
-    ) -> StorybookPage:
-        """
-        编辑故事页
-
-        对指定单页内容进行编辑，修改该页的文本和/或图片。
-
-        Args:
-            page_index: 页码索引（从0开始）
-            instruction: 编辑指令，例如"把这只兔子画得更可爱一些"、"增加更多细节描述"
-            current_page: 当前页的内容
-            system_prompt: 系统提示词（可选），用于指定绘本风格、约束条件等
-
-        Returns:
-            StorybookPage: 编辑后的页面内容
-                {
-                    "text": "编辑后的文本内容",
-                    "image_url": "https://new-generated-image-url"
-                }
-
-        Raises:
-            Exception: 当编辑失败时抛出异常
-        """
-        pass

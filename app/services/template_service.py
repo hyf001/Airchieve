@@ -159,10 +159,8 @@ async def update_template(
             template.description = description
         if instruction is not None:
             template.instruction = instruction
-        if systemprompt is not None:
-            template.systemprompt = systemprompt
-        if storybook_id is not None:
-            template.storybook_id = storybook_id
+        template.systemprompt = systemprompt
+        template.storybook_id = storybook_id
         if is_active is not None:
             template.is_active = is_active
         if sort_order is not None:
