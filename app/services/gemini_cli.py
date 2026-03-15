@@ -256,19 +256,21 @@ class GeminiCli(LLMClientBase):
                 "CRITICAL REQUIREMENTS:\n"
                 "- LANGUAGE: Generate the narrative text in the SAME language as the user's input instruction. "
                 "If the user writes in Chinese, respond in Chinese. If in English, respond in English, etc.\n"
+                "- TEXT RULES: Begin IMMEDIATELY with panel 1 text — no preamble, no story outline, no panel labels. "
+                "Each panel's text must be pure story narrative only (1-2 sentences), followed at once by its image. "
+                "Never batch multiple panels' text before generating images.\n"
                 "- Maintain visual consistency: Keep the main character's appearance identical across all panels\n"
                 "- Use a consistent art style and color palette throughout the series\n"
                 "- Each image should look like a standalone scene illustration, NOT a book page — no page borders, no book decorations, no margins\n"
                 "- Ensure cinematic, full-bleed illustrations with clean backgrounds and consistent lighting\n"
-                "- Generate images inline with the text, alternating between text and image for each panel\n"
                 "- Images must contain NO text, letters, or words whatsoever; text and images are completely separate"
             )
 
         # User Prompt：用户的具体创意要求
         user_prompt = (
-            f"Create a 10-panel illustrated story series based on the user's input instruction: \"{instruction}\"\n\n"
-            f"Please generate all 10 panels now, with text and images alternating. "
-            f"Each image should be a full scene illustration without any book-style framing. **Important: No text on images!!!**"
+            f"Create a 10-panel illustrated story series based on: \"{instruction}\"\n\n"
+            f"Generate all 10 panels with text and image strictly alternating. "
+            f"Each image must be a full scene illustration without any book-style framing. No text on images."
         )
 
         # 构建请求内容
@@ -298,6 +300,7 @@ class GeminiCli(LLMClientBase):
         current_image_url: str,
     ) -> str:
         """仅生成新图片（不修改文字），返回 base64 data URL。"""
+        logger.info("edit_image_only start | model=%s | instruction=%s", settings.GEMINI_EDIT_MODEL, instruction)
         client = _get_client()
 
         system_instruction = (
@@ -320,9 +323,10 @@ class GeminiCli(LLMClientBase):
         parts = [types.Part(text=user_prompt)]
         if current_image_url:
             parts.extend(_build_image_parts([current_image_url]))
+        logger.info("edit_image_only calling API | has_image=%s", bool(current_image_url))
 
         response = await client.aio.models.generate_content(
-            model=settings.GEMINI_MODEL,
+            model=settings.GEMINI_EDIT_MODEL,
             contents=types.Content(parts=parts),
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
@@ -333,12 +337,14 @@ class GeminiCli(LLMClientBase):
         for candidate in response.candidates or []:
             finish_reason = getattr(candidate, 'finish_reason', None)
             finish_reason_str = str(finish_reason) if finish_reason is not None else "None"
+            logger.info("edit_image_only candidate finish_reason=%s", finish_reason_str)
             if "IMAGE_SAFETY" in finish_reason_str:
                 raise ValueError("图片内容因安全策略被拒绝，请修改描述后重试")
             if not candidate.content:
                 continue
             for part in candidate.content.parts or []:
                 if part.inline_data and part.inline_data.mime_type and part.inline_data.mime_type.startswith("image/"):
+                    logger.info("edit_image_only success | mime_type=%s", part.inline_data.mime_type)
                     return _inline_data_to_data_url(part.inline_data)
 
         raise ValueError("图片生成失败，未获取到图片内容")
@@ -350,6 +356,8 @@ class GeminiCli(LLMClientBase):
         instruction: str = "",
     ) -> List[StorybookPage]:
         """基于选中的参考页面再生成 count 张新页面。"""
+        logger.info("regenerate_pages start | model=%s | ref_count=%d | count=%d | instruction=%s",
+                    settings.GEMINI_MODEL, len(pages), count, instruction)
         client = _get_client()
         ref_count = len(pages)
 
@@ -362,6 +370,8 @@ class GeminiCli(LLMClientBase):
             f"Each panel must have a short narrative text (1-2 sentences suitable for children) "
             "and a full-bleed cinematic illustration. "
             "LANGUAGE: Use the SAME language as the original panels. "
+            "STORY TEXT ONLY: Each panel's text must contain ONLY the story plot narrative — pure story prose that advances the plot. "
+            "Absolutely NO summaries, overviews, introductions, conclusions, panel labels, or any non-narrative content. "
             "Images must contain NO text, letters, or words whatsoever."
         )
 
@@ -380,6 +390,7 @@ class GeminiCli(LLMClientBase):
         image_urls = [p.get("image_url", "") for p in pages if p.get("image_url")]
         if image_urls:
             parts.extend(_build_image_parts(image_urls))
+        logger.info("regenerate_pages calling API | image_count=%d", len(image_urls))
 
         response = await client.aio.models.generate_content(
             model=settings.GEMINI_MODEL,
@@ -392,6 +403,7 @@ class GeminiCli(LLMClientBase):
         )
 
         result = _parse_response_to_pages(response)
+        logger.info("regenerate_pages success | parsed_count=%d | expected=%d", len(result), count)
         while len(result) < count:
             result.append(dict(pages[len(result) % ref_count]))  # type: ignore
         return result[:count]
