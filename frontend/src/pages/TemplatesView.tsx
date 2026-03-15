@@ -247,7 +247,7 @@ const TemplatesView: React.FC<TemplatesViewProps> = ({ onBack }) => {
             </Button>
             <div>
               <h1 className="text-2xl font-bold font-lexend text-slate-900">我的模版</h1>
-              <p className="text-sm text-slate-500 mt-0.5">管理你的绘本生成模版</p>
+              <p className="text-sm text-slate-500 mt-0.5">管理您的绘本生成模版</p>
             </div>
           </div>
           <Button onClick={handleCreate} className="gap-2 bg-indigo-600 hover:bg-indigo-700">
@@ -268,7 +268,7 @@ const TemplatesView: React.FC<TemplatesViewProps> = ({ onBack }) => {
               </div>
               <h3 className="text-xl font-bold text-slate-900 mb-2">还没有模版</h3>
               <p className="text-slate-500 mb-6 max-w-md">
-                创建你的第一个模版，用它来快速生成风格一致的绘本
+                创建您的第一个模版，用它来快速生成风格一致的绘本
               </p>
               <Button onClick={handleCreate} className="gap-2 bg-indigo-600 hover:bg-indigo-700">
                 <Plus size={20} /> 创建第一个模版
