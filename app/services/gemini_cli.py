@@ -58,11 +58,14 @@ def _build_image_parts(images: List[str]) -> List[types.Part]:
         List[types.Part]: 图片Parts列表
     """
     parts = []
-    for img in images:
+    for i, img in enumerate(images):
         if not img:
+            logger.info("跳过空图片 | index=%s", i)
             continue
         if img.startswith("data:"):
             mime_type, image_bytes = _decode_base64_image(img)
+            logger.info("处理 base64 图片 | index=%s mime_type=%s size_bytes=%s",
+                        i, mime_type, len(image_bytes))
             parts.append(
                 types.Part(
                     inline_data=types.Blob(
@@ -72,6 +75,7 @@ def _build_image_parts(images: List[str]) -> List[types.Part]:
                 )
             )
         elif img.startswith("http://") or img.startswith("https://"):
+            logger.info("处理 URL 图片 | index=%s url=%s", i, img[:100])
             parts.append(
                 types.Part(
                     file_data=types.FileData(
@@ -79,6 +83,7 @@ def _build_image_parts(images: List[str]) -> List[types.Part]:
                     )
                 )
             )
+    logger.info("构建图片 parts 完成 | total_count=%s", len(parts))
     return parts
 
 
@@ -109,6 +114,8 @@ def _parse_response_to_pages(response) -> List[StorybookPage]:
         prompt_feedback = getattr(response, 'prompt_feedback', None)
         raise ValueError(f"Gemini 未返回任何候选内容，prompt_feedback={prompt_feedback}")
 
+    logger.info("开始解析 Gemini 响应为页面 | candidates_count=%s", len(response.candidates))
+
     for candidate in response.candidates:
         finish_reason = getattr(candidate, 'finish_reason', None)
         finish_reason_str = str(finish_reason) if finish_reason is not None else "None"
@@ -120,15 +127,20 @@ def _parse_response_to_pages(response) -> List[StorybookPage]:
         if not candidate.content:
             raise ValueError(f"Gemini 返回内容为空，finish_reason={finish_reason_str}，可能被安全过滤或触发内容限制")
 
-        for part in candidate.content.parts or []:
+        parts = candidate.content.parts
+        logger.info("candidate.content | parts_count=%s", len(parts) if parts else 0)
+
+        for part in parts or []:
             # 处理文本部分
             if part.text:
                 text = part.text
+                logger.info("处理文本 part | text_length=%s", len(text))
                 # 查找所有图片标记（markdown格式：![alt](url)）
                 image_pattern = r'!\[.*?\]\((https?://[^\)]+)\)'
                 matches = list(re.finditer(image_pattern, text))
                 if matches:
                     # 有图片 URL，按图片分割文本
+                    logger.info("发现图片URL标记 | count=%s", len(matches))
                     last_end = 0
                     for match in matches:
                         before_image = text[last_end:match.start()].strip()
@@ -139,6 +151,8 @@ def _parse_response_to_pages(response) -> List[StorybookPage]:
                             "text": current_text.strip(),
                             "image_url": image_url
                         })
+                        logger.info("添加页面（URL方式）| text_length=%s image_url_prefix=%s",
+                                    len(current_text.strip()), image_url[:50])
                         current_text = ""
                         last_end = match.end()
 
@@ -149,15 +163,34 @@ def _parse_response_to_pages(response) -> List[StorybookPage]:
                 else:
                     # 没有图片 URL，累积文本
                     current_text += text
+                    logger.info("累积文本 | current_text_length=%s", len(current_text))
 
             # 处理 inline_data 图片（base64 格式）
             elif part.inline_data and part.inline_data.mime_type and part.inline_data.mime_type.startswith("image/"):
                 image_url = _inline_data_to_data_url(part.inline_data)
+                logger.info("处理 inline_data 图片 | mime_type=%s data_length=%s",
+                            part.inline_data.mime_type, len(part.inline_data.data) if part.inline_data.data else 0)
                 pages.append({
                     "text": current_text.strip(),
                     "image_url": image_url
                 })
+                logger.info("添加页面（inline_data方式）| text_length=%s", len(current_text.strip()))
                 current_text = ""
+            else:
+                logger.info("跳过 part | has_text=%s has_inline_data=%s",
+                            bool(part.text), bool(part.inline_data))
+
+    logger.info("解析完成 | total_pages=%s", len(pages))
+
+    if len(pages) == 0:
+        logger.warning("警告：未解析到任何页面 | candidates=%s", [
+            {
+                "finish_reason": str(c.finish_reason) if c.finish_reason else None,
+                "has_content": c.content is not None,
+                "parts_count": len(c.content.parts) if c.content and c.content.parts else 0,
+            }
+            for c in response.candidates
+        ])
 
     return pages
 
@@ -277,9 +310,9 @@ class GeminiCli(LLMClientBase):
 
         # User Prompt：用户的具体创意要求
         user_prompt = (
-            f"Create a 10-panel illustrated story series based on: \"{instruction}\"\n\n"
-            f"Generate all 10 panels with text and image strictly alternating. "
-            f"Each image must be a full scene illustration without any book-style framing. No text on images."
+            f"MUST generate exactly 10 illustrations regardless of uploaded images. "
+            f"Create a 10-panel illustrated story based on: \"{instruction}\". "
+            f"Each panel must have text + image (full-bleed, no framing, no text in image)."
         )
 
         # 构建请求内容

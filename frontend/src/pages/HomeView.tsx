@@ -309,10 +309,14 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
                         key={`${tmpl.id}-${idx}`}
                         className={`group shrink-0 w-60 flex flex-col text-left rounded-2xl transition-all duration-500 relative ${
                           selectedTemplate?.id === tmpl.id
-                          ? 'shadow-[0_8px_30px_rgba(251,191,36,0.25),0_0_0_2px_rgba(251,191,36,0.5)] bg-slate-700/70 backdrop-blur-sm'
+                          ? 'shadow-[0_8px_30px_rgba(251,191,36,0.25)] bg-amber-400/5 backdrop-blur-sm'
                           : 'border border-slate-600/40 bg-slate-800/50 backdrop-blur-sm hover:border-teal-400/40 hover:bg-slate-700/50 shadow-sm hover:shadow-md hover:shadow-teal-900/20'
                         }`}
                       >
+                        {/* 选中边框 - 用独立元素避免被遮挡 */}
+                        {selectedTemplate?.id === tmpl.id && (
+                          <div className="absolute inset-0 rounded-2xl border-2 border-amber-400/50 pointer-events-none" />
+                        )}
                         {/* 已选中标记 */}
                         {selectedTemplate?.id === tmpl.id && (
                           <div className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-400 text-white text-[11px] font-bold shadow-sm">
