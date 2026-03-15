@@ -321,22 +321,29 @@ export const downloadStorybookImage = async (
   const pages = storybook.pages || [];
   if (pages.length === 0) throw new Error('绘本无页面内容');
 
-  const PANEL_W = 600;
-  const PANEL_H = 800;
+  // 并行加载所有图片
+  const images = await Promise.all(pages.map(p => loadImage(p.image_url)));
+
+  // 使用原始图片尺寸，保持分辨率；同时避免超出浏览器 canvas 最大宽度限制
+  const validImages = images.filter((img): img is HTMLImageElement => img !== null);
+  const n = pages.length;
   const GAP = 16;
+  const MAX_CANVAS_W = 16000;
+  const maxPanelW = Math.max(512, Math.floor((MAX_CANVAS_W - GAP * (n - 1)) / n));
+  const rawW = validImages.length > 0 ? Math.max(...validImages.map(img => img.naturalWidth)) : 800;
+  const rawH = validImages.length > 0 ? Math.max(...validImages.map(img => img.naturalHeight)) : 800;
+  const PANEL_W = Math.min(rawW, maxPanelW);
+  const PANEL_H = Math.round(rawH * (PANEL_W / rawW));
+
   const GRAD_RATIO = 0.42;
   const gradH = Math.floor(PANEL_H * GRAD_RATIO);
   const padding = Math.floor(PANEL_W * 0.05);
   const fontSize = Math.max(22, Math.floor(PANEL_H * 0.030));
   const maxTextW = PANEL_W - padding * 2;
 
-  // 并行加载所有图片
-  const images = await Promise.all(pages.map(p => loadImage(p.image_url)));
-
-  const n = pages.length;
   const canvas = document.createElement('canvas');
-  canvas.width = PANEL_W * n + GAP * (n - 1);
-  canvas.height = PANEL_H;
+  canvas.width = PANEL_W;
+  canvas.height = PANEL_H * n + GAP * (n - 1);
   const ctx = canvas.getContext('2d')!;
 
   // 画布背景
@@ -347,11 +354,11 @@ export const downloadStorybookImage = async (
 
   for (let i = 0; i < n; i++) {
     const page = pages[i];
-    const panelX = i * (PANEL_W + GAP);
+    const panelY = i * (PANEL_H + GAP);
 
     // 面板底色（letterbox 留边可见）
     ctx.fillStyle = 'rgb(20, 20, 28)';
-    ctx.fillRect(panelX, 0, PANEL_W, PANEL_H);
+    ctx.fillRect(0, panelY, PANEL_W, PANEL_H);
 
     // 图片（letterbox fit，不裁剪）
     const img = images[i];
@@ -359,17 +366,17 @@ export const downloadStorybookImage = async (
       const scale = Math.min(PANEL_W / img.naturalWidth, PANEL_H / img.naturalHeight);
       const w = img.naturalWidth * scale;
       const h = img.naturalHeight * scale;
-      ctx.drawImage(img, panelX + (PANEL_W - w) / 2, (PANEL_H - h) / 2, w, h);
+      ctx.drawImage(img, (PANEL_W - w) / 2, panelY + (PANEL_H - h) / 2, w, h);
       if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
     }
 
     // 底部渐变遮罩（transparent → black/75）
-    const gradY = PANEL_H - gradH;
-    const grad = ctx.createLinearGradient(0, gradY, 0, PANEL_H);
+    const gradY = panelY + PANEL_H - gradH;
+    const grad = ctx.createLinearGradient(0, gradY, 0, panelY + PANEL_H);
     grad.addColorStop(0, 'rgba(0,0,0,0)');
     grad.addColorStop(1, 'rgba(0,0,0,0.75)');
     ctx.fillStyle = grad;
-    ctx.fillRect(panelX, gradY, PANEL_W, gradH);
+    ctx.fillRect(0, gradY, PANEL_W, gradH);
 
     // 白色文字（带阴影）
     ctx.font = fontStack;
@@ -401,7 +408,7 @@ export const downloadStorybookImage = async (
     ctx.fillStyle = 'white';
     for (const line of lines) {
       const lw = ctx.measureText(line).width;
-      ctx.fillText(line, panelX + (PANEL_W - lw) / 2, textY);
+      ctx.fillText(line, (PANEL_W - lw) / 2, textY);
       textY += lineH;
     }
     ctx.shadowColor = 'transparent';
