@@ -399,7 +399,8 @@ export const downloadStorybookImage = async (
 
     const lineH = fontSize * 1.55;
     const totalH = lines.length * lineH;
-    let textY = gradY + (gradH - totalH) / 2;
+    // 文字偏向渐变区域的下半部分，更靠近底部
+    let textY = gradY + (gradH - totalH) * 1.0;  // 1.0表示更偏向下部
     textY = Math.max(gradY + padding / 2, textY);
 
     ctx.shadowColor = 'rgba(0,0,0,0.6)';
@@ -429,12 +430,36 @@ export const downloadStorybookImage = async (
     format: [PANEL_W, PANEL_H],
   });
 
-  // 将每页图片添加到 PDF
+  // 将每页图片添加到 PDF，并添加页码
+  const pageNumberSize = Math.max(14, Math.floor(PANEL_W * 0.018));
+  const circleRadius = Math.max(16, Math.floor(PANEL_W * 0.02));
+  const pageNumberMargin = circleRadius + Math.floor(PANEL_W * 0.01);  // 圆的半径加上小边距
+
   pageImages.forEach((dataUrl, index) => {
     if (index > 0) {
       pdf.addPage([PANEL_W, PANEL_H]);
     }
     pdf.addImage(dataUrl, 'JPEG', 0, 0, PANEL_W, PANEL_H);
+
+    // 添加页码（右下角，实心圆背景）
+    const pageNumber = index + 1;
+    const pageNumberText = `${pageNumber}`;
+
+    // 计算圆心的位置
+    const circleX = PANEL_W - pageNumberMargin;
+    const circleY = PANEL_H - pageNumberMargin;
+
+    // 绘制实心圆背景（半透明黑色）
+    pdf.setFillColor(0, 0, 0, 0.7);  // RGB + 透明度
+    pdf.circle(circleX, circleY, circleRadius, 'F');
+
+    // 在圆心添加页码文字
+    pdf.setFontSize(pageNumberSize);
+    pdf.setTextColor(255, 255, 255);  // 白色文字
+    pdf.text(pageNumberText, circleX, circleY, {
+      align: 'center',
+      baseline: 'middle'
+    });
   });
 
   // 触发下载
