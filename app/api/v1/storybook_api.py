@@ -161,7 +161,7 @@ async def create_storybook_endpoint(
     init → creating → finished / error
     """
     try:
-        storybook_id, title, systemprompt, style_prefix = await create_storybook_async(
+        storybook_id, title, template, style_prefix = await create_storybook_async(
             instruction=req.instruction,
             template_id=req.template_id,
             user_id=current_user.id,
@@ -177,7 +177,7 @@ async def create_storybook_endpoint(
         storybook_id,
         req.instruction,
         current_user.id,
-        systemprompt,
+        template,
         req.images,
         style_prefix,
     )

@@ -6,6 +6,7 @@ LLM Client Base Interface
 from abc import ABC, abstractmethod
 from typing import List, Optional
 from app.models.storybook import StorybookPage
+from app.models.template import Template
 
 
 class LLMClientBase(ABC):
@@ -15,17 +16,17 @@ class LLMClientBase(ABC):
     async def create_story(
         self,
         instruction: str,
-        system_prompt: Optional[str] = None,
+        template: Optional[Template] = None,
         images: Optional[List[str]] = None
     ) -> List[StorybookPage]:
         """
         创建故事
 
-        根据用户指令、系统提示词和可选的参考图片，生成完整的绘本内容（包含文本和图片）。
+        根据用户指令、模板配置和可选的参考图片，生成完整的绘本内容（包含文本和图片）。
 
         Args:
             instruction: 用户指令/故事描述，例如"一个关于小兔子找朋友的故事"
-            system_prompt: 系统提示词（可选），用于指定绘本风格、约束条件等
+            template: 模板对象（可选），包含风格名称、描述和系统提示词
             images: base64编码的参考图片列表（可选），用于参考风格或角色
 
         Returns:

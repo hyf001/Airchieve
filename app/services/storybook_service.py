@@ -13,6 +13,7 @@ from PIL import Image as PILImage, ImageDraw, ImageFont
 from app.core.utils.logger import get_logger
 from app.db.session import async_session_maker
 from app.models.storybook import Storybook, StorybookPage, StorybookStatus
+from app.models.template import Template
 from app.services.gemini_cli import GeminiCli
 from app.services.points_service import (
     check_creation_points,
@@ -54,7 +55,7 @@ async def _upload_pages_images_to_oss(
 async def _generate_storybook_content(
     storybook_id: int,
     instruction: str,
-    system_prompt: Optional[str] = None,
+    template: Optional["Template"] = None,
     images: Optional[List[str]] = None,
 ) -> None:
     """通用的绘本内容生成流程"""
@@ -76,7 +77,7 @@ async def _generate_storybook_content(
 
         pages = await llm_client.create_story(
                 instruction=instruction,
-                system_prompt=system_prompt,
+                template=template,
                 images=images
             )
 
@@ -120,26 +121,24 @@ async def create_storybook_async(
     instruction: str,
     user_id: int,
     template_id: Optional[int] = None,
-) -> tuple[int, str, Optional[str], str]:
+) -> tuple[int, str, Optional[Template], str]:
     """
     同步阶段：检查积分、解析模版、创建绘本记录。
-    返回 (storybook_id, title, systemprompt) 供后台任务使用。
+    返回 (storybook_id, title, template, style_prefix) 供后台任务使用。
     积分不足时抛出 InsufficientPointsError。
     """
     await check_creation_points(user_id)
 
-    systemprompt: Optional[str] = None
+    template: Optional[Template] = None
     style_prefix = ""
 
     if template_id:
-        from app.models.template import Template
         async with async_session_maker() as session:
             result = await session.execute(
                 select(Template).where(Template.id == template_id)
             )
             template = result.scalar_one_or_none()
             if template and template.is_active:
-                systemprompt = template.systemprompt
                 style_prefix = template.instruction if template.instruction else ""
 
     async with async_session_maker() as session:
@@ -157,15 +156,15 @@ async def create_storybook_async(
         storybook_id = new_storybook.id
         title = new_storybook.title
 
-    logger.info("绘本记录已创建（异步模式）| storybook_id=%s", storybook_id)
-    return storybook_id, title, systemprompt, style_prefix
+    logger.info("绘本记���已创建（异步模式）| storybook_id=%s", storybook_id)
+    return storybook_id, title, template, style_prefix
 
 
 async def run_create_storybook_background(
     storybook_id: int,
     instruction: str,
     user_id: int,
-    systemprompt: Optional[str],
+    template: Optional[Template],
     images: Optional[List[str]],
     style_prefix: str = "",
 ) -> None:
@@ -177,7 +176,7 @@ async def run_create_storybook_background(
             _generate_storybook_content(
                 storybook_id=storybook_id,
                 instruction=combined_instruction,
-                system_prompt=systemprompt,
+                template=template,
                 images=images,
             ),
             timeout=900,

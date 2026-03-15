@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.core.utils.logger import get_logger
 from app.services.llm_cli import LLMClientBase
 from app.models.storybook import StorybookPage
+from app.models.template import Template
 
 logger = get_logger(__name__)
 
@@ -224,7 +225,7 @@ class GeminiCli(LLMClientBase):
     async def create_story(
         self,
         instruction: str,
-        system_prompt: Optional[str] = None,
+        template: Optional[Template] = None,
         images: Optional[List[str]] = None
     ) -> List[StorybookPage]:
         """
@@ -234,7 +235,7 @@ class GeminiCli(LLMClientBase):
 
         Args:
             instruction: 用户指令/故事描述
-            system_prompt: 系统提示词（可选），用于指定绘本风格、约束条件等
+            template: 模板对象（可选），包含风格名称、描述和系统提示词
             images: base64编码的参考图片列表（可选）
 
         Returns:
@@ -243,10 +244,12 @@ class GeminiCli(LLMClientBase):
         client = _get_client()
 
         # System Prompt：定义系统角色和基本规则
-        # 如果提供了自定义 system_prompt，使用它；否则使用默认的
-        if system_prompt:
-            system_instruction = system_prompt
+        # 如果提供了 template，从中提取 systemprompt、name 和 description
+        if template and template.systemprompt:
+            # 如果模板有 systemprompt，使用它作为基础
+            system_instruction = template.systemprompt
         else:
+            # 否则使用默认的 system prompt
             system_instruction = (
                 "You are a professional visual storyteller and illustrator. "
                 "Your task is to generate a complete series of 10 sequential illustration panels with accompanying text. "
@@ -265,6 +268,12 @@ class GeminiCli(LLMClientBase):
                 "- Ensure cinematic, full-bleed illustrations with clean backgrounds and consistent lighting\n"
                 "- Images must contain NO text, letters, or words whatsoever; text and images are completely separate"
             )
+
+        # 如果模板有风格名称和描述，添加到系统指令中
+        if template and template.name:
+            system_instruction += f"\n\nART STYLE: {template.name}"
+            if template.description:
+                system_instruction += f"\n{template.description}"
 
         # User Prompt：用户的具体创意要求
         user_prompt = (
