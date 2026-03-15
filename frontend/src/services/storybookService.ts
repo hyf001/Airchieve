@@ -312,28 +312,31 @@ const loadImage = async (url: string): Promise<HTMLImageElement | null> => {
 };
 
 /**
- * 在浏览器端用 Canvas 生成绘本横向长图并触发下载（JPEG）
+ * 在浏览器端用 Canvas 为每页单独生成图片，然后合并成 PDF 下载
  * 布局与 EditorView 一致：图片全屏 + 底部渐变遮罩 + 白色文字
  */
 export const downloadStorybookImage = async (
   storybook: Storybook,
 ): Promise<void> => {
+  // 动态导入 jsPDF，避免在文件顶部导入导致类型问题
+  const { default: jsPDF } = await import('jspdf');
+
   const pages = storybook.pages || [];
   if (pages.length === 0) throw new Error('绘本无页面内容');
 
   // 并行加载所有图片
   const images = await Promise.all(pages.map(p => loadImage(p.image_url)));
-
-  // 使用原始图片尺寸，保持分辨率；同时避免超出浏览器 canvas 最大宽度限制
   const validImages = images.filter((img): img is HTMLImageElement => img !== null);
-  const n = pages.length;
-  const GAP = 16;
-  const MAX_CANVAS_W = 16000;
-  const maxPanelW = Math.max(512, Math.floor((MAX_CANVAS_W - GAP * (n - 1)) / n));
+
+  // 计算单页尺寸（使用原始图片尺寸，保持分辨率）
   const rawW = validImages.length > 0 ? Math.max(...validImages.map(img => img.naturalWidth)) : 800;
   const rawH = validImages.length > 0 ? Math.max(...validImages.map(img => img.naturalHeight)) : 800;
-  const PANEL_W = Math.min(rawW, maxPanelW);
-  const PANEL_H = Math.round(rawH * (PANEL_W / rawW));
+
+  // 限制单页最大尺寸，避免内存溢出
+  const MAX_PANEL_W = 2000;
+  const MAX_PANEL_H = 2000;
+  const PANEL_W = Math.min(rawW, MAX_PANEL_W);
+  const PANEL_H = Math.min(rawH, MAX_PANEL_H);
 
   const GRAD_RATIO = 0.42;
   const gradH = Math.floor(PANEL_H * GRAD_RATIO);
@@ -341,24 +344,22 @@ export const downloadStorybookImage = async (
   const fontSize = Math.max(22, Math.floor(PANEL_H * 0.030));
   const maxTextW = PANEL_W - padding * 2;
 
-  const canvas = document.createElement('canvas');
-  canvas.width = PANEL_W;
-  canvas.height = PANEL_H * n + GAP * (n - 1);
-  const ctx = canvas.getContext('2d')!;
-
-  // 画布背景
-  ctx.fillStyle = 'rgb(30, 30, 36)';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
   const fontStack = `${fontSize}px "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif`;
 
-  for (let i = 0; i < n; i++) {
+  // 为每一页生成图片
+  const pageImages: string[] = [];
+  for (let i = 0; i < pages.length; i++) {
     const page = pages[i];
-    const panelY = i * (PANEL_H + GAP);
 
-    // 面板底色（letterbox 留边可见）
+    // 创建单页 Canvas
+    const canvas = document.createElement('canvas');
+    canvas.width = PANEL_W;
+    canvas.height = PANEL_H;
+    const ctx = canvas.getContext('2d')!;
+
+    // 面板底色
     ctx.fillStyle = 'rgb(20, 20, 28)';
-    ctx.fillRect(0, panelY, PANEL_W, PANEL_H);
+    ctx.fillRect(0, 0, PANEL_W, PANEL_H);
 
     // 图片（letterbox fit，不裁剪）
     const img = images[i];
@@ -366,13 +367,13 @@ export const downloadStorybookImage = async (
       const scale = Math.min(PANEL_W / img.naturalWidth, PANEL_H / img.naturalHeight);
       const w = img.naturalWidth * scale;
       const h = img.naturalHeight * scale;
-      ctx.drawImage(img, (PANEL_W - w) / 2, panelY + (PANEL_H - h) / 2, w, h);
+      ctx.drawImage(img, (PANEL_W - w) / 2, (PANEL_H - h) / 2, w, h);
       if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
     }
 
     // 底部渐变遮罩（transparent → black/75）
-    const gradY = panelY + PANEL_H - gradH;
-    const grad = ctx.createLinearGradient(0, gradY, 0, panelY + PANEL_H);
+    const gradY = PANEL_H - gradH;
+    const grad = ctx.createLinearGradient(0, gradY, 0, PANEL_H);
     grad.addColorStop(0, 'rgba(0,0,0,0)');
     grad.addColorStop(1, 'rgba(0,0,0,0.75)');
     ctx.fillStyle = grad;
@@ -415,21 +416,27 @@ export const downloadStorybookImage = async (
     ctx.shadowBlur = 0;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
+
+    // 将 Canvas 转换为 JPEG Data URL
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+    pageImages.push(dataUrl);
   }
 
-  // 触发下载
-  await new Promise<void>((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (!blob) { reject(new Error('生成图片失败')); return; }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${storybook.title || 'storybook'}_${storybook.id}.jpg`;
-      document.body.appendChild(a);
-      a.click();
-      URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      resolve();
-    }, 'image/jpeg', 0.92);
+  // 创建 PDF
+  const pdf = new jsPDF({
+    orientation: PANEL_W > PANEL_H ? 'landscape' : 'portrait',
+    unit: 'px',
+    format: [PANEL_W, PANEL_H],
   });
+
+  // 将每页图片添加到 PDF
+  pageImages.forEach((dataUrl, index) => {
+    if (index > 0) {
+      pdf.addPage([PANEL_W, PANEL_H]);
+    }
+    pdf.addImage(dataUrl, 'JPEG', 0, 0, PANEL_W, PANEL_H);
+  });
+
+  // 触发下载
+  pdf.save(`${storybook.title || 'storybook'}_${storybook.id}.pdf`);
 };
