@@ -3,7 +3,7 @@ Template Service
 模版服务
 """
 from typing import Optional, List
-from sqlalchemy import select, desc, or_
+from sqlalchemy import asc, select, desc, or_
 
 from app.db.session import async_session_maker
 from app.models.template import Template
@@ -92,7 +92,7 @@ async def list_templates(
         List[Template]: 模版列表
     """
     async with async_session_maker() as session:
-        query = select(Template).order_by(desc(Template.sort_order), desc(Template.created_at))
+        query = select(Template).order_by(asc(Template.sort_order), desc(Template.created_at))
 
         # 筛选条件
         if creator:

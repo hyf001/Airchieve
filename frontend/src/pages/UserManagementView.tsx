@@ -439,7 +439,7 @@ const UserManagementView: React.FC<UserManagementViewProps> = ({ onBack }) => {
           </div>
 
           {/* 分页 */}
-          {totalPages > 1 && (
+          {total > 0 && (
             <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
               <span className="text-xs text-slate-400">共 {total} 条</span>
               <div className="flex items-center gap-2">
