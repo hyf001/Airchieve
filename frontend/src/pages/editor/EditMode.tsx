@@ -117,14 +117,14 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
 
   return (
     <>
-      <div className="w-full max-w-4xl space-y-4">
-        {/* Thumbnail strip */}
-        <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
+      <div className="w-full max-w-5xl flex gap-4">
+        {/* Thumbnail strip - left sidebar */}
+        <div className="flex flex-col gap-2 overflow-y-auto p-2 custom-scrollbar max-h-[70vh] w-32 shrink-0">
           {pages.map((p, idx) => (
             <button
               key={idx}
               onClick={() => setSelectedIndex(idx)}
-              className={`relative shrink-0 w-24 rounded-lg overflow-hidden ring-2 transition-all aspect-[16/9] ${
+              className={`relative shrink-0 w-24 rounded-lg overflow-hidden ring-2 transition-all aspect-[16/9] mx-auto ${
                 selectedIndex === idx
                   ? 'ring-[#00CDD4] scale-[1.04]'
                   : 'ring-transparent hover:ring-slate-300'
@@ -139,7 +139,7 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
         </div>
 
         {/* Selected page edit area */}
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+        <div className="flex-1 bg-white rounded-2xl shadow-xl overflow-hidden max-w-3xl">
           {/* Page preview */}
           <div className="relative aspect-[16/9] bg-slate-100 overflow-hidden">
             <img

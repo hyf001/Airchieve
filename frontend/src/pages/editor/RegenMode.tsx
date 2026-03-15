@@ -98,7 +98,7 @@ const RegenMode: React.FC<RegenModeProps> = ({
           onChange={e => setInstruction(e.target.value)}
           placeholder="再生成指令，例如：继续后面的故事"
           rows={2}
-          className="w-full max-w-lg border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none resize-none focus:ring-2 focus:ring-[#00CDD4]/30 focus:border-[#00CDD4]"
+          className="w-full max-w-lg text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 outline-none resize-none focus:ring-2 focus:ring-[#00CDD4]/30 focus:border-[#00CDD4] leading-relaxed placeholder:text-slate-400"
         />
         <div className="flex justify-center gap-3 items-center">
           <Button variant="outline" onClick={onExit} disabled={isSubmitting}>
