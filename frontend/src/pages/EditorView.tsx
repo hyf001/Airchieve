@@ -421,8 +421,8 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                       <Sparkles className="absolute inset-0 m-auto text-[#00CDD4] animate-pulse" size={32} />
                     </div>
                     <div>
-                      <h3 className="text-xl font-lexend font-bold text-slate-800 mb-1">正在装帧你的故事…</h3>
-                      <p className="text-slate-400 text-sm">正在将你的灵感转化为精美的插画与排版</p>
+                      <h3 className="text-xl font-lexend font-bold text-slate-800 mb-1">正在装帧您的故事…</h3>
+                      <p className="text-slate-400 text-sm">正在将您的灵感转化为精美的插画与排版</p>
                     </div>
                     <div className="space-y-2">
                       <div className="flex justify-between text-xs text-slate-400">

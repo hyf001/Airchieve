@@ -23,7 +23,7 @@ interface InstructionInputBoxProps {
 }
 
 const InstructionInputBox: React.FC<InstructionInputBoxProps> = ({
-  placeholder = "描述你想要的修改...",
+  placeholder = "描述您想要的修改...",
   onSubmit,
   onCancel,
   isLoading = false,

@@ -239,7 +239,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
 
         {/* Tagline */}
         <p className="text-sm text-sky-200/65 max-w-xl mx-auto leading-relaxed text-center mb-10">
-          用 AI 将你的想象变成精美绘本，描述故事创意，选择画风，即刻生成。
+          用 AI 将您的想象变成精美绘本，描述故事创意，选择画风，即刻生成。
           <span className="inline-flex items-center gap-1 ml-2 text-xs text-sky-300/45 align-middle">
             <Sparkles size={10} />
             Powered by AI
@@ -249,8 +249,8 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
         {/* Input Box */}
         <div className="w-full max-w-2xl mx-auto mb-14">
           <InstructionInputBox
-            placeholder="描述你的故事创意... 比如：一只名叫 Nutty 的小松鼠在一棵老橡树中发现了一扇神秘的门..."
-            collapsedPlaceholder="今天你想创作什么故事？"
+            placeholder="描述您的故事创意... 比如：一只名叫 Nutty 的小松鼠在一棵老橡树中发现了一扇神秘的门..."
+            collapsedPlaceholder="今天您想创作什么故事？"
             onSubmit={handleStart}
             isLoading={isCreating}
             loadingMessage={generationStatus || '处理中...'}
@@ -266,7 +266,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
         <section className="w-full mb-16">
           <h2 className="text-2xl font-bold font-lexend mb-8 text-center">
             <span className="text-teal-400">选择</span>
-            <span className="text-slate-100">你的艺术风格</span>
+            <span className="text-slate-100">您的艺术风格</span>
           </h2>
           <div
             ref={carouselSectionRef}

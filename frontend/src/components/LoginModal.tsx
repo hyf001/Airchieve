@@ -65,7 +65,7 @@ const PasswordTab: React.FC<{ onSuccess: (r: TokenResponse) => void }> = ({ onSu
           <Label className="text-xs text-slate-600">昵称</Label>
           <Input
             value={nickname} onChange={(e) => setNickname(e.target.value)}
-            placeholder="你的显示名称" autoComplete="nickname" disabled={loading}
+            placeholder="您的显示名称" autoComplete="nickname" disabled={loading}
             className="bg-slate-50 focus:bg-white border-slate-200 focus:border-indigo-400 focus:ring-indigo-100"
           />
         </div>
@@ -238,7 +238,7 @@ const LoginModal: React.FC<Props> = ({ onSuccess, onClose }) => {
             <span>AIrchieve</span>
           </div>
           <h2 className="text-xl font-bold text-slate-900">{titleMap[tab]}</h2>
-          <p className="text-sm text-slate-500 mt-1">登录后开始创作你的绘本故事</p>
+          <p className="text-sm text-slate-500 mt-1">登录后开始创作您的绘本故事</p>
         </div>
 
         {/* Tabs + Form */}
@@ -267,7 +267,7 @@ const LoginModal: React.FC<Props> = ({ onSuccess, onClose }) => {
         {/* Footer */}
         <div className="px-7 pb-6">
           <p className="text-center text-[11px] text-slate-400 leading-relaxed">
-            登录即表示你同意我们的
+            登录即表示您同意我们的
             <span className="text-indigo-500 cursor-pointer hover:underline mx-0.5">服务条款</span>
             和
             <span className="text-indigo-500 cursor-pointer hover:underline mx-0.5">隐私政策</span>
