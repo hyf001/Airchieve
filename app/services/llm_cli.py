@@ -9,6 +9,16 @@ from app.models.storybook import StorybookPage
 from app.models.template import Template
 
 
+# ============ 通用 LLM 异常基类 ============
+
+class LLMError(Exception):
+    """LLM 调用异常基类（user_message 可直接展示给用户）"""
+    def __init__(self, dev_message: str, user_message: str, error_type: str):
+        super().__init__(dev_message)
+        self.user_message = user_message
+        self.error_type = error_type
+
+
 class LLMClientBase(ABC):
     """大模型客户端基类"""
 

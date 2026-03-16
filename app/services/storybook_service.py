@@ -15,6 +15,7 @@ from app.db.session import async_session_maker
 from app.models.storybook import Storybook, StorybookPage, StorybookStatus
 from app.models.template import Template
 from app.services.gemini_cli import GeminiCli
+from app.services.llm_cli import LLMError
 from app.services.points_service import (
     check_creation_points,
     consume_for_creation,
@@ -102,6 +103,18 @@ async def _generate_storybook_content(
         elapsed = time.time() - start_time
         logger.info("绘本生成完成 | storybook_id=%s pages_count=%s elapsed=%.2fs", storybook_id, len(pages) if pages else 0, elapsed)
 
+    except LLMError as e:
+        logger.warning("绘本生成被拒绝 | storybook_id=%s error_type=%s user_message=%s",
+                       storybook_id, e.error_type, e.user_message)
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(Storybook).where(Storybook.id == storybook_id)
+            )
+            storybook = result.scalar_one_or_none()
+            if storybook:
+                storybook.status = "error"
+                storybook.error_message = e.user_message
+                await session.commit()
     except Exception as e:
         logger.exception("绘本生成失败 | storybook_id=%s error=%s", storybook_id, e)
         async with async_session_maker() as session:
@@ -314,7 +327,7 @@ async def reorder_pages(
         return storybook
 
 
-# ============ 融合页（异步轮询模式） ============
+# ============ 再生成（异步轮询模式） ============
 
 async def regenerate_pages_async(
     storybook_id: int,
@@ -396,7 +409,7 @@ async def run_regenerate_pages_background(
         logger.info("再生成后台任务完成 | storybook_id=%s new_pages=%s", storybook_id, len(uploaded))
 
     except asyncio.TimeoutError:
-        logger.error("融合页超时 | storybook_id=%s", storybook_id)
+        logger.error("再生成超时 | storybook_id=%s", storybook_id)
         async with async_session_maker() as session:
             result = await session.execute(select(Storybook).where(Storybook.id == storybook_id))
             storybook = result.scalar_one_or_none()
@@ -404,8 +417,18 @@ async def run_regenerate_pages_background(
                 storybook.status = "error"
                 storybook.error_message = "生成超时，请重试"
                 await session.commit()
+    except LLMError as e:
+        logger.warning("再生成被拒绝 | storybook_id=%s error_type=%s user_message=%s",
+                       storybook_id, e.error_type, e.user_message)
+        async with async_session_maker() as session:
+            result = await session.execute(select(Storybook).where(Storybook.id == storybook_id))
+            storybook = result.scalar_one_or_none()
+            if storybook:
+                storybook.status = "error"
+                storybook.error_message = e.user_message
+                await session.commit()
     except Exception as e:
-        logger.exception("融合页后台任务异常 | storybook_id=%s error=%s", storybook_id, e)
+        logger.exception("再生成后台任务异常 | storybook_id=%s error=%s", storybook_id, e)
         async with async_session_maker() as session:
             result = await session.execute(select(Storybook).where(Storybook.id == storybook_id))
             storybook = result.scalar_one_or_none()

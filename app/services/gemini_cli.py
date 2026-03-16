@@ -11,11 +11,62 @@ from google.genai import types
 
 from app.core.config import settings
 from app.core.utils.logger import get_logger
-from app.services.llm_cli import LLMClientBase
+from app.services.llm_cli import LLMClientBase, LLMError
 from app.models.storybook import StorybookPage
 from app.models.template import Template
 
 logger = get_logger(__name__)
+
+
+# ============ 自定义异常 ============
+
+class GeminiContentPolicyError(LLMError):
+    """Gemini 内容策略拒绝错误"""
+
+
+class GeminiTechnicalError(LLMError):
+    """Gemini 技术/API 异常"""
+
+
+# ============ finishReason 映射表 ============
+
+_FINISH_REASON_MAP: dict[types.FinishReason, tuple[str, str]] = {
+    types.FinishReason.IMAGE_SAFETY:       ("IMAGE_SAFETY",       "图片内容违反安全策略，请修改描述后重试"),
+    types.FinishReason.PROHIBITED_CONTENT: ("PROHIBITED_CONTENT", "内容违反安全策略，已被拒绝处理"),
+    types.FinishReason.SAFETY:             ("SAFETY",             "内容触发了安全过滤器，请调整描述后重试"),
+    types.FinishReason.RECITATION:         ("RECITATION",         "内容可能涉及版权问题，请换一种表达方式"),
+    types.FinishReason.MAX_TOKENS:         ("MAX_TOKENS",         "内容长度超出限制，请精简提示词"),
+    types.FinishReason.OTHER:              ("OTHER",              "生成被意外中断，请稍后重试"),
+}
+
+
+# ============ 文本拒绝类型检测 ============
+
+def _detect_rejection_type(text: str) -> str:
+    """检测 API 返回的纯文本属于哪类拒绝"""
+    lower = text.lower()
+    if any(k in lower for k in ["watermark", "水印"]):
+        return "watermark"
+    if any(k in lower for k in ["faceswap", "face swap", "换脸"]):
+        return "faceswap"
+    if any(k in lower for k in ["sexually", "explicit", "色情", "不雅", "pornographic"]):
+        return "nsfw"
+    if any(k in lower for k in ["i can't", "i cannot", "i'm just a language model",
+                                  "我不能", "无法生成"]):
+        return "general_rejection"
+    return "unknown"
+
+
+def _build_rejection_message(text: str, detected_type: str) -> str:
+    """根据拒绝类型构建用户友好提示"""
+    if detected_type == "watermark":
+        return "去水印功能不被支持，请尝试其他编辑方式"
+    if detected_type == "faceswap":
+        return "换脸功能不被支持，请尝试其他编辑方式"
+    if detected_type == "nsfw":
+        return f"检测到不适当内容，请调整提示词后重试。AI说明：{text}"
+    # general_rejection / unknown: 直接展示 API 原始文本
+    return text
 
 
 def _get_client() -> genai.Client:
@@ -97,56 +148,102 @@ def _inline_data_to_data_url(inline_data: types.Blob) -> str:
     return f"data:{inline_data.mime_type};base64,{base64_data}"
 
 
-def _parse_response_to_pages(response) -> List[StorybookPage]:
+def _parse_response_to_pages(response: types.GenerateContentResponse) -> List[StorybookPage]:
     """
     解析 Gemini 响应为页面列表
 
-    Args:
-        response: Gemini API 响应对象
-
-    Returns:
-        List[StorybookPage]: 解析出的页面列表
+    按优先级顺序检查：
+    1. candidatesTokenCount == 0  → 内容审核最早期拒绝
+    2. candidates 为空            → API 格式异常
+    3. finishReason 非 STOP       → 生成过程拒绝
+    4. content.parts 为空         → 内容结构异常
+    5. 遍历 parts 收集文本和图片
+    6. 有图片                     → 成功返回
+    7. 无图片有文本               → 内容策略拒绝（展示 API 文本）
+    8. 兜底                       → 技术异常
     """
-    pages: List[StorybookPage] = []
-    current_text = ""
+    # Step 1: candidatesTokenCount == 0（最早期拒绝）
+    if (response.usage_metadata is not None
+            and response.usage_metadata.candidates_token_count == 0):
+        logger.warning("内容审核拒绝 | candidatesTokenCount=0")
+        raise GeminiContentPolicyError(
+            "candidatesTokenCount=0，谷歌内容审核阶段拒绝",
+            "您的请求在内容审核阶段被拒绝，请修改提示词或参考图后重试",
+            "ZERO_CANDIDATES_TOKEN",
+        )
 
+    # Step 2: candidates 为空
     if not response.candidates:
-        prompt_feedback = getattr(response, 'prompt_feedback', None)
-        raise ValueError(f"Gemini 未返回任何候选内容，prompt_feedback={prompt_feedback}")
+        logger.error("Gemini 未返回 candidates | prompt_feedback=%s", response.prompt_feedback)
+        raise GeminiTechnicalError(
+            f"Gemini 未返回任何候选内容，prompt_feedback={response.prompt_feedback}",
+            "系统出错，请稍后重试",
+            "NO_CANDIDATES",
+        )
 
     logger.info("开始解析 Gemini 响应为页面 | candidates_count=%s", len(response.candidates))
 
+    pages: List[StorybookPage] = []
+    current_text = ""
+    accumulated_text = ""  # 所有未配对图片的纯文本（供 step 7 使用）
+
     for candidate in response.candidates:
-        finish_reason = getattr(candidate, 'finish_reason', None)
-        finish_reason_str = str(finish_reason) if finish_reason is not None else "None"
-        logger.info("Gemini candidate finish_reason=%s", finish_reason_str)
+        finish_reason = candidate.finish_reason
+        logger.info("Gemini candidate finish_reason=%s", finish_reason)
 
-        if "IMAGE_SAFETY" in finish_reason_str:
-            raise ValueError("图片内容因安全策略被拒绝，请修改描述后重试")
+        # Step 3: finishReason 非 STOP
+        if finish_reason is not None and finish_reason != types.FinishReason.STOP:
+            if finish_reason in _FINISH_REASON_MAP:
+                error_type, user_msg = _FINISH_REASON_MAP[finish_reason]
+                logger.warning("Gemini 内容拒绝 | finish_reason=%s error_type=%s",
+                               finish_reason, error_type)
+                raise GeminiContentPolicyError(
+                    f"Gemini finish_reason={finish_reason}",
+                    user_msg,
+                    error_type,
+                )
+            # 未知非 STOP 原因
+            logger.error("Gemini 未知异常结束 | finish_reason=%s", finish_reason)
+            raise GeminiTechnicalError(
+                f"Gemini 非正常结束 finish_reason={finish_reason}",
+                "生成被意外中断，请稍后重试",
+                "UNEXPECTED_FINISH_REASON",
+            )
 
+        # Step 4: content 为空
         if not candidate.content:
-            raise ValueError(f"Gemini 返回内容为空，finish_reason={finish_reason_str}，可能被安全过滤或触发内容限制")
+            logger.error("Gemini candidate.content 为空 | finish_reason=%s", finish_reason)
+            raise GeminiTechnicalError(
+                f"Gemini 返回内容为空，finish_reason={finish_reason}",
+                "生成失败，请稍后重试",
+                "NO_CONTENT",
+            )
 
         parts = candidate.content.parts
         logger.info("candidate.content | parts_count=%s", len(parts) if parts else 0)
 
-        for part in parts or []:
-            # 处理文本部分
+        if not parts:
+            logger.error("Gemini content.parts 为空 | finish_reason=%s", finish_reason)
+            raise GeminiTechnicalError(
+                f"Gemini content.parts 为空，finish_reason={finish_reason}",
+                "生成失败，请稍后重试",
+                "NO_PARTS",
+            )
+
+        # Step 5: 遍历 parts，分别收集文本和图片
+        for part in parts:
             if part.text:
                 text = part.text
                 logger.info("处理文本 part | text_length=%s", len(text))
-                # 查找所有图片标记（markdown格式：![alt](url)）
                 image_pattern = r'!\[.*?\]\((https?://[^\)]+)\)'
                 matches = list(re.finditer(image_pattern, text))
                 if matches:
-                    # 有图片 URL，按图片分割文本
                     logger.info("发现图片URL标记 | count=%s", len(matches))
                     last_end = 0
                     for match in matches:
                         before_image = text[last_end:match.start()].strip()
                         current_text += before_image
                         image_url = match.group(1)
-
                         pages.append({
                             "text": current_text.strip(),
                             "image_url": image_url
@@ -155,21 +252,19 @@ def _parse_response_to_pages(response) -> List[StorybookPage]:
                                     len(current_text.strip()), image_url[:50])
                         current_text = ""
                         last_end = match.end()
-
-                    # 处理最后一个图片后的文本
                     after_last_image = text[last_end:].strip()
                     if after_last_image:
                         current_text = after_last_image
                 else:
-                    # 没有图片 URL，累积文本
                     current_text += text
+                    accumulated_text += text
                     logger.info("累积文本 | current_text_length=%s", len(current_text))
 
-            # 处理 inline_data 图片（base64 格式）
             elif part.inline_data and part.inline_data.mime_type and part.inline_data.mime_type.startswith("image/"):
                 image_url = _inline_data_to_data_url(part.inline_data)
                 logger.info("处理 inline_data 图片 | mime_type=%s data_length=%s",
-                            part.inline_data.mime_type, len(part.inline_data.data) if part.inline_data.data else 0)
+                            part.inline_data.mime_type,
+                            len(part.inline_data.data) if part.inline_data.data else 0)
                 pages.append({
                     "text": current_text.strip(),
                     "image_url": image_url
@@ -182,63 +277,85 @@ def _parse_response_to_pages(response) -> List[StorybookPage]:
 
     logger.info("解析完成 | total_pages=%s", len(pages))
 
-    if len(pages) == 0:
-        if current_text:
-            logger.warning("未解析到页面，累积文本内容如下：\n%s", current_text)
-        logger.warning("警告：未解析到任何页面 | candidates=%s", [
-            {
-                "finish_reason": str(c.finish_reason) if c.finish_reason else None,
-                "has_content": c.content is not None,
-                "parts_count": len(c.content.parts) if c.content and c.content.parts else 0,
-            }
-            for c in response.candidates
-        ])
+    # Step 6: 有图片 → 成功
+    if pages:
+        # 修复第一页文本：如果第一页包含第二页内容，截取
+        if len(pages) >= 2 and pages[0].get('text') and pages[1].get('text'):
+            first_text = pages[0]['text']
+            second_text = pages[1]['text']
+            # 找到第二页文本在第一页中的位置，截取之前的内容
+            pos = first_text.find(second_text[:10])
+            if pos > 0:
+                pages[0]['text'] = first_text[:pos].strip()
+                logger.info("已截取第一页文本 | original_length=%s new_length=%s", len(first_text), len(pages[0]['text']))
+        return pages
 
-    return pages
+    # Step 7: 无图片但有文本 → 内容策略拒绝
+    if accumulated_text.strip():
+        logger.warning("未解析到页面，模型返回纯文本 | text_preview=%s", accumulated_text[:200])
+        detected_type = _detect_rejection_type(accumulated_text)
+        user_message = _build_rejection_message(accumulated_text, detected_type)
+        raise GeminiContentPolicyError(
+            f"Gemini 只返回文本无图片 | detected_type={detected_type} | text={accumulated_text[:300]}",
+            user_message,
+            "TEXT_RESPONSE_NO_IMAGE",
+        )
+
+    # Step 8: 兜底
+    logger.error("未找到任何图片或有效文本内容")
+    raise GeminiTechnicalError(
+        "Gemini 响应中未找到图片或文本数据",
+        "生成失败，请检查提示词后重试",
+        "UNKNOWN",
+    )
 
 
-def _parse_response_to_single_page(response, fallback_page: StorybookPage) -> StorybookPage:
-    """
-    解析 Gemini 响应为单个页面
-
-    Args:
-        response: Gemini API 响应对象
-        fallback_page: 如果解析失败时的后备页面
-
-    Returns:
-        StorybookPage: 解析出的页面
-    """
+def _parse_response_to_single_page(response: types.GenerateContentResponse, fallback_page: StorybookPage) -> StorybookPage:
+    """解析 Gemini 响应为单个页面，解析失败时回退到 fallback_page"""
     new_text = ""
     new_image_url = ""
 
     if not response.candidates:
-        prompt_feedback = getattr(response, 'prompt_feedback', None)
-        raise ValueError(f"Gemini 未返回任何候选内容，prompt_feedback={prompt_feedback}")
+        raise GeminiTechnicalError(
+            f"Gemini 未返回任何候选内容，prompt_feedback={response.prompt_feedback}",
+            "系统出错，请稍后重试",
+            "NO_CANDIDATES",
+        )
 
     for candidate in response.candidates:
-        finish_reason = getattr(candidate, 'finish_reason', None)
-        finish_reason_str = str(finish_reason) if finish_reason is not None else "None"
-        logger.info("Gemini candidate finish_reason=%s", finish_reason_str)
+        finish_reason = candidate.finish_reason
+        logger.info("Gemini candidate finish_reason=%s", finish_reason)
 
-        if "IMAGE_SAFETY" in finish_reason_str:
-            raise ValueError("图片内容因安全策略被拒绝，请修改描述后重试")
+        if finish_reason is not None and finish_reason != types.FinishReason.STOP:
+            if finish_reason in _FINISH_REASON_MAP:
+                error_type, user_msg = _FINISH_REASON_MAP[finish_reason]
+                raise GeminiContentPolicyError(
+                    f"Gemini finish_reason={finish_reason}",
+                    user_msg,
+                    error_type,
+                )
+            raise GeminiTechnicalError(
+                f"Gemini 非正常结束 finish_reason={finish_reason}",
+                "生成被意外中断，请稍后重试",
+                "UNEXPECTED_FINISH_REASON",
+            )
 
         if not candidate.content:
-            raise ValueError(f"Gemini 返回内容为空，finish_reason={finish_reason_str}，可能被安全过滤或触发内容限制")
+            raise GeminiTechnicalError(
+                f"Gemini 返回内容为空，finish_reason={finish_reason}",
+                "生成失败，请稍后重试",
+                "NO_CONTENT",
+            )
 
         for part in candidate.content.parts or []:
             if part.text:
-                text = part.text
-                # 提取图片URL（如果有）
                 image_pattern = r'!\[.*?\]\((https?://[^\)]+)\)'
-                match = re.search(image_pattern, text)
+                match = re.search(image_pattern, part.text)
                 if match:
                     new_image_url = match.group(1)
-                    # 移除图片标记，保留文本
-                    new_text = re.sub(image_pattern, '', text).strip()
+                    new_text = re.sub(image_pattern, '', part.text).strip()
                 else:
-                    new_text = text.strip()
-
+                    new_text = part.text.strip()
             elif part.inline_data and part.inline_data.mime_type and part.inline_data.mime_type.startswith("image/"):
                 new_image_url = _inline_data_to_data_url(part.inline_data)
 
@@ -286,22 +403,22 @@ class GeminiCli(LLMClientBase):
         else:
             # 否则使用默认的 system prompt
             system_instruction = (
-                "You are a professional visual storyteller and illustrator. "
-                "Your task is to generate a complete series of 10 sequential illustration panels with accompanying text. "
-                "For each panel, you must provide:\n"
-                "1. A short, engaging narrative text (1-2 sentences suitable for children)\n"
-                "2. An illustration image that matches the text\n\n"
-                "CRITICAL REQUIREMENTS:\n"
-                "- LANGUAGE: Generate the narrative text in the SAME language as the user's input instruction. "
-                "If the user writes in Chinese, respond in Chinese. If in English, respond in English, etc.\n"
-                "- TEXT RULES: Begin IMMEDIATELY with panel 1 text — no preamble, no story outline, no panel labels. "
-                "Each panel's text must be pure story narrative only (1-2 sentences), followed at once by its image. "
-                "Never batch multiple panels' text before generating images.\n"
-                "- Maintain visual consistency: Keep the main character's appearance identical across all panels\n"
-                "- Use a consistent art style and color palette throughout the series\n"
-                "- Each image should look like a standalone scene illustration, NOT a book page — no page borders, no book decorations, no margins\n"
-                "- Ensure cinematic, full-bleed illustrations with clean backgrounds and consistent lighting\n"
-                "- Images must contain NO text, letters, or words whatsoever; text and images are completely separate"
+                "## Role\n"
+                "You are a professional visual storyteller and illustrator. Your goal is to create a seamless 10-panel narrative experience.\n\n"
+                "## Workflow & Tool Use\n"
+                "1. For EVERY panel, you MUST first write the narrative text, then IMMEDIATELY call the image generation tool to create the corresponding illustration.\n"
+                "2. NEVER output the text for multiple panels before generating their respective images.\n"
+                "3. Visual Consistency is paramount:\n"
+                "   - Analyze the uploaded image (if any) to extract the character's features, art style, and color palette.\n"
+                "   - Reuse these specific visual descriptors (e.g., \"a 5-year-old boy with messy red hair and a green hoodie, Ghibli style\") in every image prompt to ensure consistency.\n\n"
+                "## Output Format\n"
+                "[Narrative Text (1-2 sentences in user's language)]\n"
+                "[Call Image Generation Tool with detailed prompt]\n"
+                "(Repeat for each panel)\n\n"
+                "## Constraints\n"
+                "- Illustrations: Full-bleed, cinematic, clean backgrounds, no text/words, no borders.\n"
+                "- Language: Match user's input.\n"
+                "- Sequentiality: Ensure each panel naturally leads to the next."
             )
 
         # 如果模板有风格名称和描述，添加到系统指令中
@@ -378,12 +495,37 @@ class GeminiCli(LLMClientBase):
             ),
         )
 
+        # Step 1: candidatesTokenCount == 0
+        if (response.usage_metadata is not None
+                and response.usage_metadata.candidates_token_count == 0):
+            logger.warning("edit_image_only 内容审核拒绝 | candidatesTokenCount=0")
+            raise GeminiContentPolicyError(
+                "candidatesTokenCount=0，谷歌内容审核阶段拒绝",
+                "您的请求在内容审核阶段被拒绝，请修改描述后重试",
+                "ZERO_CANDIDATES_TOKEN",
+            )
+
         for candidate in response.candidates or []:
-            finish_reason = getattr(candidate, 'finish_reason', None)
-            finish_reason_str = str(finish_reason) if finish_reason is not None else "None"
-            logger.info("edit_image_only candidate finish_reason=%s", finish_reason_str)
-            if "IMAGE_SAFETY" in finish_reason_str:
-                raise ValueError("图片内容因安全策略被拒绝，请修改描述后重试")
+            finish_reason = candidate.finish_reason
+            logger.info("edit_image_only candidate finish_reason=%s", finish_reason)
+
+            # Step 3: finishReason 非 STOP
+            if finish_reason is not None and finish_reason != types.FinishReason.STOP:
+                if finish_reason in _FINISH_REASON_MAP:
+                    error_type, user_msg = _FINISH_REASON_MAP[finish_reason]
+                    logger.warning("edit_image_only 内容拒绝 | finish_reason=%s error_type=%s",
+                                   finish_reason, error_type)
+                    raise GeminiContentPolicyError(
+                        f"Gemini finish_reason={finish_reason}",
+                        user_msg,
+                        error_type,
+                    )
+                raise GeminiTechnicalError(
+                    f"edit_image_only 非正常结束 finish_reason={finish_reason}",
+                    "生成被意外中断，请稍后重试",
+                    "UNEXPECTED_FINISH_REASON",
+                )
+
             if not candidate.content:
                 continue
             for part in candidate.content.parts or []:
@@ -391,7 +533,11 @@ class GeminiCli(LLMClientBase):
                     logger.info("edit_image_only success | mime_type=%s", part.inline_data.mime_type)
                     return _inline_data_to_data_url(part.inline_data)
 
-        raise ValueError("图片生成失败，未获取到图片内容")
+        raise GeminiTechnicalError(
+            "edit_image_only 未获取到图片内容",
+            "图片生成失败，请稍后重试",
+            "NO_IMAGE_RETURNED",
+        )
 
     async def regenerate_pages(
         self,
