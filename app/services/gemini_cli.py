@@ -183,6 +183,8 @@ def _parse_response_to_pages(response) -> List[StorybookPage]:
     logger.info("解析完成 | total_pages=%s", len(pages))
 
     if len(pages) == 0:
+        if current_text:
+            logger.warning("未解析到页面，累积文本内容如下：\n%s", current_text)
         logger.warning("警告：未解析到任何页面 | candidates=%s", [
             {
                 "finish_reason": str(c.finish_reason) if c.finish_reason else None,
