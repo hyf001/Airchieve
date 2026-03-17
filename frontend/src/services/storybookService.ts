@@ -285,7 +285,7 @@ export const updateStorybookPublicStatus = async (
  * 例：https://bucket.oss-cn-xxx.aliyuncs.com/storybooks/1/page_1.png
  *  → /api/v1/oss/storybooks/1/page_1.png
  */
-const toApiUrl = (url: string): string => {
+export const toApiUrl = (url: string): string => {
   if (!url || url.startsWith("data:") || url.startsWith("/")) return url;
   try {
     const { pathname } = new URL(url);

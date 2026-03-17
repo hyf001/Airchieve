@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Edit2, Trash2, Loader2, Send, X, Check, ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Trash2, Loader2, Send, X, Check, ImageIcon, ChevronLeft, ChevronRight, PenLine } from 'lucide-react';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -10,8 +10,10 @@ import {
   deletePage,
   InsufficientPointsError,
   Storybook,
+  toApiUrl,
 } from '../../services/storybookService';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import CanvasEditorModal from '../../components/CanvasEditor/CanvasEditorModal';
 
 interface TempImage {
   url: string;
@@ -39,6 +41,7 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
   const [isSaving, setIsSaving] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [deleteConfirmIndex, setDeleteConfirmIndex] = useState<number | null>(null);
+  const [showCanvasEditor, setShowCanvasEditor] = useState(false);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
   // Reset edit state when page selection changes
@@ -206,14 +209,24 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
           <div className="px-4 pb-4 pt-3 space-y-3">
             {/* Image edit */}
             <div className="space-y-2">
-              <Button
-                variant="outline" size="sm"
-                onClick={() => { setShowImageInput(v => !v); setImageError(null); }}
-                className="gap-1.5 text-slate-600"
-              >
-                <ImageIcon size={14} />
-                编辑图片
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline" size="sm"
+                  onClick={() => { setShowImageInput(v => !v); setImageError(null); }}
+                  className="gap-1.5 text-slate-600"
+                >
+                  <ImageIcon size={14} />
+                  编辑图片
+                </Button>
+                <Button
+                  variant="outline" size="sm"
+                  onClick={() => setShowCanvasEditor(true)}
+                  className="gap-1.5 text-slate-600"
+                >
+                  <PenLine size={14} />
+                  画布编辑
+                </Button>
+              </div>
               {showImageInput && (
                 <div className="flex gap-2">
                   <input
@@ -291,6 +304,20 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteConfirmIndex(null)}
       />
+
+      {showCanvasEditor && page && (
+        <CanvasEditorModal
+          baseImageUrl={toApiUrl(currentDisplayImage)}
+          pageText={draftText}
+          onApply={base64 => {
+            const newIndex = imageHistory.length;
+            setImageHistory(prev => [...prev, { url: base64, instruction: '画布编辑' }]);
+            setActiveImageIndex(newIndex);
+            setShowCanvasEditor(false);
+          }}
+          onClose={() => setShowCanvasEditor(false)}
+        />
+      )}
     </>
   );
 };
