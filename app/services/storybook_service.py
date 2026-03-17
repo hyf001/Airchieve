@@ -14,7 +14,7 @@ from app.core.utils.logger import get_logger
 from app.db.session import async_session_maker
 from app.models.storybook import Storybook, StorybookPage, StorybookStatus
 from app.models.template import Template
-from app.services.gemini_cli import GeminiCli
+from app.services.gemini_cli2 import GeminiCli
 from app.services.llm_cli import LLMError
 from app.services.points_service import (
     check_creation_points,
@@ -25,31 +25,64 @@ from app.services.points_service import (
 logger = get_logger(__name__)
 
 
+async def _upload_page_image_to_oss(
+    storybook_id: int,
+    page: StorybookPage,
+    page_index: int
+) -> StorybookPage:
+    """
+    将单个页面的 image_url 上传到 OSS，并替换为 OSS 公开访问 URL
+
+    Args:
+        storybook_id: 绘本ID
+        page: 页面数据，包含 text 和 image_url
+        page_index: 页面索引（从0开始）
+
+    Returns:
+        StorybookPage: 更新了 image_url 的页面数据
+    """
+    from app.services import oss_service
+
+    url = page.get("image_url", "")
+    if not url:
+        return page
+
+    # 根据 data URL 头或默认值决定扩展名
+    if url.startswith("data:image/png"):
+        ext = ".png"
+    else:
+        ext = ".jpg"
+
+    object_key = f"storybooks/{storybook_id}/page_{page_index}{ext}"
+    try:
+        oss_url = await oss_service.upload_from_url(url, object_key)
+        logger.info("图片上传OSS成功 | storybook_id=%s page=%d object_key=%s",
+                   storybook_id, page_index, object_key)
+        return {**page, "image_url": oss_url}
+    except Exception as e:
+        logger.warning("图片上传OSS失败，保留原URL | storybook_id=%s page=%d error=%s",
+                      storybook_id, page_index, e)
+        return page
+
+
 async def _upload_pages_images_to_oss(
     storybook_id: int,
     pages: List[StorybookPage]
 ) -> List[StorybookPage]:
-    """将每页的 image_url 上传到 OSS，并替换为 OSS 公开访问 URL"""
-    from app.services import oss_service
+    """
+    批量将每页的 image_url 上传到 OSS，并替换为 OSS 公开访问 URL
 
-    async def _upload_one(i: int, page: StorybookPage) -> StorybookPage:
-        url = page.get("image_url", "")
-        if not url:
-            return page
-        # 根据 data URL 头或默认值决定扩展名
-        if url.startswith("data:image/png"):
-            ext = ".png"
-        else:
-            ext = ".jpg"
-        object_key = f"storybooks/{storybook_id}/page_{i}{ext}"
-        try:
-            oss_url = await oss_service.upload_from_url(url, object_key)
-            return {**page, "image_url": oss_url}
-        except Exception as e:
-            logger.warning("图片上传OSS失败，保留原URL | page=%s error=%s", i, e)
-            return page
+    Args:
+        storybook_id: 绘本ID
+        pages: 页面列表
 
-    results = await asyncio.gather(*[_upload_one(i, page) for i, page in enumerate(pages)])
+    Returns:
+        List[StorybookPage]: 更新了 image_url 的页面列表
+    """
+    results = await asyncio.gather(*[
+        _upload_page_image_to_oss(storybook_id, page, i)
+        for i, page in enumerate(pages)
+    ])
     return list(results)
 
 
@@ -76,26 +109,45 @@ async def _generate_storybook_content(
     try:
         llm_client = GeminiCli()
 
-        pages = await llm_client.create_story(
+        # 流式处理：每生成一页就立即上传到 OSS 并更新数据库
+        pages = []
+        page_count = 0
+
+        async for page in llm_client.create_story(
                 instruction=instruction,
                 template=template,
                 images=images
-            )
+            ):
+            page_count += 1
+            logger.info("生成第 %d 页 | storybook_id=%s", page_count, storybook_id)
 
-        # 将图片转存到 OSS
-        if pages:
+            # 立即上传单页图片到 OSS
             oss_start = time.time()
-            pages = await _upload_pages_images_to_oss(storybook_id, pages)
-            logger.info("图片转存OSS完成 | storybook_id=%s pages=%s elapsed=%.2fs", storybook_id, len(pages), time.time() - oss_start)
+            page = await _upload_page_image_to_oss(storybook_id, page, page_count - 1)
+            logger.info("第 %d 页图片上传OSS完成 | storybook_id=%s elapsed=%.2fs",
+                       page_count, storybook_id, time.time() - oss_start)
 
-        # 更新绘本内容
+            # 添加到页面列表
+            pages.append(page)
+
+            # 立即更新数据库（增量更新）
+            async with async_session_maker() as session:
+                result = await session.execute(
+                    select(Storybook).where(Storybook.id == storybook_id)
+                )
+                storybook = result.scalar_one_or_none()
+                if storybook:
+                    storybook.pages = pages
+                    await session.commit()
+                    logger.info("更新数据库进度 | storybook_id=%s pages=%d", storybook_id, len(pages))
+
+        # 所有页面生成完成，更新状态为 finished
         async with async_session_maker() as session:
             result = await session.execute(
                 select(Storybook).where(Storybook.id == storybook_id)
             )
             storybook = result.scalar_one_or_none()
             if storybook:
-                storybook.pages = pages
                 storybook.status = "finished"
                 storybook.error_message = None
                 await session.commit()

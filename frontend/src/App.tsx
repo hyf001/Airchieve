@@ -6,7 +6,7 @@ import EditorView from './pages/EditorView';
 import TemplatesView from './pages/TemplatesView';
 import UserProfileView from './pages/UserProfileView';
 import UserManagementView from './pages/UserManagementView';
-import { Loader2 } from 'lucide-react';
+import LoadingSpinner from './components/LoadingSpinner';
 import { ToastContextProvider } from './components/ui/toast-provider';
 import { Toaster } from './components/ui/toaster';
 
@@ -34,7 +34,7 @@ const InnerApp: React.FC = () => {
   if (isLoading) {
     return (
       <div className="h-screen flex items-center justify-center bg-[#061428]">
-        <Loader2 size={32} className="text-indigo-600 animate-spin" />
+        <LoadingSpinner size={48} />
       </div>
     );
   }

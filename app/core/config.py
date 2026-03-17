@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     GEMINI_API_URL: str | None = None
     GEMINI_MODEL: str = "gemini-3-pro-image-preview"  # 默认模型
     GEMINI_EDIT_MODEL: str = "gemini-2.0-flash-preview-image-generation"  # 图片编辑模型
+    GEMINI_TEXT_MODEL: str = "gemini-2.5-flash-lite-preview-09-2025"  # 文本生成模型
 
     # Anthropic API
     ANTHROPIC_AUTH_TOKEN: str = ""

@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StorybookPage } from '../../services/storybookService';
 
@@ -7,9 +7,10 @@ interface ReadModeProps {
   pages: StorybookPage[];
   currentIndex: number;
   onIndexChange: (index: number) => void;
+  isGenerating?: boolean;
 }
 
-const ReadMode: React.FC<ReadModeProps> = ({ pages, currentIndex, onIndexChange }) => {
+const ReadMode: React.FC<ReadModeProps> = ({ pages, currentIndex, onIndexChange, isGenerating }) => {
   const prev = useCallback(() => {
     if (currentIndex > 0) onIndexChange(currentIndex - 1);
   }, [currentIndex, onIndexChange]);
@@ -66,7 +67,14 @@ const ReadMode: React.FC<ReadModeProps> = ({ pages, currentIndex, onIndexChange 
           </div>
         </div>
 
-        {/* Right nav */}
+        {/* "Next page incoming" hint when on last real page */}
+        {isGenerating && currentIndex === pages.length - 1 && (
+          <div className="mt-3 flex items-center justify-center gap-1.5 text-xs text-[#00b0b8] font-medium">
+            <Loader2 size={12} className="animate-spin" />
+            下一页正在绘制中…
+          </div>
+        )}
+
         <Button
           variant="ghost" size="icon"
           onClick={next}
@@ -78,7 +86,7 @@ const ReadMode: React.FC<ReadModeProps> = ({ pages, currentIndex, onIndexChange 
       </div>
 
       {/* Dot navigation */}
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 flex gap-2 items-center">
         {pages.map((_, idx) => (
           <button
             key={idx}
@@ -88,6 +96,9 @@ const ReadMode: React.FC<ReadModeProps> = ({ pages, currentIndex, onIndexChange 
             }`}
           />
         ))}
+        {isGenerating && (
+          <div className="w-1.5 h-1.5 rounded-full bg-[#00CDD4] animate-pulse" />
+        )}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Loader2, BookOpen } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BookOpen } from 'lucide-react';
+import LoadingSpinner from './LoadingSpinner';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Dialog, DialogPortal, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
@@ -107,7 +108,7 @@ const StorybookPreview: React.FC<StorybookPreviewProps> = ({
             <div className="relative bg-slate-950 rounded-b-2xl overflow-hidden" style={{ aspectRatio: '16/9' }}>
               {loadingPages ? (
                 <div className="w-full h-full flex items-center justify-center">
-                  <Loader2 size={36} className="animate-spin text-indigo-400" />
+                  <LoadingSpinner size={36} />
                 </div>
               ) : currentPage?.image_url ? (
                 <img

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Edit2, Trash2, Loader2, Send, X, Check, ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import LoadingSpinner from '../../components/LoadingSpinner';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -149,7 +150,7 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
             />
             {isGeneratingImage && (
               <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-2">
-                <Loader2 className="animate-spin text-white" size={32} />
+                <LoadingSpinner size={32} />
                 <span className="text-white text-sm font-medium">AI 生成中，请不要刷新页面…</span>
               </div>
             )}

@@ -1,9 +1,10 @@
 """
-Gemini CLI Implementation
-Gemini 大模型客户端实现
+Gemini CLI Implementation 2
+Gemini 大模型客户端实现（版本2：分步生成）
 """
 import re
 import base64
+import json
 from typing import List, Optional, AsyncGenerator
 
 from google import genai
@@ -18,7 +19,7 @@ from app.models.template import Template
 logger = get_logger(__name__)
 
 
-# ============ 自定义异常 ============
+# ============ 自定���异常 ============
 
 class GeminiContentPolicyError(LLMError):
     """Gemini 内容策略拒绝错误"""
@@ -371,8 +372,126 @@ def _parse_response_to_single_page(response: types.GenerateContentResponse, fall
     }
 
 
+def _extract_story_texts(response_text: str) -> List[str]:
+    """
+    从模型响应中提取故事文本列表
+
+    Args:
+        response_text: 模型返回的文本
+
+    Returns:
+        List[str]: 每页的故事文本列表
+    """
+    # 尝试解析 JSON 格式
+    try:
+        # 尝试找到 JSON 数组
+        json_match = re.search(r'\[\s*\{.*\}\s*\]', response_text, re.DOTALL)
+        if json_match:
+            data = json.loads(json_match.group(0))
+            if isinstance(data, list):
+                texts = []
+                for item in data:
+                    if isinstance(item, dict) and 'text' in item:
+                        texts.append(item['text'])
+                    elif isinstance(item, str):
+                        texts.append(item)
+                if texts:
+                    logger.info("从 JSON 中提取到 %d 条故事文本", len(texts))
+                    return texts
+    except (json.JSONDecodeError, Exception) as e:
+        logger.info("JSON 解析失败: %s，尝试其他方法", e)
+
+    # 尝试按行分割
+    lines = response_text.strip().split('\n')
+    texts = []
+    current_text = []
+
+    for line in lines:
+        line = line.strip()
+        # 跳过空行和标题
+        if not line or line.startswith('#') or line.startswith('Page'):
+            if current_text:
+                texts.append(' '.join(current_text))
+                current_text = []
+            continue
+
+        # 检查是否是新的页面标记（如 "1.", "Page 1", "第一页" 等）
+        if re.match(r'^(\d+\.|Page\s+\d+|第[一二三四五六七八九十\d]+\s*页)', line):
+            if current_text:
+                texts.append(' '.join(current_text))
+                current_text = []
+            # 提取实际文本内容（去掉序号）
+            text_content = re.sub(r'^(\d+\.|Page\s+\d+|第[一二三四五六七八九十\d]+\s*页)\s*', '', line)
+            if text_content:
+                current_text.append(text_content)
+        else:
+            current_text.append(line)
+
+    # 添加最后一个文本
+    if current_text:
+        texts.append(' '.join(current_text))
+
+    # 如果仍然没有提取到有效文本，尝试按段落分割
+    if not texts:
+        paragraphs = re.split(r'\n\n+', response_text.strip())
+        texts = [p.strip() for p in paragraphs if p.strip()]
+
+    logger.info("提取到 %d 条故事文本", len(texts))
+    return texts
+
+
+def _parse_images_response(response: types.GenerateContentResponse) -> List[str]:
+    """
+    解析图片生成响应，提取所有图片的 data URL
+
+    Args:
+        response: Gemini API 响应
+
+    Returns:
+        List[str]: 图片 data URL 列表
+    """
+    if not response.candidates:
+        raise GeminiTechnicalError(
+            f"Gemini 未返回任何候选内容，prompt_feedback={response.prompt_feedback}",
+            "系统出错，请稍后重试",
+            "NO_CANDIDATES",
+        )
+
+    images = []
+
+    for candidate in response.candidates:
+        finish_reason = candidate.finish_reason
+        logger.info("Gemini candidate finish_reason=%s", finish_reason)
+
+        if finish_reason is not None and finish_reason != types.FinishReason.STOP:
+            if finish_reason in _FINISH_REASON_MAP:
+                error_type, user_msg = _FINISH_REASON_MAP[finish_reason]
+                raise GeminiContentPolicyError(
+                    f"Gemini finish_reason={finish_reason}",
+                    user_msg,
+                    error_type,
+                )
+            raise GeminiTechnicalError(
+                f"Gemini 非正常结束 finish_reason={finish_reason}",
+                "生成被意外中断，请稍后重试",
+                "UNEXPECTED_FINISH_REASON",
+            )
+
+        if not candidate.content:
+            continue
+
+        for part in candidate.content.parts or []:
+            if part.inline_data and part.inline_data.mime_type and part.inline_data.mime_type.startswith("image/"):
+                image_url = _inline_data_to_data_url(part.inline_data)
+                images.append(image_url)
+                logger.info("提取到图片 | mime_type=%s", part.inline_data.mime_type)
+
+    logger.info("总共提取到 %d 张图片", len(images))
+    return images
+
+
 class GeminiCli(LLMClientBase):
-    """Gemini 大模型客户端实现"""
+    """Gemini 大模型客户端实现（版本2：分步生成）"""
 
     async def create_story(
         self,
@@ -381,9 +500,10 @@ class GeminiCli(LLMClientBase):
         images: Optional[List[str]] = None
     ) -> AsyncGenerator[StorybookPage, None]:
         """
-        创建故事（流式生成）
+        创建故事（流式分步生成版本）
 
-        根据用户指令生成绘本内容（包含文本和图片），每生成一页就返回一页。
+        第一步：先生成每页的故事文本
+        第二步：逐页生成图片，每生成一页就返回一页
 
         Args:
             instruction: 用户指令/故事描述
@@ -395,43 +515,42 @@ class GeminiCli(LLMClientBase):
         """
         client = _get_client()
 
+        # ============ 第一步：生成故事文本 ============
+
+        logger.info("开始第一步：生成故事文本")
+
         # System Prompt：定义系统角色和基本规则
-        # 如果提供了 template，从中提取 systemprompt、name 和 description
         if template and template.systemprompt:
-            # 如果模板有 systemprompt，使用它作为基础
             system_instruction = template.systemprompt
         else:
-            # 否则使用默认的 system prompt
             system_instruction = (
                 "## Role\n"
-                "You are a professional visual storyteller and illustrator. Your goal is to create a seamless 10-panel narrative experience.\n\n"
-                "## Workflow & Tool Use\n"
-                "1. For EVERY panel, you MUST first write the narrative text, then IMMEDIATELY call the image generation tool to create the corresponding illustration.\n"
-                "2. NEVER output the text for multiple panels before generating their respective images.\n"
-                "3. Visual Consistency is paramount:\n"
-                "   - Analyze the uploaded image (if any) to extract the character's features, art style, and color palette.\n"
-                "   - Reuse these specific visual descriptors (e.g., \"a 5-year-old boy with messy red hair and a green hoodie, Ghibli style\") in every image prompt to ensure consistency.\n\n"
+                "You are a professional children's storybook writer. "
+                "Your goal is to create engaging 10-panel stories for children.\n\n"
+                "## Task\n"
+                "Write exactly 10 short narrative texts (1-2 sentences each) for a children's storybook. "
+                "Each text should be simple, engaging, and suitable for children.\n\n"
                 "## Output Format\n"
-                "[Narrative Text (1-2 sentences in user's language)]\n"
-                "[Call Image Generation Tool with detailed prompt]\n"
-                "(Repeat for each panel)\n\n"
+                "Return a JSON array with 10 objects, each containing a 'text' field:\n"
+                "```\n"
+                "[\n"
+                "  {\"text\": \"First panel story text...\"},\n"
+                "  {\"text\": \"Second panel story text...\"},\n"
+                "  ...\n"
+                "]\n"
+                "```\n\n"
                 "## Constraints\n"
-                "- Illustrations: Full-bleed, cinematic, clean backgrounds, no text/words, no borders.\n"
-                "- Language: Match user's input.\n"
-                "- Sequentiality: Ensure each panel naturally leads to the next."
+                "- Language: Match user's input language\n"
+                "- Length: Exactly 10 panels\n"
+                "- Each text: 1-2 sentences, simple and engaging\n"
+                "- Story flow: Each panel should naturally lead to the next\n"
+                "- Content: Pure story narrative only, no descriptions or labels"
             )
-
-        # 如果模板有风格名称和描述，添加到系统指令中
-        if template and template.name:
-            system_instruction += f"\n\nART STYLE: {template.name}"
-            if template.description:
-                system_instruction += f"\n{template.description}"
 
         # User Prompt：用户的具体创意要求
         user_prompt = (
-            f"MUST generate exactly 10 illustrations regardless of uploaded images. "
-            f"Create a 10-panel illustrated story based on: \"{instruction}\". "
-            f"Each panel must have text + image (full-bleed, no framing, no text in image)."
+            f"Create a 10-panel children's story based on: \"{instruction}\". "
+            f"Return the result as a JSON array with 10 objects, each containing a 'text' field with the story text for that panel."
         )
 
         # 构建请求内容
@@ -441,21 +560,138 @@ class GeminiCli(LLMClientBase):
         if images:
             parts.extend(_build_image_parts(images))
 
-        # 调用 Gemini API
+        # 调用 Gemini API 生成故事文本（JSON 格式）
         response = await client.aio.models.generate_content(
-            model=settings.GEMINI_MODEL,
+            model=settings.GEMINI_TEXT_MODEL,  # 使用文本模型
             contents=types.Content(parts=parts),
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
-                response_modalities=["TEXT", "IMAGE"],
-                image_config=types.ImageConfig(aspect_ratio="16:9"),
+                response_modalities=["TEXT"],
+                response_mime_type="application/json",  # 指定返回 JSON 格式
             ),
         )
 
-        # 解析响应并逐页 yield
-        pages = _parse_response_to_pages(response)
-        for page in pages:
-            yield page
+        # 解析 JSON 故事文本
+        story_texts = []
+        if response.candidates and response.candidates[0].content:
+            for part in response.candidates[0].content.parts or []:
+                if part.text:
+                    try:
+                        data = json.loads(part.text)
+                        if isinstance(data, list):
+                            story_texts = [item['text'] if isinstance(item, dict) else item for item in data]
+                        logger.info("从 JSON 解析到 %d 条故事文本", len(story_texts))
+                    except (json.JSONDecodeError, KeyError) as e:
+                        logger.warning("JSON 解析失败: %s，回退到文本提取", e)
+                        story_texts = _extract_story_texts(part.text)
+                    break
+
+        if not story_texts or len(story_texts) < 10:
+            logger.warning("生成的故事文本不足10条，实际: %d", len(story_texts))
+            # 补充到10条
+            while len(story_texts) < 10:
+                story_texts.append(f"Story panel {len(story_texts) + 1}")
+
+        logger.info("故事文本生成完成 | count=%d", len(story_texts))
+
+        # ============ 第二步：逐页生成图片并返回 ============
+
+        logger.info("开始第二步：逐页生成图片并流式返回")
+
+        # 图片生成的系统指令（专注于视觉风格）
+        image_system_instruction = (
+            "You are a professional children's book illustrator. "
+            "Your task is to create a single illustration based on the provided story text. "
+            "Create a full-bleed cinematic scene with clean backgrounds. "
+            "CRITICAL: If reference images are provided (especially the previous page), "
+            "you MUST maintain visual consistency - same characters, art style, color palette, and overall aesthetic. "
+            "Use the reference images as a style guide to ensure consistency across the storybook."
+        )
+
+        # 添加模板风格到系统指令
+        if template and template.name:
+            image_system_instruction += f"\n\nART STYLE: {template.name}"
+            if template.description:
+                image_system_instruction += f"\n{template.description}"
+
+        image_urls = []
+
+        # 逐页生成图片并 yield
+        for i, story_text in enumerate(story_texts):
+            try:
+                logger.info("生成第 %d 页图片 | text=%s", i + 1, story_text[:50])
+
+                # 构建单张图片生成提示词
+                # 首先提供完整的故事情节上下文
+                full_story_context = "Complete Story Context:\n"
+                for idx, text in enumerate(story_texts, 1):
+                    full_story_context += f"Page {idx}: {text}\n"
+
+                single_image_prompt = (
+                    f"{full_story_context}\n\n"
+                    f"CURRENT TASK: Generate illustration for PAGE {i + 1} ONLY\n\n"
+                    f"Current page text: {story_text}\n\n"
+                    f"Requirements:\n"
+                    f"- Create a single full-bleed cinematic illustration for PAGE {i + 1}\n"
+                    f"- The illustration should match the current page text\n"
+                    f"- Consider the complete story context above to understand the narrative flow\n"
+                    f"- No text, letters, or words in the image\n"
+                    f"- Clean background, no borders or frames\n"
+                    f"- Aspect ratio: 16:9\n"
+                    f"- This is page {i + 1} of {len(story_texts)} total pages"
+                )
+
+                # 调用 Gemini API 生成单张图片
+                parts = [types.Part(text=single_image_prompt)]
+
+                # 收集参考图片
+                reference_images = []
+
+                # 第一页：使用用户提供的参考图片
+                if i == 0 and images:
+                    reference_images.extend(images)
+                    logger.info("第 %d 页使用用户上传的图片作为参考 | user_images=%d", i + 1, len(images))
+                # 第二页及以后：只使用上一页生成的图片
+                elif i > 0 and len(image_urls) > 0:
+                    reference_images.append(image_urls[-1])
+                    logger.info("第 %d 页使用上一页图片作为参考 | previous_page=%d", i + 1, i)
+
+                # 将所有参考图片添加到请求中
+                if reference_images:
+                    parts.extend(_build_image_parts(reference_images))
+
+                image_response = await client.aio.models.generate_content(
+                    model=settings.GEMINI_MODEL,
+                    contents=types.Content(parts=parts),
+                    config=types.GenerateContentConfig(
+                        system_instruction=image_system_instruction,
+                        response_modalities=["IMAGE"],
+                        image_config=types.ImageConfig(aspect_ratio="16:9",image_size="1k"),
+                    ),
+                )
+
+                # 解析单张图片响应
+                response_images = _parse_images_response(image_response)
+                if response_images:
+                    image_url = response_images[0]
+                    image_urls.append(image_url)
+                    logger.info("第 %d 页图片生成成功 | total=%d", i + 1, len(image_urls))
+
+                    # 立即 yield 这一页
+                    yield {
+                        "text": story_text,
+                        "image_url": image_url
+                    }
+                    logger.info("已返回第 %d 页", i + 1)
+                else:
+                    logger.warning("第 %d 页图片生成失败，跳过", i + 1)
+
+            except Exception as e:
+                logger.exception("第 %d 页图片生成异常 | error=%s", i + 1, e)
+                # 继续生成下一页，不中断整个流程
+                continue
+
+        logger.info("故事创建完成 | total_pages=%d", len(image_urls))
 
     async def edit_image_only(
         self,

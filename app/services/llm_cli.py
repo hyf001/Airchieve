@@ -4,7 +4,7 @@ LLM Client Base Interface
 用于处理绘本生成的核心方法
 """
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, AsyncGenerator
 from app.models.storybook import StorybookPage
 from app.models.template import Template
 
@@ -28,26 +28,31 @@ class LLMClientBase(ABC):
         instruction: str,
         template: Optional[Template] = None,
         images: Optional[List[str]] = None
-    ) -> List[StorybookPage]:
+    ) -> AsyncGenerator[StorybookPage, None]:
         """
-        创建故事
+        创建故事（流式生成）
 
-        根据用户指令、模板配置和可选的参考图片，生成完整的绘本内容（包含文本和图片）。
+        根据用户指令、模板配置和可选的参考图片，逐页生成绘本内容（包含文本和图片）。
+        每生成一页就通过异步生成器返回，实现流式输出。
 
         Args:
             instruction: 用户指令/故事描述，例如"一个关于小兔子找朋友的故事"
             template: 模板对象（可选），包含风格名称、描述和系统提示词
             images: base64编码的参考图片列表（可选），用于参考风格或角色
 
-        Returns:
-            List[StorybookPage]: 生成的页面列表，每页包含文本内容和图片URL
-                [{
-                    "text": "第一页的文本内容",
-                    "image_url": "https://generated-image-url-1"
-                }, ...]
+        Yields:
+            StorybookPage: 每次yield生成的一页，包含文本内容和图片URL
+                {
+                    "text": "当前页的文本内容",
+                    "image_url": "https://generated-image-url"
+                }
 
         Raises:
             Exception: 当生成失败时抛出异常
+
+        Example:
+            async for page in llm_client.create_story("小兔子的故事"):
+                print(f"生成页面: {page['text']}")
         """
         pass
 

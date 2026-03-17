@@ -7,7 +7,6 @@ import {
   Loader2,
   Trash2,
   Plus,
-  Sparkles,
   AlertCircle,
   Download,
   Gift,
@@ -32,6 +31,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
+import ProgressCaterpillar from '../components/ProgressCaterpillar';
 import ReadMode from './editor/ReadMode';
 import EditMode from './editor/EditMode';
 import ReorderMode from './editor/ReorderMode';
@@ -69,11 +69,9 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
 
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
-  const [creationProgress, setCreationProgress] = useState(0);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 
-  const creationStartTimeRef = React.useRef<number | null>(null);
-  const CREATION_ESTIMATED_MS = 120_000;
+  const prevPagesLengthRef = React.useRef<number>(0);
 
   // ---- 下载假进度 ----
   useEffect(() => {
@@ -91,32 +89,20 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
     return () => clearInterval(id);
   }, [isDownloading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ---- 创作假进度 ----
-  useEffect(() => {
-    const status = currentStorybook?.status;
-    if (!status || TERMINAL_STATUSES.has(status)) {
-      creationStartTimeRef.current = null;
-      setCreationProgress(status === 'finished' ? 100 : 0);
-      return;
-    }
-    if (!creationStartTimeRef.current) creationStartTimeRef.current = Date.now();
-    const update = () => {
-      const pct = Math.min(95, ((Date.now() - creationStartTimeRef.current!) / CREATION_ESTIMATED_MS) * 100);
-      setCreationProgress(pct);
-    };
-    update();
-    const id = setInterval(update, 1000);
-    return () => clearInterval(id);
-  }, [currentStorybook?.status]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // ---- 轮询 ----
   const handlePollResult = useCallback((book: Storybook) => {
+    const newCount = book.pages?.length ?? 0;
+    if (newCount > prevPagesLengthRef.current) {
+      toast({ title: `第 ${newCount} 页已生成 ✓` });
+      setCurrentPageIndex(newCount - 1);
+    }
+    prevPagesLengthRef.current = newCount;
     setCurrentStorybook(book);
     setStorybookList(prev => prev.map(item =>
       item.id === book.id ? { ...item, status: book.status } : item
     ));
     return { stop: TERMINAL_STATUSES.has(book.status) };
-  }, []);
+  }, [toast]);
 
   const { start: startPolling, stop: stopPolling } = usePolling(getStorybook, handlePollResult);
 
@@ -139,6 +125,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
     try {
       const book = await getStorybook(id);
       setCurrentStorybook(book);
+      prevPagesLengthRef.current = book.pages?.length ?? 0;
       setStorybookList(prev => {
         const idx = prev.findIndex(item => item.id === id);
         if (idx !== -1) {
@@ -228,6 +215,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
   };
 
   const pages = currentStorybook?.pages || [];
+  const isCreating = currentStorybook?.status === 'creating' || currentStorybook?.status === 'updating';
   const canEditModes = currentStorybook?.status === 'finished' && pages.length > 0;
 
   const modeTabs: { key: EditorMode; label: string; icon: React.ReactNode }[] = [
@@ -374,17 +362,8 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
             <main className="flex-1 relative flex flex-col items-center justify-center p-4 md:p-8 lg:p-12 overflow-auto">
               {/* Download progress bar */}
               {isDownloading && (
-                <div className="absolute top-0 left-0 right-0 z-50">
-                  <div className="h-1.5 bg-slate-200">
-                    <div
-                      className="h-full bg-[#00CDD4] transition-all duration-500 ease-out"
-                      style={{ width: `${downloadProgress}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center justify-center gap-2 py-2 bg-slate-50/90 backdrop-blur-sm text-slate-600 text-sm font-medium">
-                    <Loader2 size={14} className="animate-spin" />
-                    正在制作，请稍后…{Math.round(downloadProgress)}%
-                  </div>
+                <div className="absolute top-0 left-0 right-0 z-50 px-4 pt-2 pb-1 bg-slate-50/90 backdrop-blur-sm">
+                  <ProgressCaterpillar progress={downloadProgress} showLabel />
                 </div>
               )}
 
@@ -413,35 +392,34 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                 </div>
               )}
 
-              {!loading && (currentStorybook.status === 'init' || currentStorybook.status === 'creating' || currentStorybook.status === 'updating') && (
+              {!loading && (currentStorybook.status === 'init' || (isCreating && pages.length === 0)) && (
                 <div className="w-full h-full flex items-center justify-center">
                   <div className="text-center space-y-6 max-w-sm w-full px-8">
-                    <div className="relative inline-block">
-                      <div className="w-24 h-24 border-8 border-slate-100 border-t-[#00CDD4] rounded-full animate-spin" />
-                      <Sparkles className="absolute inset-0 m-auto text-[#00CDD4] animate-pulse" size={32} />
-                    </div>
+                    <LoadingSpinner size={64} />
                     <div>
                       <h3 className="text-xl font-lexend font-bold text-slate-800 mb-1">正在装帧您的故事…</h3>
                       <p className="text-slate-400 text-sm">正在将您的灵感转化为精美的插画与排版</p>
+                      <p className="text-slate-300 text-xs mt-2">预计 2 分钟内完成</p>
                     </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-xs text-slate-400">
-                        <span>预计 2 分钟内完成</span>
-                        <span>{Math.round(creationProgress)}%</span>
-                      </div>
-                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-[#00CDD4] rounded-full transition-all duration-1000 ease-out"
-                          style={{ width: `${creationProgress}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-slate-300">
-                        {creationProgress < 30 ? '正在构思故事结构…'
-                          : creationProgress < 60 ? '正在绘制插图…'
-                          : creationProgress < 85 ? '正在排版文字…'
-                          : '即将完成…'}
-                      </p>
+                  </div>
+                </div>
+              )}
+
+              {!loading && isCreating && pages.length > 0 && (
+                <div className="w-full flex flex-col items-center gap-4">
+                  <div className="w-full absolute top-0 left-0 right-0 z-40">
+                    <div className="flex items-center justify-center gap-2 py-1.5 bg-[#00CDD4]/10 text-[#009fa5] text-xs font-medium">
+                      <Loader2 size={12} className="animate-spin" />
+                      正在生成更多页面… 已完成 {pages.length} 页
                     </div>
+                  </div>
+                  <div className="mt-10 w-full flex justify-center">
+                    <ReadMode
+                      pages={pages}
+                      currentIndex={currentPageIndex}
+                      onIndexChange={setCurrentPageIndex}
+                      isGenerating
+                    />
                   </div>
                 </div>
               )}
