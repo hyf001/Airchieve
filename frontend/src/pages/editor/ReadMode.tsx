@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StorybookPage } from '../../services/storybookService';
 
@@ -67,10 +67,9 @@ const ReadMode: React.FC<ReadModeProps> = ({ pages, currentIndex, onIndexChange,
           </div>
         </div>
 
-        {/* "Next page incoming" hint when on last real page */}
+
         {isGenerating && currentIndex === pages.length - 1 && (
-          <div className="mt-3 flex items-center justify-center gap-1.5 text-xs text-[#00b0b8] font-medium">
-            <Loader2 size={12} className="animate-spin" />
+          <div className="mt-3 flex items-center justify-center text-xs text-[#00b0b8] font-medium">
             下一页正在绘制中…
           </div>
         )}

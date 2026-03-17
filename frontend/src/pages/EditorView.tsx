@@ -4,8 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   ChevronLeft,
   BookOpen,
-  Loader2,
-  Trash2,
+Trash2,
   Plus,
   AlertCircle,
   Download,
@@ -409,7 +408,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                 <div className="w-full flex flex-col items-center gap-4">
                   <div className="w-full absolute top-0 left-0 right-0 z-40">
                     <div className="flex items-center justify-center gap-2 py-1.5 bg-[#00CDD4]/10 text-[#009fa5] text-xs font-medium">
-                      <Loader2 size={12} className="animate-spin" />
+                      <LoadingSpinner size={20} />
                       正在生成更多页面… 已完成 {pages.length} 页
                     </div>
                   </div>

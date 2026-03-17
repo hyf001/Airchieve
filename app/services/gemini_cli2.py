@@ -647,14 +647,14 @@ class GeminiCli(LLMClientBase):
                 # 收集参考图片
                 reference_images = []
 
-                # 第一页：使用用户提供的参考图片
-                if i == 0 and images:
+                # 每页都带上用户输入的图片
+                if images:
                     reference_images.extend(images)
                     logger.info("第 %d 页使用用户上传的图片作为参考 | user_images=%d", i + 1, len(images))
-                # 第二页及以后：只使用上一页生成的图片
-                elif i > 0 and len(image_urls) > 0:
+                # 第二页及以后：额外带上上一页生成的图片
+                if i > 0 and len(image_urls) > 0:
                     reference_images.append(image_urls[-1])
-                    logger.info("第 %d 页使用上一页图片作为参考 | previous_page=%d", i + 1, i)
+                    logger.info("第 %d 页额外使用上一页图片作为参考 | previous_page=%d", i + 1, i)
 
                 # 将所有参考图片添加到请求中
                 if reference_images:
