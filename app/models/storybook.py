@@ -29,16 +29,25 @@ class JsonText(TypeDecorator):
         return value
 
 
-__all__ = ["Storybook", "StorybookPage", "StorybookStatus"]
+__all__ = ["Storybook", "StorybookPage", "StorybookStatus", "Storyboard"]
 
 
 # Storybook 状态字面量类型
 StorybookStatus = Literal["init", "creating", "updating", "finished", "error"]
 
 
+class Storyboard(TypedDict):
+    scene: str       # 场景环境
+    characters: str  # 人物与动作
+    shot: str        # 景别构图
+    color: str       # 色调氛围
+    lighting: str    # 光线
+
+
 class StorybookPage(TypedDict):
-    text:str
-    image_url:str
+    text: str
+    image_url: str
+    storyboard: Optional[Storyboard]
 
 class Storybook(Base):
     """绘本表"""

@@ -13,7 +13,7 @@ from google.genai import types
 from app.core.config import settings
 from app.core.utils.logger import get_logger
 from app.services.llm_cli import LLMClientBase, LLMError
-from app.models.storybook import StorybookPage
+from app.models.storybook import StorybookPage, Storyboard
 from app.models.template import Template
 
 logger = get_logger(__name__)
@@ -525,32 +525,42 @@ class GeminiCli(LLMClientBase):
         else:
             system_instruction = (
                 "## Role\n"
-                "You are a professional children's storybook writer. "
-                "Your goal is to create engaging 10-panel stories for children.\n\n"
+                "You are a professional children's storybook writer and visual director. "
+                "Your goal is to create engaging 10-panel stories with detailed visual storyboards.\n\n"
                 "## Task\n"
-                "Write exactly 10 short narrative texts (1-2 sentences each) for a children's storybook. "
-                "Each text should be simple, engaging, and suitable for children.\n\n"
+                "Write exactly 10 panels for a children's storybook. "
+                "For each panel, provide both the story text and a storyboard describing the illustration.\n\n"
                 "## Output Format\n"
-                "Return a JSON array with 10 objects, each containing a 'text' field:\n"
+                "Return a JSON array with exactly 10 objects:\n"
                 "```\n"
                 "[\n"
-                "  {\"text\": \"First panel story text...\"},\n"
-                "  {\"text\": \"Second panel story text...\"},\n"
-                "  ...\n"
+                "  {\n"
+                "    \"text\": \"Story narrative text (1-2 sentences)\",\n"
+                "    \"storyboard\": {\n"
+                "      \"scene\": \"Scene environment, e.g. sunlit forest clearing with tall oak trees\",\n"
+                "      \"characters\": \"Character actions, posture and expression for this panel, e.g. kneeling down with arms outstretched, mouth open in surprise — describe what they are DOING and FEELING, not what they look like\",\n"
+                "      \"shot\": \"Shot type and composition, e.g. medium shot, subject centered\",\n"
+                "      \"color\": \"Color tone and mood, e.g. warm golden tones, soft afternoon light\",\n"
+                "      \"lighting\": \"Lighting direction and quality, e.g. dappled sunlight from upper left\"\n"
+                "    }\n"
+                "  }\n"
                 "]\n"
                 "```\n\n"
                 "## Constraints\n"
-                "- Language: Match user's input language\n"
+                "- Language: Match user's input language for 'text' field; storyboard fields must be in English\n"
                 "- Length: Exactly 10 panels\n"
                 "- Each text: 1-2 sentences, simple and engaging\n"
                 "- Story flow: Each panel should naturally lead to the next\n"
-                "- Content: Pure story narrative only, no descriptions or labels"
+                "- Storyboard: Be specific and visual, avoid abstract descriptions\n"
+                "- 'characters' field: describe actions, posture, and expressions ONLY — do not describe physical appearance or clothing\n"
+                "- IMPORTANT: Every panel MUST include both 'text' and 'storyboard' fields; omitting storyboard is not allowed"
             )
 
         # User Prompt：用户的具体创意要求
         user_prompt = (
             f"Create a 10-panel children's story based on: \"{instruction}\". "
-            f"Return the result as a JSON array with 10 objects, each containing a 'text' field with the story text for that panel."
+            f"Return a JSON array with 10 objects, each containing a 'text' field (story narrative) "
+            f"and a 'storyboard' object with fields: scene, characters, shot, color, lighting."
         )
 
         # 构建请求内容
@@ -571,26 +581,32 @@ class GeminiCli(LLMClientBase):
             ),
         )
 
-        # 解析 JSON 故事文本
-        story_texts = []
+        # 解析 JSON 故事文本 + 分镜
+        story_texts: list[str] = []
+        story_storyboards: list[Optional[Storyboard]] = []
         if response.candidates and response.candidates[0].content:
             for part in response.candidates[0].content.parts or []:
                 if part.text:
                     try:
                         data = json.loads(part.text)
                         if isinstance(data, list):
-                            story_texts = [item['text'] if isinstance(item, dict) else item for item in data]
-                        logger.info("从 JSON 解析到 %d 条故事文本", len(story_texts))
+                            for item in data:
+                                if isinstance(item, dict):
+                                    story_texts.append(item.get('text', ''))
+                                    sb = item.get('storyboard')
+                                    story_storyboards.append(sb if isinstance(sb, dict) else None)  # type: ignore[arg-type]
+                                else:
+                                    story_texts.append(str(item))
+                                    story_storyboards.append(None)
+                        logger.info("从 JSON 解析到 %d 条故事文本+分镜", len(story_texts))
                     except (json.JSONDecodeError, KeyError) as e:
                         logger.warning("JSON 解析失败: %s，回退到文本提取", e)
                         story_texts = _extract_story_texts(part.text)
+                        story_storyboards = [None] * len(story_texts)
                     break
 
-        if not story_texts or len(story_texts) < 10:
-            logger.warning("生成的故事文本不足10条，实际: %d", len(story_texts))
-            # 补充到10条
-            while len(story_texts) < 10:
-                story_texts.append(f"Story panel {len(story_texts) + 1}")
+        if not story_texts:
+            logger.warning("模型未返回任何故事文本")
 
         logger.info("故事文本生成完成 | count=%d", len(story_texts))
 
@@ -601,11 +617,13 @@ class GeminiCli(LLMClientBase):
         # 图片生成的系统指令（专注于视觉风格）
         image_system_instruction = (
             "You are a professional children's book illustrator. "
-            "Your task is to create a single illustration based on the provided story text. "
+            "Your task is to create a single illustration based on the provided storyboard and story context. "
             "Create a full-bleed cinematic scene with clean backgrounds. "
-            "CRITICAL: If reference images are provided (especially the previous page), "
-            "you MUST maintain visual consistency - same characters, art style, color palette, and overall aesthetic. "
-            "Use the reference images as a style guide to ensure consistency across the storybook."
+            "If a CHARACTER REFERENCE PHOTO is provided, extract the character's identity features "
+            "(facial structure, hair color and style, distinguishing marks) and render them in the story's illustration art style — "
+            "preserve the person's recognizability, but do not replicate the photographic style. "
+            "If a PREVIOUS PAGE illustration is provided, treat it as the established rendering of the character in this story's art style. "
+            "Maintain full consistency with it: same character rendering, art style, color palette, and environment progression."
         )
 
         # 添加模板风格到系统指令
@@ -616,24 +634,38 @@ class GeminiCli(LLMClientBase):
 
         image_urls = []
 
+        # 构建完整故事上下文（循环外只构建一次）
+        full_story_context = "Complete Story Context:\n"
+        for idx, text in enumerate(story_texts, 1):
+            full_story_context += f"Page {idx}: {text}\n"
+
         # 逐页生成图片并 yield
         for i, story_text in enumerate(story_texts):
+            storyboard = story_storyboards[i] if i < len(story_storyboards) else None
             try:
                 logger.info("生成第 %d 页图片 | text=%s", i + 1, story_text[:50])
 
-                # 构建单张图片生成提示词
-                # 首先提供完整的故事情节上下文
-                full_story_context = "Complete Story Context:\n"
-                for idx, text in enumerate(story_texts, 1):
-                    full_story_context += f"Page {idx}: {text}\n"
+                # 用分镜描述驱动图像生成，文本作为叙事语义补充
+                if storyboard:
+                    storyboard_desc = (
+                        f"Story text: {story_text}\n\n"
+                        f"Storyboard for this page:\n"
+                        f"- Scene: {storyboard.get('scene', '')}\n"
+                        f"- Characters: {storyboard.get('characters', '')}\n"
+                        f"- Shot: {storyboard.get('shot', '')}\n"
+                        f"- Color: {storyboard.get('color', '')}\n"
+                        f"- Lighting: {storyboard.get('lighting', '')}"
+                    )
+                else:
+                    storyboard_desc = f"Story text: {story_text}"
 
                 single_image_prompt = (
                     f"{full_story_context}\n\n"
                     f"CURRENT TASK: Generate illustration for PAGE {i + 1} ONLY\n\n"
-                    f"Current page text: {story_text}\n\n"
+                    f"{storyboard_desc}\n\n"
                     f"Requirements:\n"
                     f"- Create a single full-bleed cinematic illustration for PAGE {i + 1}\n"
-                    f"- The illustration should match the current page text\n"
+                    f"- Follow the storyboard specifications above precisely\n"
                     f"- Consider the complete story context above to understand the narrative flow\n"
                     f"- No text, letters, or words in the image\n"
                     f"- Clean background, no borders or frames\n"
@@ -644,21 +676,17 @@ class GeminiCli(LLMClientBase):
                 # 调用 Gemini API 生成单张图片
                 parts = [types.Part(text=single_image_prompt)]
 
-                # 收集参考图片
-                reference_images = []
-
-                # 每页都带上用户输入的图片
+                # 用户提供的参考图片（风格/角色指引），带文字标签告知模型用途
                 if images:
-                    reference_images.extend(images)
-                    logger.info("第 %d 页使用用户上传的图片作为参考 | user_images=%d", i + 1, len(images))
-                # 第二页及以后：额外带上上一页生成的图片
-                if i > 0 and len(image_urls) > 0:
-                    reference_images.append(image_urls[-1])
-                    logger.info("第 %d 页额外使用上一页图片作为参考 | previous_page=%d", i + 1, i)
+                    parts.append(types.Part(text=f"The following {len(images)} image(s) are CHARACTER REFERENCE PHOTOS. Extract this person's identity features (facial structure, hair, distinguishing marks) and render them in the story's illustration art style. Preserve their recognizability — do not replicate the photographic style or color grading."))
+                    parts.extend(_build_image_parts(images))
+                    logger.info("第 %d 页添加用户角色参考图 | count=%d", i + 1, len(images))
 
-                # 将所有参考图片添加到请求中
-                if reference_images:
-                    parts.extend(_build_image_parts(reference_images))
+                # 上一页生成的图片（叙事连续性），带文字标签告知模型用途
+                if i > 0 and len(image_urls) > 0:
+                    parts.append(types.Part(text="The following image is the PREVIOUS PAGE illustration from this story. This is how the character has been rendered in this story's art style. Maintain full consistency with it: same character appearance, art style, color palette, and environment progression."))
+                    parts.extend(_build_image_parts([image_urls[-1]]))
+                    logger.info("第 %d 页添加上一页图片作为连续性参考 | previous_page=%d", i + 1, i)
 
                 image_response = await client.aio.models.generate_content(
                     model=settings.GEMINI_MODEL,
@@ -680,7 +708,8 @@ class GeminiCli(LLMClientBase):
                     # 立即 yield 这一页
                     yield {
                         "text": story_text,
-                        "image_url": image_url
+                        "image_url": image_url,
+                        "storyboard": storyboard,
                     }
                     logger.info("已返回第 %d 页", i + 1)
                 else:

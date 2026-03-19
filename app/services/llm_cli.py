@@ -23,7 +23,7 @@ class LLMClientBase(ABC):
     """大模型客户端基类"""
 
     @abstractmethod
-    async def create_story(
+    def create_story(
         self,
         instruction: str,
         template: Optional[Template] = None,
