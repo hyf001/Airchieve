@@ -9,25 +9,12 @@ Points Domain Models
 但 User.points_balance 存储了冗余快照用于快速读取，由 points_service 原子维护。
 """
 from datetime import datetime, timezone
-from enum import Enum
 
 from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
-
-
-# ---------------------------------------------------------------------------
-# Enums
-# ---------------------------------------------------------------------------
-
-class PointsLogType(str, Enum):
-    """积分流水类型"""
-    recharge      = "recharge"       # 微信支付充值
-    creation_cost = "creation_cost"  # 绘本创作消耗
-    bonus         = "bonus"          # 平台奖励（注册礼包等）
-    refund        = "refund"         # 退款返还
-    admin_adjust  = "admin_adjust"   # 管理员手动调整
+from app.models.enums import PointsLogType
 
 
 # ---------------------------------------------------------------------------

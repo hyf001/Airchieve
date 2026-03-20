@@ -1,7 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Wand2, Loader2, X, Upload, Palette } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { TemplateListItem } from '../services/templateService';
+import { CliType, AspectRatio, ImageSize } from '../services/storybookService';
 
 interface InstructionInputBoxProps {
   placeholder?: string;
@@ -20,6 +28,14 @@ interface InstructionInputBoxProps {
   uploadedImages?: string[];
   onImageAdd?: (images: string[]) => void;
   onImageRemove?: (index: number) => void;
+  cliType?: CliType;
+  onCliTypeChange?: (value: CliType) => void;
+  pageCount?: number;
+  onPageCountChange?: (value: number) => void;
+  aspectRatio?: AspectRatio;
+  onAspectRatioChange?: (value: AspectRatio) => void;
+  imageSize?: ImageSize;
+  onImageSizeChange?: (value: ImageSize) => void;
 }
 
 const InstructionInputBox: React.FC<InstructionInputBoxProps> = ({
@@ -38,6 +54,14 @@ const InstructionInputBox: React.FC<InstructionInputBoxProps> = ({
   uploadedImages = [],
   onImageAdd,
   onImageRemove,
+  cliType = 'gemini',
+  onCliTypeChange,
+  pageCount = 10,
+  onPageCountChange,
+  aspectRatio = '16:9',
+  onAspectRatioChange,
+  imageSize = '1k',
+  onImageSizeChange,
 }) => {
   const [prompt, setPrompt] = useState('');
   const [localImages, setLocalImages] = useState<string[]>(uploadedImages);
@@ -195,7 +219,7 @@ const InstructionInputBox: React.FC<InstructionInputBoxProps> = ({
         </div>
 
         {/* Bottom action bar */}
-        <div className="flex items-center gap-2 px-4 py-3
+        <div className="flex items-center gap-2 px-4 py-3 flex-nowrap
                         border-t border-white/50 bg-white/20">
           {/* Upload */}
           <input
@@ -222,8 +246,58 @@ const InstructionInputBox: React.FC<InstructionInputBoxProps> = ({
             <span>上传图片</span>
           </button>
 
+          {/* Options */}
+          <div className="flex items-center gap-2 shrink-0">
+            <Select value={cliType} onValueChange={(v) => onCliTypeChange?.(v as CliType)}>
+              <SelectTrigger className="h-8 w-[110px] text-xs bg-white/60 border-white/70 text-slate-700 shadow-sm focus:ring-[#00CDD4]/30">
+                <SelectValue placeholder="CLI 类型" />
+              </SelectTrigger>
+              <SelectContent className="bg-white/95 border-white/70">
+                <SelectItem value="gemini">Gemini</SelectItem>
+                <SelectItem value="claude">Claude</SelectItem>
+                <SelectItem value="openai">OpenAI</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={String(pageCount)} onValueChange={(v) => onPageCountChange?.(Number(v))}>
+              <SelectTrigger className="h-8 w-[90px] text-xs bg-white/60 border-white/70 text-slate-700 shadow-sm focus:ring-[#00CDD4]/30">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-slate-500">页数</span>
+                  <SelectValue placeholder="数量" />
+                </div>
+              </SelectTrigger>
+              <SelectContent className="bg-white/95 border-white/70">
+                {Array.from({ length: 20 }).map((_, i) => (
+                  <SelectItem key={i + 1} value={String(i + 1)}>{i + 1}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={aspectRatio} onValueChange={(v) => onAspectRatioChange?.(v as AspectRatio)}>
+              <SelectTrigger className="h-8 w-[96px] text-xs bg-white/60 border-white/70 text-slate-700 shadow-sm focus:ring-[#00CDD4]/30">
+                <SelectValue placeholder="尺寸比例" />
+              </SelectTrigger>
+              <SelectContent className="bg-white/95 border-white/70">
+                <SelectItem value="16:9">16:9</SelectItem>
+                <SelectItem value="4:3">4:3</SelectItem>
+                <SelectItem value="1:1">1:1</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={imageSize} onValueChange={(v) => onImageSizeChange?.(v as ImageSize)}>
+              <SelectTrigger className="h-8 w-[80px] text-xs bg-white/60 border-white/70 text-slate-700 shadow-sm focus:ring-[#00CDD4]/30">
+                <SelectValue placeholder="分辨率" />
+              </SelectTrigger>
+              <SelectContent className="bg-white/95 border-white/70">
+                <SelectItem value="1k">1K</SelectItem>
+                <SelectItem value="2k">2K</SelectItem>
+                <SelectItem value="4k">4K</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Hint */}
-          <div className="flex-1 text-xs text-slate-400/70 select-none text-center">
+          <div className="flex-1 min-w-0 text-xs text-slate-400/70 select-none text-center truncate whitespace-nowrap hidden md:block">
             {mode ?? (displayImages.length > 0
               ? `已上传 ${displayImages.length} 张图片`
               : '')}

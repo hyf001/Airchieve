@@ -23,11 +23,24 @@ const handleWriteError = async (res: Response, fallback: string): Promise<never>
 };
 
 // ============ Types ============
-export type StorybookStatus = "init" | "creating" | "updating" | "finished" | "error";
+export type StorybookStatus = "init" | "creating" | "updating" | "finished" | "error" | "terminated";
+
+export type CliType = "gemini" | "claude" | "openai";
+export type AspectRatio = "1:1" | "16:9" | "4:3";
+export type ImageSize = "1k" | "2k" | "4k";
+export type PageType = "cover" | "content" | "back_cover";
 
 export interface StorybookPage {
   text: string;
   image_url: string;
+  storyboard?: {
+    scene: string;
+    characters: string;
+    shot: string;
+    color: string;
+    lighting: string;
+  } | null;
+  page_type?: PageType;
 }
 
 export interface Storybook {
@@ -40,6 +53,9 @@ export interface Storybook {
   error_message?: string | null;
   instruction?: string | null;
   template_id?: number | null;
+  cli_type?: CliType;
+  aspect_ratio?: AspectRatio;
+  image_size?: ImageSize;
 }
 
 export interface StorybookListItem {
@@ -51,12 +67,19 @@ export interface StorybookListItem {
   is_public: boolean;
   created_at: string;
   pages: StorybookPage[] | null;
+  cli_type?: CliType;
+  aspect_ratio?: AspectRatio;
+  image_size?: ImageSize;
 }
 
 export interface CreateStorybookRequest {
   instruction: string;
   template_id?: number;
   images?: string[];
+  cli_type?: CliType;
+  page_count?: number;
+  aspect_ratio?: AspectRatio;
+  image_size?: ImageSize;
 }
 
 export interface StorybookCreateResponse {
@@ -70,7 +93,7 @@ export interface EditPageAsyncResponse {
   status: StorybookStatus;
 }
 
-export interface RegeneratePageAsyncResponse {
+export interface InsertPageAsyncResponse {
   storybook_id: number;
   status: StorybookStatus;
 }
@@ -90,6 +113,10 @@ export const createStorybook = async (
       instruction: req.instruction,
       template_id: req.template_id,
       images: req.images || [],
+      cli_type: req.cli_type,
+      page_count: req.page_count,
+      aspect_ratio: req.aspect_ratio,
+      image_size: req.image_size,
     }),
   });
   if (!res.ok) {
@@ -160,13 +187,20 @@ export const editStorybookPage = async (
  * 返回 base64 data URL，前端缓存，用户保存时再调 savePage
  */
 export const editPageImage = async (
+  storybookId: number,
   imageUrl: string,
-  instruction: string
+  instruction: string,
+  referencedImage?: string
 ): Promise<string> => {
   const res = await fetch(`${API_BASE}/image/edit`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-    body: JSON.stringify({ instruction, image: imageUrl }),
+    body: JSON.stringify({
+      instruction,
+      image_to_edit: imageUrl,
+      referenced_image: referencedImage,
+      storybook_id: storybookId,
+    }),
   });
   if (!res.ok) {
     await handleWriteError(res, "图片生成失败");
@@ -233,21 +267,35 @@ export const reorderPages = async (
 /**
  * 融合两页，生成新页追加到末尾（异步，轮询）
  */
-export const regeneratePages = async (
+export const insertPages = async (
   storybookId: number,
-  pageIndices: number[],
+  insertPosition: number,
   count: number,
   instruction?: string
-): Promise<RegeneratePageAsyncResponse> => {
-  const res = await fetch(`${API_BASE}/${storybookId}/pages/merge`, {
+): Promise<InsertPageAsyncResponse> => {
+  const res = await fetch(`${API_BASE}/${storybookId}/pages/insert`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-    body: JSON.stringify({ page_indices: pageIndices, count, instruction }),
+    body: JSON.stringify({ insert_position: insertPosition, count, instruction: instruction || "" }),
   });
   if (!res.ok) {
-    await handleWriteError(res, "融合页面失败");
+    await handleWriteError(res, "插入页面失败");
   }
-  return res.json() as Promise<RegeneratePageAsyncResponse>;
+  return res.json() as Promise<InsertPageAsyncResponse>;
+};
+
+/**
+ * 中止正在生成的绘本
+ */
+export const terminateStorybook = async (storybookId: number): Promise<{ success: boolean; message: string }> => {
+  const res = await fetch(`${API_BASE}/${storybookId}/terminate`, {
+    method: "POST",
+    headers: { ...getAuthHeaders() },
+  });
+  if (!res.ok) {
+    await handleWriteError(res, "中止失败");
+  }
+  return res.json() as Promise<{ success: boolean; message: string }>;
 };
 
 /**

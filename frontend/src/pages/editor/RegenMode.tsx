@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import {
   Storybook,
-  regeneratePages,
+  insertPages,
   InsufficientPointsError,
 } from '../../services/storybookService';
 
@@ -24,24 +24,16 @@ const RegenMode: React.FC<RegenModeProps> = ({
   const { toast } = useToast();
   const pages = storybook.pages || [];
 
-  const [selected, setSelected] = useState<number[]>([]);
+  const [insertPosition, setInsertPosition] = useState<number>(pages.length);
   const [count, setCount] = useState(1);
   const [instruction, setInstruction] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const toggleSelect = (idx: number) => {
-    setSelected(prev => {
-      if (prev.includes(idx)) return prev.filter(i => i !== idx);
-      if (prev.length >= 5) return prev;
-      return [...prev, idx];
-    });
-  };
-
   const handleConfirm = async () => {
-    if (selected.length === 0 || isSubmitting) return;
+    if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      await regeneratePages(storybook.id, selected, count, instruction || undefined);
+      await insertPages(storybook.id, insertPosition, count, instruction || undefined);
       onStorybookChange({ ...storybook, status: 'updating' });
       onStartPolling(storybook.id);
       onExit();
@@ -49,18 +41,28 @@ const RegenMode: React.FC<RegenModeProps> = ({
       if (err instanceof InsufficientPointsError) {
         toast({ variant: 'destructive', title: '积分不足', description: err.message });
       } else {
-        toast({ variant: 'destructive', title: '再生成失败', description: err instanceof Error ? err.message : undefined });
+        toast({ variant: 'destructive', title: '插入页失败', description: err instanceof Error ? err.message : undefined });
       }
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  useEffect(() => {
+    setInsertPosition(pages.length);
+  }, [pages.length]);
+
+  const positionLabel = (pos: number) => {
+    if (pos <= 0) return '开头';
+    if (pos >= pages.length) return '末尾';
+    return `第 ${pos} 页后`;
+  };
+
   return (
     <div className="w-full max-w-4xl space-y-4">
       <div className="text-center space-y-1">
-        <p className="text-slate-700 font-medium">选择参考页面，再生成新页面</p>
-        <p className="text-slate-400 text-sm">已选 {selected.length} / 5 页</p>
+        <p className="text-slate-700 font-medium">选择插入位置并生成新页面</p>
+        <p className="text-slate-400 text-sm">当前插入位置：{positionLabel(insertPosition)}</p>
       </div>
 
       {/* Page selection grid */}
@@ -68,9 +70,9 @@ const RegenMode: React.FC<RegenModeProps> = ({
         {pages.map((page, idx) => (
           <div
             key={idx}
-            onClick={() => toggleSelect(idx)}
+            onClick={() => setInsertPosition(idx + 1)}
             className={`relative aspect-[16/9] rounded-xl overflow-hidden cursor-pointer ring-4 transition-all ${
-              selected.includes(idx)
+              insertPosition === idx + 1
                 ? 'ring-[#00CDD4] scale-[0.97]'
                 : 'ring-transparent hover:ring-slate-300'
             }`}
@@ -79,7 +81,7 @@ const RegenMode: React.FC<RegenModeProps> = ({
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-3 pb-2 pt-6">
               <p className="text-white text-xs line-clamp-2">{page.text}</p>
             </div>
-            {selected.includes(idx) && (
+            {insertPosition === idx + 1 && (
               <div className="absolute top-2 right-2 bg-[#00CDD4] rounded-full p-1">
                 <Check size={14} className="text-white" />
               </div>
@@ -93,10 +95,24 @@ const RegenMode: React.FC<RegenModeProps> = ({
 
       {/* Controls */}
       <div className="flex flex-col items-center gap-3">
+        <div className="flex items-center gap-3 text-sm text-slate-600">
+          <span>插入位置</span>
+          <select
+            value={insertPosition}
+            onChange={e => setInsertPosition(Number(e.target.value))}
+            className="border border-slate-200 rounded-md px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-[#00CDD4]/30 focus:border-[#00CDD4]"
+          >
+            {Array.from({ length: pages.length + 1 }).map((_, idx) => (
+              <option key={idx} value={idx}>
+                {positionLabel(idx)}
+              </option>
+            ))}
+          </select>
+        </div>
         <textarea
           value={instruction}
           onChange={e => setInstruction(e.target.value)}
-          placeholder="再生成指令，例如：继续后面的故事"
+          placeholder="插入指令，例如：补充一个过渡场景"
           rows={2}
           className="w-full max-w-lg text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 outline-none resize-none focus:ring-2 focus:ring-[#00CDD4]/30 focus:border-[#00CDD4] leading-relaxed placeholder:text-slate-400"
         />
@@ -117,11 +133,11 @@ const RegenMode: React.FC<RegenModeProps> = ({
           </div>
           <Button
             onClick={handleConfirm}
-            disabled={selected.length === 0 || isSubmitting}
+            disabled={isSubmitting}
             className="bg-[#00CDD4] hover:bg-[#00b8be] text-white"
           >
             {isSubmitting ? <Loader2 size={14} className="animate-spin mr-1.5" /> : null}
-            再生成
+            插入页
           </Button>
         </div>
       </div>

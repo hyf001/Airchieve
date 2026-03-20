@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Sparkles, ChevronLeft, ChevronRight, FileText, BookOpen, LogOut, Coins, Crown, User, Shield } from 'lucide-react';
-import { CreateStorybookRequest, createStorybook, InsufficientPointsError, listStorybooks, getStorybook, StorybookListItem, Storybook } from '../services/storybookService';
+import { CreateStorybookRequest, createStorybook, InsufficientPointsError, listStorybooks, getStorybook, StorybookListItem, Storybook, CliType, AspectRatio, ImageSize } from '../services/storybookService';
 import { listTemplates, TemplateListItem, Template } from '../services/templateService';
 import StorybookPreview from '../components/StorybookPreview';
 import InstructionInputBox from '../components/InstructionInputBox';
@@ -35,6 +35,10 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [generationStatus, setGenerationStatus] = useState<string | null>(null);
+  const [cliType, setCliType] = useState<CliType>('gemini');
+  const [pageCount, setPageCount] = useState(10);
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('16:9');
+  const [imageSize, setImageSize] = useState<ImageSize>('1k');
   const carouselSectionRef = useRef<HTMLDivElement>(null);
   const carouselRef = useRef<HTMLDivElement>(null);
   const [carouselPaused, setCarouselPaused] = useState(false);
@@ -152,6 +156,10 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
         instruction,
         template_id: selectedTemplate?.id,
         images: uploadedImages.length > 0 ? uploadedImages : undefined,
+        cli_type: cliType,
+        page_count: pageCount,
+        aspect_ratio: aspectRatio,
+        image_size: imageSize,
       };
       setPendingCreateParams(params);
       openLoginModal();
@@ -166,6 +174,10 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
         instruction,
         template_id: selectedTemplate?.id,
         images: uploadedImages.length > 0 ? uploadedImages : undefined,
+        cli_type: cliType,
+        page_count: pageCount,
+        aspect_ratio: aspectRatio,
+        image_size: imageSize,
       });
       onStart?.(res.id);
     } catch (err) {
@@ -259,6 +271,14 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
             uploadedImages={uploadedImages}
             onImageAdd={handleImageAdd}
             onImageRemove={handleImageRemove}
+            cliType={cliType}
+            onCliTypeChange={setCliType}
+            pageCount={pageCount}
+            onPageCountChange={setPageCount}
+            aspectRatio={aspectRatio}
+            onAspectRatioChange={setAspectRatio}
+            imageSize={imageSize}
+            onImageSizeChange={setImageSize}
           />
         </div>
 

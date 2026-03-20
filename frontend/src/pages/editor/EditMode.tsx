@@ -66,7 +66,7 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
     setImageError(null);
     const baseImage = activeImageIndex >= 0 ? imageHistory[activeImageIndex].url : page.image_url;
     try {
-      const newUrl = await editPageImage(baseImage, imageInstruction);
+      const newUrl = await editPageImage(storybook.id, baseImage, imageInstruction);
       const newEntry = { url: newUrl, instruction: imageInstruction };
       const newIndex = imageHistory.length;
       setImageHistory(prev => [...prev, newEntry]);

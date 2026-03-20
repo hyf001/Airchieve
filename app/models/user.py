@@ -12,45 +12,13 @@ Identity Domain Models
   membership_expire_at    ← payment_service
 """
 from datetime import datetime, timezone
-from enum import Enum
 from typing import List
 
 from sqlalchemy import Boolean, DateTime, Enum as SAEnum, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-
-
-# ---------------------------------------------------------------------------
-# Enums
-# ---------------------------------------------------------------------------
-
-class UserRole(str, Enum):
-    """用户角色"""
-    admin = "admin"
-    user  = "user"
-
-
-class UserStatus(str, Enum):
-    """账号状态"""
-    active  = "active"
-    banned  = "banned"
-    deleted = "deleted"
-
-
-class AuthType(str, Enum):
-    """登录凭证类型"""
-    password   = "password"    # 账号 + 密码
-    sms        = "sms"         # 手机号（验证码在缓存层校验，不持久化）
-    wechat_web = "wechat_web"  # 微信网页扫码授权（openid）
-
-
-class MembershipLevel(str, Enum):
-    """会员等级（订阅制：lite / pro / max，按月）"""
-    free = "free"
-    lite = "lite"
-    pro  = "pro"
-    max  = "max"
+from app.models.enums import AuthType, MembershipLevel, UserRole, UserStatus
 
 
 # ---------------------------------------------------------------------------

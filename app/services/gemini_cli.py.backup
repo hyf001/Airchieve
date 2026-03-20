@@ -806,61 +806,271 @@ class GeminiCli(LLMClientBase):
             "NO_IMAGE_RETURNED",
         )
 
-    async def regenerate_pages(
+    async def insert_pages(
         self,
         pages: List[StorybookPage],
+        insert_position: int,
         count: int = 1,
         instruction: str = "",
-    ) -> List[StorybookPage]:
-        """基于选中的参考页面再生成 count 张新页面。"""
-        logger.info("regenerate_pages start | model=%s | ref_count=%d | count=%d | instruction=%s",
-                    settings.GEMINI_MODEL, len(pages), count, instruction)
+        template: Optional[Template] = None,
+    ) -> AsyncGenerator[StorybookPage, None]:
+        """
+        在指定位置插入新页面（流式分步生成版本）
+
+        第一步：先生成要插入页面的故事文本和分镜
+        第二步：逐页生成图片，每生成一页就返回一页
+
+        Args:
+            pages: 参考页面列表（用于理解上下文和风格）
+            insert_position: 插入位置（从0开始，0表示在最前面插入）
+            count: 要插入的页面数量
+            instruction: 插入指令（描述要在该位置插入什么内容）
+            template: 模板对象（可选），包含风格名称、描述和系统提示词
+
+        Yields:
+            StorybookPage: 每次yield生成的一页，包含文本内容、图片URL和���镜
+        """
         client = _get_client()
         ref_count = len(pages)
 
-        system_instruction = (
-            "You are a professional visual storyteller and illustrator. "
-            f"You will receive {ref_count} existing story panel(s) (text + illustrations) as reference. "
-            f"Your task is to generate exactly {count} NEW panel(s) inspired by and visually consistent with the provided panels — "
-            "do NOT simply copy or describe the originals. "
-            "Base the new illustrations on the visual style, characters, and composition of the provided images. "
-            f"Each panel must have a short narrative text (1-2 sentences suitable for children) "
-            "and a full-bleed cinematic illustration. "
-            "LANGUAGE: Use the SAME language as the original panels. "
-            "STORY TEXT ONLY: Each panel's text must contain ONLY the story plot narrative — pure story prose that advances the plot. "
-            "Absolutely NO summaries, overviews, introductions, conclusions, panel labels, or any non-narrative content. "
-            "Images must contain NO text, letters, or words whatsoever."
-        )
+        logger.info("insert_pages start | insert_position=%d | ref_count=%d | count=%d | instruction=%s",
+                    insert_position, ref_count, count, instruction)
 
-        panels_desc = "\n".join(
-            f"Panel {i + 1} text: {p['text']}" for i, p in enumerate(pages)
-        )
-        regen_instruction = instruction if instruction else "请基于这些页面再生成新的内容"
+        # ============ 第一步：生成插入页面的故事文本和分镜 ============
+
+        logger.info("开始第一步：生成插入页面的故事文本和分镜")
+
+        # 构建上下文：前后的页面文本
+        context_parts = []
+        if insert_position > 0 and pages:
+            # 提供前面的页面作为上下文
+            before_text = "\n".join(
+                f"Page {i + 1}: {p['text']}"
+                for i, p in enumerate(pages[:insert_position])
+            )
+            context_parts.append(f"BEFORE insertion position:\n{before_text}")
+
+        if insert_position < len(pages):
+            # 提供后面的页面作为上下文
+            after_text = "\n".join(
+                f"Page {insert_position + i + 1}: {p['text']}"
+                for i, p in enumerate(pages[insert_position:])
+            )
+            context_parts.append(f"AFTER insertion position:\n{after_text}")
+
+        context_str = "\n\n".join(context_parts) if context_parts else "No context pages available"
+
+        # System Prompt：定义系统角色和基本规则
+        if template and template.systemprompt:
+            system_instruction = template.systemprompt
+        else:
+            system_instruction = (
+                "## Role\n"
+                "You are a professional children's storybook writer and visual director. "
+                "Your goal is to create engaging story panels with detailed visual storyboards.\n\n"
+                "## Task\n"
+                "Generate new story panels that will be inserted at a specific position in an existing story. "
+                "For each panel, provide both the story text and a storyboard describing the illustration.\n\n"
+                "## Output Format\n"
+                "Return a JSON array with objects:\n"
+                "```\n"
+                "[\n"
+                "  {\n"
+                "    \"text\": \"Story narrative text (1-2 sentences)\",\n"
+                "    \"storyboard\": {\n"
+                "      \"scene\": \"Scene environment, e.g. sunlit forest clearing with tall oak trees\",\n"
+                "      \"characters\": \"Character actions, posture and expression for this panel, e.g. kneeling down with arms outstretched, mouth open in surprise — describe what they are DOING and FEELING, not what they look like\",\n"
+                "      \"shot\": \"Shot type and composition, e.g. medium shot, subject centered\",\n"
+                "      \"color\": \"Color tone and mood, e.g. warm golden tones, soft afternoon light\",\n"
+                "      \"lighting\": \"Lighting direction and quality, e.g. dappled sunlight from upper left\"\n"
+                "    }\n"
+                "  }\n"
+                "]\n"
+                "```\n\n"
+                "## Constraints\n"
+                "- Language: Match the language of the context pages for 'text' field; storyboard fields must be in English\n"
+                "- Length: Exactly {count} panel(s)\n"
+                "- Each text: 1-2 sentences, simple and engaging\n"
+                "- Story flow: The new panels should naturally connect the context before and after the insertion point\n"
+                "- Storyboard: Be specific and visual, avoid abstract descriptions\n"
+                "- 'characters' field: describe actions, posture, and expressions ONLY — do not describe physical appearance or clothing\n"
+                "- IMPORTANT: Every panel MUST include both 'text' and 'storyboard' fields; omitting storyboard is not allowed"
+            ).format(count=count)
+
+        # User Prompt：用户的具体插入要求
+        insert_instruction = instruction if instruction else "Continue the story naturally at this position"
         user_prompt = (
-            f"Reference panels:\n{panels_desc}\n\n"
-            f"Regeneration instruction: {regen_instruction}\n\n"
-            f"The reference images are attached. Generate exactly {count} new panel(s). "
-            f"Each image must be: full-bleed cinematic scene, no borders/frames, NO text or letters in image, visually consistent with reference."
+            f"STORY CONTEXT:\n{context_str}\n\n"
+            f"INSERTION POSITION: {insert_position}\n\n"
+            f"INSERTION INSTRUCTION: {insert_instruction}\n\n"
+            f"TASK: Generate exactly {count} new panel(s) to insert at position {insert_position}. "
+            f"Return a JSON array with {count} objects, each containing a 'text' field (story narrative) "
+            f"and a 'storyboard' object with fields: scene, characters, shot, color, lighting. "
+            f"The new panels should naturally bridge the narrative between the context before and after."
         )
 
+        # 构建请求内容
         parts = [types.Part(text=user_prompt)]
+
+        # 添加参考图片（用于理解风格和角色）
         image_urls = [p.get("image_url", "") for p in pages if p.get("image_url")]
         if image_urls:
+            parts.append(types.Part(text="The following images are reference pages from the existing story. Use them to understand the visual style, characters, and art direction."))
             parts.extend(_build_image_parts(image_urls))
-        logger.info("regenerate_pages calling API | image_count=%d", len(image_urls))
+            logger.info("添加参考图片 | count=%d", len(image_urls))
 
+        # 调用 Gemini API 生成故事文本（JSON 格式）
         response = await client.aio.models.generate_content(
-            model=settings.GEMINI_MODEL,
+            model=settings.GEMINI_TEXT_MODEL,
             contents=types.Content(parts=parts),
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
-                response_modalities=["TEXT", "IMAGE"],
-                image_config=types.ImageConfig(aspect_ratio="16:9"),
+                response_modalities=["TEXT"],
+                response_mime_type="application/json",
             ),
         )
 
-        result = _parse_response_to_pages(response)
-        logger.info("regenerate_pages success | parsed_count=%d | expected=%d", len(result), count)
-        while len(result) < count:
-            result.append(dict(pages[len(result) % ref_count]))  # type: ignore
-        return result[:count]
+        # 解析 JSON 故事文本 + 分镜
+        story_texts: list[str] = []
+        story_storyboards: list[Optional[Storyboard]] = []
+        if response.candidates and response.candidates[0].content:
+            for part in response.candidates[0].content.parts or []:
+                if part.text:
+                    try:
+                        data = json.loads(part.text)
+                        if isinstance(data, list):
+                            for item in data:
+                                if isinstance(item, dict):
+                                    story_texts.append(item.get('text', ''))
+                                    sb = item.get('storyboard')
+                                    story_storyboards.append(sb if isinstance(sb, dict) else None)  # type: ignore[arg-type]
+                                else:
+                                    story_texts.append(str(item))
+                                    story_storyboards.append(None)
+                        logger.info("从 JSON 解析到 %d 条插入页面文本+分镜", len(story_texts))
+                    except (json.JSONDecodeError, KeyError) as e:
+                        logger.warning("JSON 解析失败: %s，回退到文本提取", e)
+                        story_texts = _extract_story_texts(part.text)
+                        story_storyboards = [None] * len(story_texts)
+                    break
+
+        if not story_texts:
+            logger.warning("模型未返回任何插入页面文本")
+
+        logger.info("插入页面文本生成完成 | count=%d", len(story_texts))
+
+        # ============ 第二步：逐页生成图片并返回 ============
+
+        logger.info("开始第二步：逐页生成插入页面的图片并流式返回")
+
+        # 图片生成的系统指令（专注于视觉风格）
+        image_system_instruction = (
+            "You are a professional children's book illustrator. "
+            "Your task is to create a single illustration based on the provided storyboard and story context. "
+            "Create a full-bleed cinematic scene with clean backgrounds. "
+            "If a CHARACTER REFERENCE PHOTO is provided, extract the character's identity features "
+            "(facial structure, hair color and style, distinguishing marks) and render them in the story's illustration art style — "
+            "preserve the person's recognizability, but do not replicate the photographic style. "
+            "If PREVIOUS PAGE illustrations are provided, treat them as the established rendering of the character in this story's art style. "
+            "Maintain full consistency with them: same character rendering, art style, color palette, and environment progression."
+        )
+
+        # 添加模板风格到系统指令
+        if template and template.name:
+            image_system_instruction += f"\n\nART STYLE: {template.name}"
+            if template.description:
+                image_system_instruction += f"\n{template.description}"
+
+        generated_image_urls = []
+
+        # 构建完整故事上下文（包含参考页面的文本）
+        full_story_context = "Complete Story Context (including reference pages):\n"
+        for idx, text in enumerate(pages[:insert_position], 1):
+            full_story_context += f"Page {idx}: {text}\n"
+        for idx, text in enumerate(story_texts, len(pages[:insert_position]) + 1):
+            full_story_context += f"Page {idx} (TO INSERT): {text}\n"
+        for idx, text in enumerate(pages[insert_position:], len(pages[:insert_position]) + len(story_texts) + 1):
+            full_story_context += f"Page {idx}: {text}\n"
+
+        # 逐页生成图片并 yield
+        for i, story_text in enumerate(story_texts):
+            storyboard = story_storyboards[i] if i < len(story_storyboards) else None
+            try:
+                logger.info("生成插入页面第 %d 页图片 | text=%s", i + 1, story_text[:50])
+
+                # 用分镜描述驱动图像生成，文本作为叙事语义补充
+                if storyboard:
+                    storyboard_desc = (
+                        f"Story text: {story_text}\n\n"
+                        f"Storyboard for this page:\n"
+                        f"- Scene: {storyboard.get('scene', '')}\n"
+                        f"- Characters: {storyboard.get('characters', '')}\n"
+                        f"- Shot: {storyboard.get('shot', '')}\n"
+                        f"- Color: {storyboard.get('color', '')}\n"
+                        f"- Lighting: {storyboard.get('lighting', '')}"
+                    )
+                else:
+                    storyboard_desc = f"Story text: {story_text}"
+
+                single_image_prompt = (
+                    f"{full_story_context}\n\n"
+                    f"CURRENT TASK: Generate illustration for INSERT PAGE {i + 1} of {len(story_texts)}\n\n"
+                    f"{storyboard_desc}\n\n"
+                    f"Requirements:\n"
+                    f"- Create a single full-bleed cinematic illustration for this insertion page\n"
+                    f"- Follow the storyboard specifications above precisely\n"
+                    f"- Consider the complete story context above to understand the narrative flow\n"
+                    f"- Maintain visual consistency with the reference pages\n"
+                    f"- No text, letters, or words in the image\n"
+                    f"- Clean background, no borders or frames\n"
+                    f"- Aspect ratio: 16:9"
+                )
+
+                # 调用 Gemini API 生成单张图片
+                parts = [types.Part(text=single_image_prompt)]
+
+                # 参考图片（用于理解风格和角色）
+                if image_urls:
+                    parts.append(types.Part(text="The following images are REFERENCE PAGES from the existing story. Use them to understand the visual style, characters, art style, and color palette. Maintain full consistency with these reference pages."))
+                    parts.extend(_build_image_parts(image_urls))
+                    logger.info("第 %d 页添加参考图片 | count=%d", i + 1, len(image_urls))
+
+                # 之前生成的插入页面图片（用于连续性）
+                if i > 0 and len(generated_image_urls) > 0:
+                    parts.append(types.Part(text="The following image is the PREVIOUS INSERTED PAGE illustration. Maintain full consistency with it: same character appearance, art style, color palette, and environment progression."))
+                    parts.extend(_build_image_parts([generated_image_urls[-1]]))
+                    logger.info("第 %d 页添加上一张插入页面图片 | previous_page=%d", i + 1, i)
+
+                image_response = await client.aio.models.generate_content(
+                    model=settings.GEMINI_MODEL,
+                    contents=types.Content(parts=parts),
+                    config=types.GenerateContentConfig(
+                        system_instruction=image_system_instruction,
+                        response_modalities=["IMAGE"],
+                        image_config=types.ImageConfig(aspect_ratio="16:9", image_size="1k"),
+                    ),
+                )
+
+                # 解析单张图片响应
+                response_images = _parse_images_response(image_response)
+                if response_images:
+                    image_url = response_images[0]
+                    generated_image_urls.append(image_url)
+                    logger.info("插入页面第 %d 页图片生成成功 | total=%d", i + 1, len(generated_image_urls))
+
+                    # 立即 yield 这一页
+                    yield {
+                        "text": story_text,
+                        "image_url": image_url,
+                        "storyboard": storyboard,
+                    }
+                    logger.info("已返回插入页面第 %d 页", i + 1)
+                else:
+                    logger.warning("插入页面第 %d 页图片生成失败，跳过", i + 1)
+
+            except Exception as e:
+                logger.exception("插入页面第 %d 页图片生成异常 | error=%s", i + 1, e)
+                # 继续生成下一页，不中断整个流程
+                continue
+
+        logger.info("插入页面创建完成 | total_pages=%d", len(generated_image_urls))

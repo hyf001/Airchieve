@@ -10,33 +10,12 @@ Payment Domain Models
   SubscriptionOrder → 直接更新 User.membership_level / expire_at
 """
 from datetime import datetime, timezone
-from enum import Enum
 
 from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
-from app.models.user import MembershipLevel
-
-
-# ---------------------------------------------------------------------------
-# Enums
-# ---------------------------------------------------------------------------
-
-class OrderStatus(str, Enum):
-    """充值订单状态"""
-    pending  = "pending"   # 待支付
-    paid     = "paid"      # 已支付
-    failed   = "failed"    # 支付失败
-    refunded = "refunded"  # 已退款
-
-
-class SubscriptionStatus(str, Enum):
-    """订阅订单状态"""
-    pending   = "pending"    # 待支付
-    active    = "active"     # 生效中
-    expired   = "expired"    # 已到期
-    cancelled = "cancelled"  # 已取消
+from app.models.enums import MembershipLevel, OrderStatus, SubscriptionStatus
 
 
 # ---------------------------------------------------------------------------

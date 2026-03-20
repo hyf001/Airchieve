@@ -30,6 +30,11 @@ const ReadMode: React.FC<ReadModeProps> = ({ pages, currentIndex, onIndexChange,
 
   const page = pages[currentIndex];
   if (!page) return null;
+  const pageTypeLabel = page.page_type === 'cover'
+    ? '封面'
+    : page.page_type === 'back_cover'
+      ? '封底'
+      : '内页';
 
   return (
     <div className="flex flex-col items-center w-full max-w-4xl">
@@ -52,6 +57,9 @@ const ReadMode: React.FC<ReadModeProps> = ({ pages, currentIndex, onIndexChange,
               alt={`第 ${currentIndex + 1} 页`}
               className="w-full h-full object-cover"
             />
+            <div className="absolute top-3 left-3 bg-black/50 text-white text-xs px-2 py-1 rounded-md">
+              {pageTypeLabel}
+            </div>
             {page.text && (
               <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/75 via-black/40 to-transparent px-6 pt-10 pb-4">
                 <p className="text-white text-sm md:text-base lg:text-lg font-lexend leading-relaxed text-center drop-shadow">

@@ -4,9 +4,10 @@ LLM Client Base Interface
 用于处理绘本生成的核心方法
 """
 from abc import ABC, abstractmethod
-from typing import List, Optional, AsyncGenerator
-from app.models.storybook import StorybookPage
+from typing import List, Optional, Tuple, AsyncGenerator
+from app.models.storybook import StorybookPage, Storyboard
 from app.models.template import Template
+from app.models.enums import CliType
 
 
 # ============ 通用 LLM 异常基类 ============
@@ -22,74 +23,132 @@ class LLMError(Exception):
 class LLMClientBase(ABC):
     """大模型客户端基类"""
 
-    @abstractmethod
-    def create_story(
-        self,
-        instruction: str,
-        template: Optional[Template] = None,
-        images: Optional[List[str]] = None
-    ) -> AsyncGenerator[StorybookPage, None]:
+    @staticmethod
+    def get_client(cli_type: CliType) -> "LLMClientBase":
         """
-        创建故事（流式生成）
-
-        根据用户指令、模板配置和可选的参考图片，逐页生成绘本内容（包含文本和图片）。
-        每生成一页就通过异步生成器返回，实现流式输出。
+        根据CLI类型获取对应的客户端实例
 
         Args:
-            instruction: 用户指令/故事描述，例如"一个关于小兔子找朋友的故事"
-            template: 模板对象（可选），包含风格名称、描述和系统提示词
-            images: base64编码的参考图片列表（可选），用于参考风格或角色
+            cli_type: CLI类型
 
-        Yields:
-            StorybookPage: 每次yield生成的一页，包含文本内容和图片URL
-                {
-                    "text": "当前页的文本内容",
-                    "image_url": "https://generated-image-url"
-                }
+        Returns:
+            LLMClientBase: 对应的客户端实例
 
         Raises:
-            Exception: 当生成失败时抛出异常
+            ValueError: 不支持的CLI类型
+        """
+        if cli_type == CliType.GEMINI:
+            from app.services.gemini_cli import GeminiCli
+            return GeminiCli()
+        # 未来可以在这里添加其他客户端
+        # elif cli_type == CliType.CLAUDE:
+        #     from app.services.claude_cli import ClaudeCli
+        #     return ClaudeCli()
+        # elif cli_type == CliType.OPENAI:
+        #     from app.services.openai_cli import OpenAICli
+        #     return OpenAICli()
+        else:
+            raise ValueError(f"不支持的CLI类型: {cli_type}")
 
-        Example:
-            async for page in llm_client.create_story("小兔子的故事"):
-                print(f"生成页面: {page['text']}")
+    @abstractmethod
+    async def create_story_and_storyboard(
+        self,
+        instruction: str,
+        page_count: int = 10,
+        template: Optional[Template] = None,
+        images: Optional[List[str]] = None,
+    ) -> Tuple[List[str], List[Optional[Storyboard]]]:
+        """
+        创建故事文本和分镜（纯文本生成）
+
+        Args:
+            instruction: 用户指令/故事描述
+            page_count: 需要生成的页面数量
+            template: 模板对象（可选）
+            images: base64编码的参考图片列表（可选）
+
+        Returns:
+            Tuple[List[str], List[Optional[Storyboard]]]: (故事文本列表, 分镜列表)
         """
         pass
 
     @abstractmethod
-    async def edit_image_only(
+    async def generate_page(
+        self,
+        story_text: str,
+        storyboard: Optional[Storyboard],
+        story_context: List[str],
+        page_index: int,
+        reference_images: Optional[List[str]] = None,
+        previous_page_image: Optional[str] = None,
+        template: Optional[Template] = None,
+        aspect_ratio: str = "16:9",
+        image_size: str = "1k",
+    ) -> str:
+        """
+        生成单页图片
+
+        Args:
+            story_text: 当前页的故事文本
+            storyboard: 当前页的分镜描述
+            story_context: 完整故事的所有文本
+            page_index: 当前页索引
+            reference_images: 用户提供的参考图片
+            previous_page_image: 上一页生成的图片URL
+            template: 风格模板
+            aspect_ratio: 图片比例
+            image_size: 图片尺寸
+
+        Returns:
+            str: 生成的图片URL（base64 data URL）
+        """
+        pass
+
+    @abstractmethod
+    async def edit_image(
         self,
         instruction: str,
         current_image_url: str,
+        referenced_image: Optional[str] = None,
+        aspect_ratio: str = "16:9",
+        image_size: str = "1k",
     ) -> str:
         """
-        仅编辑图片，不修改文字。
+        编辑图片
 
         Args:
-            instruction: 图片编辑指令
-            current_image_url: 当前图片 URL 或 base64 data URL
+            instruction: 编辑指令
+            current_image_url: 当前图片URL
+            referenced_image: 参考图片URL（可选）
+            aspect_ratio: 图片比例
+            image_size: 图片尺寸
 
         Returns:
-            str: 生成的新图片 base64 data URL
+            str: 编辑后的图片URL（base64 data URL）
         """
         pass
 
     @abstractmethod
-    async def regenerate_pages(
+    async def create_insertion_story_and_storyboard(
         self,
         pages: List[StorybookPage],
-        count: int = 1,
-        instruction: str = "",
-    ) -> List[StorybookPage]:
+        insert_position: int,
+        count: int,
+        instruction: str,
+        template: Optional[Template] = None,
+    ) -> Tuple[List[str], List[Optional[Storyboard]]]:
         """
-        基于选中的页面再生成新页面。
+        创建插入页面的故事文本和分镜（需要上下文）
 
         Args:
-            pages: 选中的 1-5 个原始页面
-            instruction: 再生成指令（可选）
+            pages: 现有页面列表
+            insert_position: 插入位置
+            count: 插入页面数量
+            instruction: 插入指令
+            template: 模板对象（可选）
 
         Returns:
-            List[StorybookPage]: 新生成的页面列表（数量与输入相同）
+            Tuple[List[str], List[Optional[Storyboard]]]: (故事文本列表, 分镜列表)
         """
         pass
 

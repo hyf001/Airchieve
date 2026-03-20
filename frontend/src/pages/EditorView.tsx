@@ -15,6 +15,7 @@ Trash2,
   ArrowUpDown,
   Edit2,
   Eye,
+  Square,
 } from 'lucide-react';
 import {
   getStorybook,
@@ -22,11 +23,13 @@ import {
   deleteStorybook,
   updateStorybookPublicStatus,
   downloadStorybookImage,
+  terminateStorybook,
   Storybook,
   StorybookListItem,
 } from '../services/storybookService';
 import { usePolling } from '../hooks/usePolling';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -44,9 +47,10 @@ const statusTextMap: Record<string, string> = {
   updating: '更新中',
   finished: '已完成',
   error: '错误',
+  terminated: '已中止',
 };
 
-const TERMINAL_STATUSES = new Set(['finished', 'error']);
+const TERMINAL_STATUSES = new Set(['finished', 'error', 'terminated']);
 
 interface EditorViewProps {
   storybookId?: number;
@@ -69,6 +73,8 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [isTerminating, setIsTerminating] = useState(false);
+  const [isTerminateConfirmOpen, setIsTerminateConfirmOpen] = useState(false);
 
   const prevPagesLengthRef = React.useRef<number>(0);
 
@@ -213,16 +219,192 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
     }
   };
 
+  const handleTerminate = async () => {
+    if (!currentStorybook || isTerminating) return;
+    setIsTerminating(true);
+    try {
+      const res = await terminateStorybook(currentStorybook.id);
+      toast({ title: res.message || '已中止' });
+      stopPolling();
+      setMode('read');
+      setCurrentStorybook(prev => prev ? { ...prev, status: 'terminated' } : prev);
+      setStorybookList(prev =>
+        prev.map(item => item.id === currentStorybook.id ? { ...item, status: 'terminated' } : item)
+      );
+    } catch (err) {
+      toast({ variant: 'destructive', title: '中止失败', description: err instanceof Error ? err.message : undefined });
+    } finally {
+      setIsTerminating(false);
+    }
+  };
+  const handleTerminateClick = () => {
+    if (!currentStorybook || isTerminating) return;
+    setIsTerminateConfirmOpen(true);
+  };
+
   const pages = currentStorybook?.pages || [];
   const isCreating = currentStorybook?.status === 'creating' || currentStorybook?.status === 'updating';
-  const canEditModes = currentStorybook?.status === 'finished' && pages.length > 0;
+  const canEditModes = pages.length > 0;
+  const canReadPages = pages.length > 0;
 
   const modeTabs: { key: EditorMode; label: string; icon: React.ReactNode }[] = [
     { key: 'read',    label: '阅读',   icon: <Eye size={14} /> },
-    { key: 'edit',    label: '编辑',   icon: <Edit2 size={14} /> },
+    { key: 'edit',    label: '编辑页',   icon: <Edit2 size={14} /> },
     { key: 'reorder', label: '排序',   icon: <ArrowUpDown size={14} /> },
-    { key: 'regen',   label: '再生成', icon: <Layers size={14} /> },
+    { key: 'regen',   label: '继续创作', icon: <Layers size={14} /> },
   ];
+
+  const renderContent = () => {
+    if (loading) {
+      return <LoadingSpinner size={48} text="加载中..." className="py-8" />;
+    }
+
+    if (currentStorybook.status === 'error' && pages.length === 0) {
+      return (
+        <div className="w-full h-full flex items-center justify-center">
+          <div className="text-center space-y-6 max-w-sm">
+            <AlertCircle className="mx-auto text-red-500" size={64} />
+            <h3 className="text-xl font-lexend font-bold text-slate-800">生成失败</h3>
+            <p className="text-slate-400 text-sm leading-relaxed">
+              {currentStorybook.error_message || '抱歉，绘本生成过程中遇到了错误。请检查网络连接或稍后重试。'}
+            </p>
+            <Button variant="secondary" onClick={onBack}>返回首页</Button>
+          </div>
+        </div>
+      );
+    }
+
+    if (currentStorybook.status === 'init' || (isCreating && pages.length === 0)) {
+      return (
+        <div className="w-full h-full flex items-center justify-center">
+          <div className="text-center space-y-6 max-w-sm w-full px-8">
+            <LoadingSpinner size={64} />
+            <div>
+              <h3 className="text-xl font-lexend font-bold text-slate-800 mb-1">正在装帧您的故事…</h3>
+              <p className="text-slate-400 text-sm">正在将您的灵感转化为精美的插画与排版</p>
+              <p className="text-slate-300 text-xs mt-2">预计 2 分钟内完成</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (isCreating && pages.length > 0) {
+      return (
+        <div className="w-full flex flex-col items-center gap-3">
+          <div className="w-full max-w-4xl flex items-center justify-center gap-2 py-1.5 bg-[#00CDD4]/10 text-[#009fa5] text-xs font-medium rounded-lg">
+            <LoadingSpinner size={20} />
+            正在生成更多页面… 已完成 {pages.length} 页
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={handleTerminateClick}
+                    disabled={isTerminating}
+                    variant="outline"
+                    size="sm"
+                    className="ml-2 h-7 px-2 border-red-200 text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    <Square size={12} fill="currentColor" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>停止生成</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          <ReadMode
+            pages={pages}
+            currentIndex={currentPageIndex}
+            onIndexChange={setCurrentPageIndex}
+            isGenerating
+          />
+        </div>
+      );
+    }
+
+    if (currentStorybook.status === 'finished' && pages.length === 0) {
+      return (
+        <div className="w-full h-full flex items-center justify-center">
+          <div className="text-center space-y-6 max-w-sm">
+            <AlertCircle className="mx-auto text-amber-500" size={64} />
+            <h3 className="text-xl font-lexend font-bold text-slate-800">内容生成失败</h3>
+            <p className="text-slate-400 text-sm leading-relaxed">抱歉，绘本生成过程中遇到了问题，没有生成任何内容。</p>
+            <Button variant="secondary" onClick={onBack}>返回首页</Button>
+          </div>
+        </div>
+      );
+    }
+
+    if (canReadPages) {
+      const showErrorBanner = currentStorybook.status === 'error' && pages.length > 0;
+      let content: React.ReactNode = null;
+
+      if (mode === 'read') {
+        content = (
+          <ReadMode
+            pages={pages}
+            currentIndex={currentPageIndex}
+            onIndexChange={setCurrentPageIndex}
+          />
+        );
+      }
+      if (canEditModes && mode === 'edit') {
+        content = (
+          <EditMode
+            storybook={currentStorybook}
+            onStorybookChange={setCurrentStorybook}
+          />
+        );
+      }
+      if (canEditModes && mode === 'reorder') {
+        content = (
+          <ReorderMode
+            storybook={currentStorybook}
+            onStorybookChange={(updated) => {
+              setCurrentStorybook(updated);
+              setCurrentPageIndex(0);
+            }}
+            onExit={() => setMode('read')}
+          />
+        );
+      }
+      if (canEditModes && mode === 'regen') {
+        content = (
+          <RegenMode
+            storybook={currentStorybook}
+            onStorybookChange={(updated) => {
+              setCurrentStorybook(updated);
+              setStorybookList(prev =>
+                prev.map(item => item.id === updated.id ? { ...item, status: updated.status } : item)
+              );
+            }}
+            onStartPolling={startPolling}
+            onExit={() => setMode('read')}
+          />
+        );
+      }
+
+      if (!content) return null;
+
+      if (!showErrorBanner) return content;
+
+      return (
+        <div className="w-full flex flex-col gap-3">
+          <div className="w-full max-w-4xl flex items-center gap-2 py-2 px-3 bg-red-50 text-red-700 text-xs font-medium rounded-lg border border-red-100">
+            <AlertCircle size={16} className="shrink-0" />
+            <span>
+              {currentStorybook.error_message || '内容生成过程中遇到问题，以下为已生成的页面。'}
+            </span>
+          </div>
+          {content}
+        </div>
+      );
+    }
+
+    return null;
+  };
 
   return (
     <>
@@ -376,104 +558,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                 </div>
               )}
 
-              {loading && <LoadingSpinner size={48} text="加载中..." className="py-8" />}
-
-              {!loading && currentStorybook.status === 'error' && (
-                <div className="w-full h-full flex items-center justify-center">
-                  <div className="text-center space-y-6 max-w-sm">
-                    <AlertCircle className="mx-auto text-red-500" size={64} />
-                    <h3 className="text-xl font-lexend font-bold text-slate-800">生成失败</h3>
-                    <p className="text-slate-400 text-sm leading-relaxed">
-                      {currentStorybook.error_message || '抱歉，绘本生成过程中遇到了错误。请检查网络连接或稍后重试。'}
-                    </p>
-                    <Button variant="secondary" onClick={onBack}>返回首页</Button>
-                  </div>
-                </div>
-              )}
-
-              {!loading && (currentStorybook.status === 'init' || (isCreating && pages.length === 0)) && (
-                <div className="w-full h-full flex items-center justify-center">
-                  <div className="text-center space-y-6 max-w-sm w-full px-8">
-                    <LoadingSpinner size={64} />
-                    <div>
-                      <h3 className="text-xl font-lexend font-bold text-slate-800 mb-1">正在装帧您的故事…</h3>
-                      <p className="text-slate-400 text-sm">正在将您的灵感转化为精美的插画与排版</p>
-                      <p className="text-slate-300 text-xs mt-2">预计 2 分钟内完成</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {!loading && isCreating && pages.length > 0 && (
-                <div className="w-full flex flex-col items-center gap-4">
-                  <div className="w-full absolute top-0 left-0 right-0 z-40">
-                    <div className="flex items-center justify-center gap-2 py-1.5 bg-[#00CDD4]/10 text-[#009fa5] text-xs font-medium">
-                      <LoadingSpinner size={20} />
-                      正在生成更多页面… 已完成 {pages.length} 页
-                    </div>
-                  </div>
-                  <div className="mt-10 w-full flex justify-center">
-                    <ReadMode
-                      pages={pages}
-                      currentIndex={currentPageIndex}
-                      onIndexChange={setCurrentPageIndex}
-                      isGenerating
-                    />
-                  </div>
-                </div>
-              )}
-
-              {!loading && currentStorybook.status === 'finished' && pages.length === 0 && (
-                <div className="w-full h-full flex items-center justify-center">
-                  <div className="text-center space-y-6 max-w-sm">
-                    <AlertCircle className="mx-auto text-amber-500" size={64} />
-                    <h3 className="text-xl font-lexend font-bold text-slate-800">内容生成失败</h3>
-                    <p className="text-slate-400 text-sm leading-relaxed">抱歉，绘本生成过程中遇到了问题，没有生成任何内容。</p>
-                    <Button variant="secondary" onClick={onBack}>返回首页</Button>
-                  </div>
-                </div>
-              )}
-
-              {!loading && currentStorybook.status === 'finished' && pages.length > 0 && (
-                <>
-                  {mode === 'read' && (
-                    <ReadMode
-                      pages={pages}
-                      currentIndex={currentPageIndex}
-                      onIndexChange={setCurrentPageIndex}
-                    />
-                  )}
-                  {mode === 'edit' && (
-                    <EditMode
-                      storybook={currentStorybook}
-                      onStorybookChange={setCurrentStorybook}
-                    />
-                  )}
-                  {mode === 'reorder' && (
-                    <ReorderMode
-                      storybook={currentStorybook}
-                      onStorybookChange={(updated) => {
-                        setCurrentStorybook(updated);
-                        setCurrentPageIndex(0);
-                      }}
-                      onExit={() => setMode('read')}
-                    />
-                  )}
-                  {mode === 'regen' && (
-                    <RegenMode
-                      storybook={currentStorybook}
-                      onStorybookChange={(updated) => {
-                        setCurrentStorybook(updated);
-                        setStorybookList(prev =>
-                          prev.map(item => item.id === updated.id ? { ...item, status: updated.status } : item)
-                        );
-                      }}
-                      onStartPolling={startPolling}
-                      onExit={() => setMode('read')}
-                    />
-                  )}
-                </>
-              )}
+              {renderContent()}
             </main>
           )}
         </div>
@@ -483,8 +568,22 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
         open={deleteConfirmId !== null}
         title="确认删除"
         description="确定要删除这个绘本吗？此操作不可恢复。"
+        confirmText="确认删除"
+        cancelText="取消"
         onConfirm={confirmDelete}
         onCancel={() => setDeleteConfirmId(null)}
+      />
+      <ConfirmDialog
+        open={isTerminateConfirmOpen}
+        title="确认停止"
+        description="确定要停止生成吗？已生成的页面将保留。"
+        confirmText="停止"
+        cancelText="取消"
+        onConfirm={() => {
+          setIsTerminateConfirmOpen(false);
+          handleTerminate();
+        }}
+        onCancel={() => setIsTerminateConfirmOpen(false)}
       />
     </>
   );

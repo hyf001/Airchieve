@@ -188,7 +188,7 @@ const EditModal: React.FC<EditModalProps> = ({ user, token, onClose, onSaved }) 
 // ——— 作品弹窗 ———
 
 const WORK_STATUS_LABEL: Record<StorybookStatus, string> = {
-  init: '初始化', creating: '生成中', updating: '更新中', finished: '已完成', error: '失败',
+  init: '初始化', creating: '生成中', updating: '更新中', finished: '已完成', error: '失败', terminated: '已中止',
 };
 
 const statusToBadgeVariant: Record<StorybookStatus, 'muted' | 'info' | 'success' | 'destructive'> = {
@@ -197,6 +197,7 @@ const statusToBadgeVariant: Record<StorybookStatus, 'muted' | 'info' | 'success'
   updating: 'info',
   finished: 'success',
   error: 'destructive',
+  terminated: 'muted',
 };
 
 const WORKS_PAGE_SIZE = 12;

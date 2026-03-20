@@ -23,7 +23,7 @@ const StorybookPreview: React.FC<StorybookPreviewProps> = ({
   const [pageIndex, setPageIndex] = useState(0);
 
   const coverImage = storybook.pages && storybook.pages.length > 0
-    ? storybook.pages[0].image_url
+    ? (storybook.pages.find(p => p.page_type === 'cover')?.image_url || storybook.pages[0].image_url)
     : null;
 
   const handleClick = () => {

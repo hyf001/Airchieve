@@ -12,6 +12,7 @@ from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.storybook import Storybook
 from app.models.user import User
+from app.models.enums import CliType, AspectRatio, ImageSize
 from app.services.storybook_service import (
     create_storybook_async,
     run_create_storybook_background,
@@ -23,8 +24,9 @@ from app.services.storybook_service import (
     save_page_content,
     delete_page,
     reorder_pages,
-    regenerate_pages_async,
-    run_regenerate_pages_background,
+    insert_pages_async,
+    run_insert_pages_background,
+    terminate_storybook,
 )
 from app.services.points_service import InsufficientPointsError, check_creation_points
 
@@ -39,6 +41,10 @@ class CreateStorybookRequest(BaseModel):
     instruction: str = Field(..., min_length=1, max_length=1000, description="用户指令/绘本描述")
     template_id: Optional[int] = Field(None, description="模版ID")
     images: Optional[List[str]] = Field(None, description="base64编码的参考图片列表")
+    cli_type: CliType = Field(CliType.GEMINI, description="CLI类型")
+    page_count: int = Field(10, ge=1, le=20, description="页数")
+    aspect_ratio: AspectRatio = Field(AspectRatio.RATIO_16_9, description="图片比例")
+    image_size: ImageSize = Field(ImageSize.SIZE_1K, description="图片尺寸")
 
 
 class StorybookPageResponse(BaseModel):
@@ -58,6 +64,9 @@ class StorybookResponse(BaseModel):
     error_message: Optional[str] = None
     instruction: Optional[str] = None
     template_id: Optional[int] = None
+    cli_type: CliType
+    aspect_ratio: AspectRatio
+    image_size: ImageSize
 
     class Config:
         from_attributes = True
@@ -73,6 +82,9 @@ class StorybookListResponse(BaseModel):
     is_public: bool
     created_at: str
     pages: Optional[List[StorybookPageResponse]] = None
+    cli_type: Optional[CliType]
+    aspect_ratio: Optional[AspectRatio]
+    image_size: Optional[ImageSize]
 
     class Config:
         from_attributes = True
@@ -81,7 +93,9 @@ class StorybookListResponse(BaseModel):
 class EditImageRequest(BaseModel):
     """图片编辑请求（仅生成图片，不写库）"""
     instruction: str = Field(..., min_length=1, max_length=1000, description="图片编辑指令")
-    image: str = Field(..., description="当前图片 URL 或 base64 data URL")
+    image_to_edit: str = Field(..., description="要编辑的图片 URL 或 base64 data URL")
+    referenced_image: Optional[str] = Field(None, description="参考图片 URL 或 base64 data URL（可选）")
+    storybook_id: int = Field(..., description="绘本ID，用于获取模型、清晰度、图片比例等配置")
 
 
 class SavePageRequest(BaseModel):
@@ -95,15 +109,15 @@ class ReorderPagesRequest(BaseModel):
     order: List[int] = Field(..., description="原页面下标的新排列，例如 [2,0,1]")
 
 
-class RegeneratePagesRequest(BaseModel):
-    """再生成页请求"""
-    page_indices: List[int] = Field(..., min_length=1, max_length=5, description="参考页面下标（1-5 页）")
-    count: int = Field(1, ge=1, le=5, description="生成新页面数量（1-5）")
-    instruction: str = Field("", description="再生成指令")
+class InsertPagesRequest(BaseModel):
+    """插入页面请求"""
+    insert_position: int = Field(..., ge=0, description="插入位置（从0开始，0表示在最前面插入）")
+    count: int = Field(1, ge=1, le=5, description="插入页面数量（1-5）")
+    instruction: str = Field("", description="插入指令")
 
 
-class RegeneratePageAsyncResponse(BaseModel):
-    """再生成页异步响应"""
+class InsertPageAsyncResponse(BaseModel):
+    """插入页面异步响应"""
     storybook_id: int
     status: str
 
@@ -118,6 +132,12 @@ class StorybookCreateResponse(BaseModel):
     id: int
     title: str
     status: str
+
+
+class TerminateResponse(BaseModel):
+    """中止响应"""
+    success: bool
+    message: str
 
 
 # ============ Endpoints ============
@@ -135,7 +155,9 @@ async def edit_image_endpoint(
     try:
         image_base64 = await generate_edited_image(
             instruction=req.instruction,
-            image_url=req.image,
+            image_url=req.image_to_edit,
+            referenced_image=req.referenced_image,
+            storybook_id=req.storybook_id,
             user_id=current_user.id,
         )
     except InsufficientPointsError as e:
@@ -161,10 +183,14 @@ async def create_storybook_endpoint(
     init → creating → finished / error
     """
     try:
-        storybook_id, title, template, style_prefix = await create_storybook_async(
+        storybook_id, title, template = await create_storybook_async(
             instruction=req.instruction,
             template_id=req.template_id,
             user_id=current_user.id,
+            cli_type=req.cli_type,
+            page_count=req.page_count,
+            aspect_ratio=req.aspect_ratio,
+            image_size=req.image_size,
         )
     except InsufficientPointsError as e:
         raise HTTPException(
@@ -179,7 +205,10 @@ async def create_storybook_endpoint(
         current_user.id,
         template,
         req.images,
-        style_prefix,
+        req.page_count,
+        req.aspect_ratio.value,
+        req.image_size.value,
+        req.cli_type,
     )
 
     return StorybookCreateResponse(id=storybook_id, title=title, status="init")
@@ -215,7 +244,10 @@ async def list_storybooks(
             "status": book.status,
             "is_public": book.is_public if book.is_public is not None else False,
             "created_at": book.created_at.isoformat() if book.created_at else "",
-            "pages": book.pages[:1] if book.pages else None
+            "pages": book.pages[:1] if book.pages else None,
+            "cli_type": book.cli_type,
+            "aspect_ratio": book.aspect_ratio,
+            "image_size": book.image_size,
         })
 
     return response_data
@@ -369,21 +401,22 @@ async def delete_page_endpoint(
     return storybook
 
 
-@router.post("/{storybook_id}/pages/merge", status_code=status.HTTP_202_ACCEPTED, response_model=RegeneratePageAsyncResponse)
-async def regenerate_pages_endpoint(
+@router.post("/{storybook_id}/pages/insert", status_code=status.HTTP_202_ACCEPTED, response_model=InsertPageAsyncResponse)
+async def insert_pages_endpoint(
     storybook_id: int,
-    req: RegeneratePagesRequest,
+    req: InsertPagesRequest,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
 ):
     """
-    基于选中页面再生成新页追加到末尾（异步，轮询模式）。
-    原页保留不变。生成几页消耗几积分，成功后扣除。
+    在指定位置插入新页面（异步，轮询模式）。
+    支持在任意位置插入页面。生成几页消耗几积分，成功后扣除。
     """
     try:
-        await regenerate_pages_async(
+        await insert_pages_async(
             storybook_id=storybook_id,
-            page_indices=req.page_indices,
+            insert_position=req.insert_position,
+            count=req.count,
             instruction=req.instruction,
             user_id=current_user.id,
         )
@@ -396,12 +429,25 @@ async def regenerate_pages_endpoint(
         )
 
     background_tasks.add_task(
-        run_regenerate_pages_background,
+        run_insert_pages_background,
         storybook_id,
-        req.page_indices,
+        req.insert_position,
         req.count,
         req.instruction,
         current_user.id,
     )
 
-    return RegeneratePageAsyncResponse(storybook_id=storybook_id, status="updating")
+    return InsertPageAsyncResponse(storybook_id=storybook_id, status="updating")
+
+
+@router.post("/{storybook_id}/terminate", response_model=TerminateResponse)
+async def terminate_storybook_endpoint(
+    storybook_id: int,
+    current_user: User = Depends(get_current_user),
+):
+    """中止正在生成的绘本"""
+    success = await terminate_storybook(storybook_id)
+    return TerminateResponse(
+        success=success,
+        message="已中止" if success else "中止失败或绘本不在生成中"
+    )
