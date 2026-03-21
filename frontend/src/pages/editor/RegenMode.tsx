@@ -23,6 +23,20 @@ const RegenMode: React.FC<RegenModeProps> = ({
 }) => {
   const { toast } = useToast();
   const pages = storybook.pages || [];
+  const aspectRatio = storybook.aspect_ratio || '16:9';
+
+  // 根据比例获取 Tailwind 类名
+  const getAspectRatioClass = (ratio: string): string => {
+    switch (ratio) {
+      case '1:1':
+        return 'aspect-square';
+      case '4:3':
+        return 'aspect-[4/3]';
+      case '16:9':
+      default:
+        return 'aspect-[16/9]';
+    }
+  };
 
   const [insertPosition, setInsertPosition] = useState<number>(pages.length);
   const [count, setCount] = useState(1);
@@ -59,19 +73,19 @@ const RegenMode: React.FC<RegenModeProps> = ({
   };
 
   return (
-    <div className="w-full max-w-4xl space-y-4">
+    <div className="w-full space-y-4 flex justify-center flex-col items-center">
       <div className="text-center space-y-1">
         <p className="text-slate-700 font-medium">选择插入位置并生成新页面</p>
         <p className="text-slate-400 text-sm">当前插入位置：{positionLabel(insertPosition)}</p>
       </div>
 
       {/* Page selection grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 w-full max-w-4xl">
         {pages.map((page, idx) => (
           <div
             key={idx}
             onClick={() => setInsertPosition(idx + 1)}
-            className={`relative aspect-[16/9] rounded-xl overflow-hidden cursor-pointer ring-4 transition-all ${
+            className={`relative ${getAspectRatioClass(aspectRatio)} rounded-xl overflow-hidden cursor-pointer ring-4 transition-all h-[200px] md:h-[250px] ${
               insertPosition === idx + 1
                 ? 'ring-[#00CDD4] scale-[0.97]'
                 : 'ring-transparent hover:ring-slate-300'

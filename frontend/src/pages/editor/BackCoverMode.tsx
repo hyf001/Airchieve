@@ -89,7 +89,7 @@ const BackCoverMode: React.FC<BackCoverModeProps> = ({ storybook, onBack, onBack
 
   if (hasBackCover) {
     return (
-      <div className="w-full max-w-2xl mx-auto flex flex-col items-center gap-6 py-12">
+      <div className="w-full mx-auto flex flex-col items-center gap-6 py-12">
         <div className="text-center">
           <h2 className="text-xl font-bold text-slate-800 mb-2">封底已存在</h2>
           <p className="text-sm text-slate-500">此绘本已经创建了封底，无法重复创建。</p>

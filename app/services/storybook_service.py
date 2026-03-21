@@ -286,6 +286,9 @@ async def create_storybook_async(
             creator=str(user_id),
             instruction=instruction,
             template_id=template_id,
+            cli_type=cli_type,
+            aspect_ratio=aspect_ratio,
+            image_size=image_size,
             status="init"
         )
         session.add(new_storybook)

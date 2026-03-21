@@ -28,6 +28,20 @@ interface EditModeProps {
 const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => {
   const { toast } = useToast();
   const pages = storybook.pages || [];
+  const aspectRatio = storybook.aspect_ratio || '16:9';
+
+  // 根据比例获取 Tailwind 类名
+  const getAspectRatioClass = (ratio: string): string => {
+    switch (ratio) {
+      case '1:1':
+        return 'aspect-square';
+      case '4:3':
+        return 'aspect-[4/3]';
+      case '16:9':
+      default:
+        return 'aspect-[16/9]';
+    }
+  };
 
   const [selectedIndex, setSelectedIndex] = useState(0);
 
@@ -121,14 +135,14 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
 
   return (
     <>
-      <div className="w-full max-w-5xl flex gap-4">
+      <div className="w-full flex gap-4 justify-center items-start">
         {/* Thumbnail strip - left sidebar */}
         <div className="flex flex-col gap-2 overflow-y-auto p-2 custom-scrollbar max-h-[70vh] w-32 shrink-0">
           {pages.map((p, idx) => (
             <button
               key={idx}
               onClick={() => setSelectedIndex(idx)}
-              className={`relative shrink-0 w-24 rounded-lg overflow-hidden ring-2 transition-all aspect-[16/9] mx-auto ${
+              className={`relative shrink-0 w-24 rounded-lg overflow-hidden ring-2 transition-all ${getAspectRatioClass(aspectRatio)} mx-auto ${
                 selectedIndex === idx
                   ? 'ring-[#00CDD4] scale-[1.04]'
                   : 'ring-transparent hover:ring-slate-300'
@@ -143,9 +157,9 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
         </div>
 
         {/* Selected page edit area */}
-        <div className="flex-1 bg-white rounded-2xl shadow-xl overflow-hidden max-w-3xl">
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
           {/* Page preview */}
-          <div className="relative aspect-[16/9] bg-slate-100 overflow-hidden">
+          <div className={`relative ${getAspectRatioClass(aspectRatio)} bg-slate-100 overflow-hidden h-[400px] md:h-[500px]`}>
             <img
               src={currentDisplayImage}
               alt={`第 ${selectedIndex + 1} 页`}
@@ -234,7 +248,7 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
                     onChange={e => setImageInstruction(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleGenerateImage(); } }}
                     placeholder="描述图片修改，例如：把天空改成夜晚…"
-                    className="flex-1 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-[#00CDD4]/30 focus:border-[#00CDD4] placeholder:text-slate-400"
+                    className="flex-1 min-w-0 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-[#00CDD4]/30 focus:border-[#00CDD4] placeholder:text-slate-400"
                     disabled={isGeneratingImage}
                     autoFocus
                   />

@@ -332,6 +332,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
             currentIndex={currentPageIndex}
             onIndexChange={setCurrentPageIndex}
             isGenerating
+            aspectRatio={currentStorybook.aspect_ratio}
           />
         </div>
       );
@@ -360,6 +361,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
             pages={pages}
             currentIndex={currentPageIndex}
             onIndexChange={setCurrentPageIndex}
+            aspectRatio={currentStorybook.aspect_ratio}
           />
         );
       }

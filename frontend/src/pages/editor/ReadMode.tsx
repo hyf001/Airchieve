@@ -1,16 +1,17 @@
 import React, { useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { StorybookPage } from '../../services/storybookService';
+import { StorybookPage, AspectRatio } from '../../services/storybookService';
 
 interface ReadModeProps {
   pages: StorybookPage[];
   currentIndex: number;
   onIndexChange: (index: number) => void;
   isGenerating?: boolean;
+  aspectRatio?: AspectRatio;
 }
 
-const ReadMode: React.FC<ReadModeProps> = ({ pages, currentIndex, onIndexChange, isGenerating }) => {
+const ReadMode: React.FC<ReadModeProps> = ({ pages, currentIndex, onIndexChange, isGenerating, aspectRatio = '16:9' }) => {
   const prev = useCallback(() => {
     if (currentIndex > 0) onIndexChange(currentIndex - 1);
   }, [currentIndex, onIndexChange]);
@@ -18,6 +19,19 @@ const ReadMode: React.FC<ReadModeProps> = ({ pages, currentIndex, onIndexChange,
   const next = useCallback(() => {
     if (currentIndex < pages.length - 1) onIndexChange(currentIndex + 1);
   }, [currentIndex, pages.length, onIndexChange]);
+
+  // 根据比例获取 Tailwind 类名
+  const getAspectRatioClass = (ratio: AspectRatio): string => {
+    switch (ratio) {
+      case '1:1':
+        return 'aspect-square';
+      case '4:3':
+        return 'aspect-[4/3]';
+      case '16:9':
+      default:
+        return 'aspect-[16/9]';
+    }
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -37,21 +51,21 @@ const ReadMode: React.FC<ReadModeProps> = ({ pages, currentIndex, onIndexChange,
       : '内页';
 
   return (
-    <div className="flex flex-col items-center w-full max-w-4xl">
-      <div className="relative w-full">
+    <div className="flex flex-col items-center w-full">
+      <div className="relative flex items-center justify-center gap-2.5">
         {/* Left nav */}
         <Button
           variant="ghost" size="icon"
           onClick={prev}
           disabled={currentIndex === 0}
-          className="absolute -left-4 md:-left-14 top-[45%] -translate-y-1/2 bg-white/80 hover:bg-white text-slate-700 rounded-full shadow-lg z-40 disabled:opacity-0 hover:scale-110 h-12 w-12"
+          className="bg-white/80 hover:bg-white text-slate-700 rounded-full shadow-lg z-40 disabled:opacity-0 hover:scale-110 h-12 w-12 shrink-0"
         >
           <ChevronLeft size={28} />
         </Button>
 
         {/* Page card */}
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-          <div className="relative aspect-[16/9] bg-slate-100 overflow-hidden">
+          <div className={`relative ${getAspectRatioClass(aspectRatio)} bg-slate-100 overflow-hidden h-[400px] md:h-[500px]`}>
             <img
               src={page.image_url}
               alt={`第 ${currentIndex + 1} 页`}
@@ -75,18 +89,12 @@ const ReadMode: React.FC<ReadModeProps> = ({ pages, currentIndex, onIndexChange,
           </div>
         </div>
 
-
-        {isGenerating && currentIndex === pages.length - 1 && (
-          <div className="mt-3 flex items-center justify-center text-xs text-[#00b0b8] font-medium">
-            下一页正在绘制中…
-          </div>
-        )}
-
+        {/* Right nav */}
         <Button
           variant="ghost" size="icon"
           onClick={next}
           disabled={currentIndex >= pages.length - 1}
-          className="absolute -right-4 md:-right-14 top-[45%] -translate-y-1/2 bg-white/80 hover:bg-white text-slate-700 rounded-full shadow-lg z-40 disabled:opacity-0 hover:scale-110 h-12 w-14"
+          className="bg-white/80 hover:bg-white text-slate-700 rounded-full shadow-lg z-40 disabled:opacity-0 hover:scale-110 h-12 w-12 shrink-0"
         >
           <ChevronRight size={28} />
         </Button>

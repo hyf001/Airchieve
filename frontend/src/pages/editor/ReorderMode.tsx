@@ -13,9 +13,23 @@ interface ReorderModeProps {
 const ReorderMode: React.FC<ReorderModeProps> = ({ storybook, onStorybookChange, onExit }) => {
   const { toast } = useToast();
   const pages = storybook.pages || [];
+  const aspectRatio = storybook.aspect_ratio || '16:9';
   const [draft, setDraft] = useState<number[]>(() => pages.map((_, i) => i));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const dragIndexRef = useRef<number | null>(null);
+
+  // 根据比例获取 Tailwind 类名
+  const getAspectRatioClass = (ratio: string): string => {
+    switch (ratio) {
+      case '1:1':
+        return 'aspect-square';
+      case '4:3':
+        return 'aspect-[4/3]';
+      case '16:9':
+      default:
+        return 'aspect-[16/9]';
+    }
+  };
 
   const handleDragStart = (pos: number) => {
     dragIndexRef.current = pos;
@@ -67,14 +81,14 @@ const ReorderMode: React.FC<ReorderModeProps> = ({ storybook, onStorybookChange,
   };
 
   return (
-    <div className="w-full max-w-4xl space-y-4">
+    <div className="w-full space-y-4 flex justify-center flex-col items-center">
       <div className="text-center space-y-1">
         <p className="text-slate-700 font-medium">拖动缩略图调整顺序</p>
         <p className="text-slate-400 text-sm">也可使用左右箭头微调位置</p>
       </div>
 
       {/* Page grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 w-full max-w-5xl">
         {draft.map((origIdx, pos) => {
           const page = pages[origIdx];
           if (!page) return null;
@@ -86,7 +100,7 @@ const ReorderMode: React.FC<ReorderModeProps> = ({ storybook, onStorybookChange,
               onDragOver={(e) => handleDragOver(e, pos)}
               className="rounded-xl overflow-hidden ring-2 ring-slate-200 hover:ring-[#00CDD4] transition-all select-none cursor-grab active:cursor-grabbing bg-white shadow-sm"
             >
-              <div className="relative aspect-[16/9]">
+              <div className={`relative ${getAspectRatioClass(aspectRatio)} h-[150px] md:h-[180px]`}>
                 <img src={page.image_url} alt={`第 ${pos + 1} 页`} className="w-full h-full object-cover" />
                 <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] text-center py-0.5">
                   第 {pos + 1} 页

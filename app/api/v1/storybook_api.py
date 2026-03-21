@@ -4,7 +4,6 @@ Storybook API
 """
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
-from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +18,6 @@ from app.services.storybook_service import (
     get_storybook,
     update_storybook_pages,
     list_storybooks as list_storybooks_service,
-    generate_storybook_image,
     generate_edited_image,
     save_page_content,
     delete_page,
@@ -374,32 +372,6 @@ async def update_public_status_endpoint(
             detail=f"更新公开状态时发生错误: {str(e)}"
         )
 
-
-@router.get("/{storybook_id}/download", status_code=status.HTTP_200_OK)
-async def download_storybook_image(
-    storybook_id: int,
-    current_user: User = Depends(get_current_user),
-):
-    """下载绘本横向长图（JPEG）"""
-    storybook = await get_storybook(storybook_id)
-    if not storybook:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="绘本不存在")
-
-    image_data = await generate_storybook_image(storybook_id)
-
-    if not image_data:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="生成图片失败")
-
-    filename = f"{storybook.title or 'storybook'}_{storybook_id}.jpg"
-    filename = filename.replace("/", "-").replace("\\", "-").replace(":", "-")
-    from urllib.parse import quote
-    encoded_filename = quote(filename, safe='')
-
-    return Response(
-        content=image_data,
-        media_type="image/jpeg",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"}
-    )
 
 
 @router.put("/{storybook_id}/pages/{page_index}", response_model=StorybookPageResponse)

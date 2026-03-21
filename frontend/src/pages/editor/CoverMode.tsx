@@ -69,7 +69,7 @@ const CoverMode: React.FC<CoverModeProps> = ({ storybook, onCoverGenerating }) =
     .filter(({ page }) => page.page_type === 'content');
 
   return (
-    <div className="w-full max-w-2xl mx-auto flex flex-col gap-5">
+    <div className="w-full mx-auto flex flex-col gap-5 items-center">
       {/* 说明 */}
       <p className="text-sm text-slate-500">
         选择 <span className="font-medium text-slate-700">3 张</span> 参考页，AI 将提取画风和角色生成封面。
