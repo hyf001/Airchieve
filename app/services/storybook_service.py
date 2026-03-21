@@ -1019,7 +1019,7 @@ async def generate_cover_async(
         )
 
         cover_page = StorybookPage(
-            text=title,
+            text="",
             image_url=cover_image_url,
             page_type=PageType.COVER,
         )
