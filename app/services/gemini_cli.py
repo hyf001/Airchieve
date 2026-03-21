@@ -314,7 +314,7 @@ class GeminiCli(LLMClientBase):
         page_count: int = 10,
         template: Optional[Template] = None,
         images: Optional[List[str]] = None,
-    ) -> Tuple[List[str], List[Optional[Storyboard]]]:
+    ) -> Tuple[str, List[str], List[Optional[Storyboard]]]:
         """
         创建故事文本和分镜（纯文本生成）
 
@@ -322,10 +322,10 @@ class GeminiCli(LLMClientBase):
             instruction: 用户指令/故事描述
             page_count: 需要生成的页面数量
             template: 模板对象（可选），包含风格名称、描述和系统提示词
-            images: base64编码的参考图片��表（可选）
+            images: base64编码的参考图片列表（可选）
 
         Returns:
-            Tuple[List[str], List[Optional[Storyboard]]]: (故事文本列表, 分镜列表)
+            Tuple[str, List[str], List[Optional[Storyboard]]]: (故事标题, 故事文本列表, 分镜列表)
         """
         client = _get_client()
         logger.info("开始生成故事文本和分镜 | page_count=%d", page_count)
@@ -342,24 +342,27 @@ class GeminiCli(LLMClientBase):
                 "Write story panels for a children's storybook. "
                 "For each panel, provide both the story text and a storyboard describing the illustration.\n\n"
                 "## Output Format\n"
-                "Return a JSON array with objects:\n"
+                "Return a JSON object with the following structure:\n"
                 "```\n"
-                "[\n"
-                "  {\n"
-                "    \"text\": \"Story narrative text (1-2 sentences)\",\n"
-                "    \"storyboard\": {\n"
-                "      \"scene\": \"Scene environment, e.g. sunlit forest clearing with tall oak trees\",\n"
-                "      \"characters\": \"Character actions, posture and expression for this panel, e.g. kneeling down with arms outstretched, mouth open in surprise — describe what they are DOING and FEELING, not what they look like\",\n"
-                "      \"shot\": \"Shot type and composition, e.g. medium shot, subject centered\",\n"
-                "      \"color\": \"Color tone and mood, e.g. warm golden tones, soft afternoon light\",\n"
-                "      \"lighting\": \"Lighting direction and quality, e.g. dappled sunlight from upper left\"\n"
+                "{\n"
+                "  \"title\": \"A concise, evocative story title (match the language of the user's input)\",\n"
+                "  \"pages\": [\n"
+                "    {\n"
+                "      \"text\": \"Story narrative text (1-2 sentences)\",\n"
+                "      \"storyboard\": {\n"
+                "        \"scene\": \"Scene environment, e.g. sunlit forest clearing with tall oak trees\",\n"
+                "        \"characters\": \"Character actions, posture and expression for this panel, e.g. kneeling down with arms outstretched, mouth open in surprise — describe what they are DOING and FEELING, not what they look like\",\n"
+                "        \"shot\": \"Shot type and composition, e.g. medium shot, subject centered\",\n"
+                "        \"color\": \"Color tone and mood, e.g. warm golden tones, soft afternoon light\",\n"
+                "        \"lighting\": \"Lighting direction and quality, e.g. dappled sunlight from upper left\"\n"
+                "      }\n"
                 "    }\n"
-                "  }\n"
-                "]\n"
+                "  ]\n"
+                "}\n"
                 "```\n\n"
                 "## Constraints\n"
-                "- Language: Match user's input language for 'text' field; storyboard fields must be in English\n"
-                "- Length: Exactly {page_count} panel(s)\n"
+                "- Language: Match user's input language for 'title' and 'text' fields; storyboard fields must be in English\n"
+                "- Length: Exactly {page_count} panel(s) in the 'pages' array\n"
                 "- Each text: 1-2 sentences, simple and engaging\n"
                 "- Story flow: Each panel should naturally lead to the next\n"
                 "- Storyboard: Be specific and visual, avoid abstract descriptions\n"
@@ -371,7 +374,8 @@ class GeminiCli(LLMClientBase):
         # User Prompt：用户的具体创意要求
         user_prompt = (
             f"Create a {page_count}-panel children's story based on: \"{instruction}\". "
-            f"Return a JSON array with {page_count} objects, each containing a 'text' field (story narrative) "
+            f"Return a JSON object with a 'title' field (story title) and a 'pages' array of {page_count} objects, "
+            f"each containing a 'text' field (story narrative) "
             f"and a 'storyboard' object with fields: scene, characters, shot, color, lighting."
         )
 
@@ -393,14 +397,46 @@ class GeminiCli(LLMClientBase):
             ),
         )
 
-        # 解析 JSON 故事文本 + 分镜
-        story_texts, story_storyboards = _parse_story_json_response(response)
+        # 解析 JSON：{ title, pages: [{text, storyboard}] }
+        title = ""
+        story_texts: List[str] = []
+        story_storyboards: List[Optional[Storyboard]] = []
+
+        if response.candidates and response.candidates[0].content:
+            for part in response.candidates[0].content.parts or []:
+                if part.text:
+                    try:
+                        data = json.loads(part.text)
+                        if isinstance(data, dict):
+                            title = data.get("title", "")
+                            pages_data = data.get("pages", [])
+                        elif isinstance(data, list):
+                            # 兼容旧格式：直接返回数组
+                            pages_data = data
+                        else:
+                            pages_data = []
+
+                        for item in pages_data:
+                            if isinstance(item, dict):
+                                story_texts.append(item.get("text", ""))
+                                sb = item.get("storyboard")
+                                story_storyboards.append(sb if isinstance(sb, dict) else None)  # type: ignore[arg-type]
+                            else:
+                                story_texts.append(str(item))
+                                story_storyboards.append(None)
+
+                        logger.info("故事解析完成 | title=%s pages=%d", title, len(story_texts))
+                    except (json.JSONDecodeError, KeyError) as e:
+                        logger.warning("JSON 解析失败: %s，回退到文本提取", e)
+                        story_texts = _extract_story_texts(part.text)
+                        story_storyboards = [None] * len(story_texts)
+                    break
 
         if not story_texts:
             logger.warning("模型未返回任何故事文本")
 
-        logger.info("故事文本生成完成 | count=%d", len(story_texts))
-        return story_texts, story_storyboards
+        logger.info("故事文本生成完成 | title=%s count=%d", title, len(story_texts))
+        return title, story_texts, story_storyboards
 
     async def create_insertion_story_and_storyboard(
         self,
@@ -445,14 +481,17 @@ class GeminiCli(LLMClientBase):
                 position_marker = " <-- BEFORE insertion point"
             elif idx == insert_position:
                 position_marker = " <-- AFTER insertion point"
-            full_story_context += f"Page {idx + 1}: {page.text}{position_marker}\n"
+            page_text = page.text or ""
+            full_story_context += f"Page {idx + 1}: {page_text}{position_marker}\n"
 
         # 构建插入点上下文（前后页文本）
         insertion_context_parts = []
         if before_page:
-            insertion_context_parts.append(f"PAGE BEFORE insertion (Page {insert_position}):\n{before_page.text}")
+            before_text = before_page.text or ""
+            insertion_context_parts.append(f"PAGE BEFORE insertion (Page {insert_position}):\n{before_text}")
         if after_page:
-            insertion_context_parts.append(f"PAGE AFTER insertion (Page {insert_position + 1}):\n{after_page.text}")
+            after_text = after_page.text or ""
+            insertion_context_parts.append(f"PAGE AFTER insertion (Page {insert_position + 1}):\n{after_text}")
 
         if not insertion_context_parts:
             insertion_context_str = "No context pages available"
@@ -775,5 +814,98 @@ class GeminiCli(LLMClientBase):
         raise GeminiTechnicalError(
             "edit_image 未获取到图片内容",
             "图片生成失败，请稍后重试",
+            "NO_IMAGE_RETURNED",
+        )
+
+    async def generate_cover(
+        self,
+        title: str,
+        cover_text: str,
+        reference_images: List[str],
+        aspect_ratio: str = "16:9",
+        image_size: str = "1k",
+    ) -> str:
+        """生成绘本封面图片，使用内页图作为风格参考"""
+        client = _get_client()
+        logger.info("生成封面 | title=%s ref_count=%d", title, len(reference_images))
+
+        system_instruction = (
+            "You are a professional children's book cover designer. "
+            "Your task is to create a single eye-catching cover illustration for a picture book. "
+            "The cover must be visually striking, compositionally complete, and reflect the story's art style. "
+            "Extract the art style, color palette, and character appearance from the reference page illustrations provided. "
+            "Apply these consistently to create a cohesive cover that feels part of the same book. "
+            "The cover should feature the main character(s) prominently with an inviting, warm composition. "
+            "IMPORTANT: The book title MUST appear on the cover as beautifully hand-lettered or illustrated artistic text — "
+            "styled to match the book's art style (e.g. brush script, fairy-tale calligraphy, playful bubble letters). "
+            "The title text should be integrated naturally into the illustration, not pasted on top. "
+            "Output a full-bleed illustration."
+        )
+
+        prompt = (
+            f"Create a cover illustration for the children's picture book.\n\n"
+            f"Book title (MUST appear as artistic hand-lettered text on the cover): 《{title}》\n"
+            f"Cover description: {cover_text}\n\n"
+            f"Requirements:\n"
+            f"- Full-bleed cinematic cover composition\n"
+            f"- Match the art style, color palette, and character design from the reference page illustrations below\n"
+            f"- The main character(s) should be clearly visible and engaging\n"
+            f"- Warm, inviting mood appropriate for a children's book cover\n"
+            f"- The title 「{title}」 MUST be rendered as decorative artistic lettering integrated into the illustration\n"
+            f"- Title text style: hand-lettered, calligraphic, or illustrated — consistent with the book's art style"
+        )
+
+        parts = [types.Part(text=prompt)]
+        parts.append(types.Part(
+            text=(
+                f"The following {len(reference_images)} image(s) are REFERENCE PAGE ILLUSTRATIONS from this book. "
+                "Extract and maintain the exact art style, color palette, character appearance, and visual atmosphere."
+            )
+        ))
+        parts.extend(_build_image_parts(reference_images))
+
+        response = await client.aio.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=types.Content(parts=parts),
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                response_modalities=["IMAGE"],
+                image_config=types.ImageConfig(aspect_ratio=aspect_ratio, image_size=image_size),
+            ),
+        )
+
+        if (response.usage_metadata is not None
+                and response.usage_metadata.candidates_token_count == 0):
+            raise GeminiContentPolicyError(
+                "封面生成 candidatesTokenCount=0",
+                "封面生成被内容审核拒绝，请修改描述后重试",
+                "ZERO_CANDIDATES_TOKEN",
+            )
+
+        for candidate in response.candidates or []:
+            finish_reason = candidate.finish_reason
+            if finish_reason is not None and finish_reason != types.FinishReason.STOP:
+                if finish_reason in _FINISH_REASON_MAP:
+                    error_type, user_msg = _FINISH_REASON_MAP[finish_reason]
+                    raise GeminiContentPolicyError(
+                        f"封面生成 finish_reason={finish_reason}",
+                        user_msg,
+                        error_type,
+                    )
+                raise GeminiTechnicalError(
+                    f"封面生成非正常结束 finish_reason={finish_reason}",
+                    "生成被意外中断，请稍后重试",
+                    "UNEXPECTED_FINISH_REASON",
+                )
+            if not candidate.content:
+                continue
+            for part in candidate.content.parts or []:
+                if part.inline_data and part.inline_data.mime_type and part.inline_data.mime_type.startswith("image/"):
+                    logger.info("封面生成成功 | mime_type=%s", part.inline_data.mime_type)
+                    return _inline_data_to_data_url(part.inline_data)
+
+        raise GeminiTechnicalError(
+            "封面生成未获取到图片内容",
+            "封面生成失败，请稍后重试",
             "NO_IMAGE_RETURNED",
         )

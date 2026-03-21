@@ -135,9 +135,9 @@ async def _generate_storybook_content(
     try:
         llm_client = LLMClientBase.get_client(cli_type)
 
-        # 第一步：生成故事和分镜
+        # 第一步：生成故事和分镜（含标题）
         logger.info("第一步：生成故事文本和分镜 | storybook_id=%s", storybook_id)
-        story_texts, storyboards = await llm_client.create_story_and_storyboard(
+        generated_title, story_texts, storyboards = await llm_client.create_story_and_storyboard(
             instruction=instruction,
             page_count=page_count,
             template=template,
@@ -147,7 +147,19 @@ async def _generate_storybook_content(
         if not story_texts:
             raise ValueError("未能生成故事文本")
 
-        logger.info("故事文本和分镜生成完成 | storybook_id=%s count=%d", storybook_id, len(story_texts))
+        logger.info("故事文本和分镜生成完成 | storybook_id=%s count=%d title=%s", storybook_id, len(story_texts), generated_title)
+
+        # 更新数据库中的故事标题（如果 AI 返回了标题）
+        if generated_title:
+            async with async_session_maker() as session:
+                result = await session.execute(
+                    select(Storybook).where(Storybook.id == storybook_id)
+                )
+                storybook = result.scalar_one_or_none()
+                if storybook:
+                    storybook.title = generated_title
+                    await session.commit()
+                    logger.info("故事标题已更新 | storybook_id=%s title=%s", storybook_id, generated_title)
 
         # 第二步：逐页生成图片
         pages = []
@@ -540,8 +552,11 @@ async def run_insert_pages_background(
             storybook = result.scalar_one_or_none()
             if not storybook or not storybook.pages:
                 return
-            # 获取所有页面作为参考
-            reference_pages: List[StorybookPage] = list(storybook.pages)
+            # 获取所有页面作为参考（排除封面和封底）
+            reference_pages: List[StorybookPage] = [
+                p for p in storybook.pages
+                if p.page_type not in (PageType.COVER, PageType.BACK_COVER)
+            ]
 
             # 获取模板（如果有）
             template = None
@@ -921,3 +936,227 @@ async def generate_storybook_image(
     logger.info("绘本长图生成成功 | storybook_id=%s panels=%s size=%s",
                 storybook_id, len(panels), out.tell())
     return out.getvalue()
+
+
+# ============ 封面生成 ============
+
+def _pick_reference_pages(pages: List[StorybookPage]) -> List[StorybookPage]:
+    """
+    从内页中选取参考页：
+    - 超过3页：取第一页、中间页、最后一页
+    - 3页及以下：全选
+    只取 page_type == CONTENT 的页面。
+    """
+    content_pages = [p for p in pages if p.page_type == PageType.CONTENT]
+    if not content_pages:
+        # 降级：所有页面都算
+        content_pages = list(pages)
+
+    n = len(content_pages)
+    if n <= 3:
+        return content_pages
+    mid = n // 2
+    return [content_pages[0], content_pages[mid], content_pages[-1]]
+
+
+async def generate_cover_async(
+    storybook_id: int,
+    user_id: int,
+    selected_page_indices: Optional[List[int]] = None,
+) -> None:
+    """
+    手动触发封面生成（异步，由后台任务调用）。
+    若提供 selected_page_indices，则使用用户指定的页面作为参考图；
+    否则自动选取首/中/尾3张。
+    封面文字使用绘本标题。
+    生成后插入/替换 pages[0]（page_type=COVER）。
+    """
+    await check_creation_points(user_id)
+
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Storybook).where(Storybook.id == storybook_id)
+        )
+        storybook = result.scalar_one_or_none()
+        if not storybook:
+            raise ValueError("绘本不存在")
+        if not storybook.pages:
+            raise ValueError("绘本暂无页面，无法生成封面")
+
+        cli_type = storybook.cli_type
+        aspect_ratio = storybook.aspect_ratio
+        image_size = storybook.image_size
+        title = storybook.title
+        pages_snapshot = list(storybook.pages)
+
+        storybook.status = "updating"
+        await session.commit()
+
+    try:
+        if selected_page_indices is not None:
+            # 用户手动选择的页面（过滤越界索引）
+            reference_image_urls = [
+                pages_snapshot[i].image_url
+                for i in selected_page_indices
+                if 0 <= i < len(pages_snapshot)
+            ]
+        else:
+            reference_pages = _pick_reference_pages(pages_snapshot)
+            reference_image_urls = [p.image_url for p in reference_pages]
+
+        logger.info(
+            "封面生成：选取参考页 %d 张 | storybook_id=%s",
+            len(reference_image_urls), storybook_id,
+        )
+
+        llm_client = LLMClientBase.get_client(cli_type)
+        cover_image_url = await llm_client.generate_cover(
+            title=title,
+            cover_text=title,
+            reference_images=reference_image_urls,
+            aspect_ratio=aspect_ratio,
+            image_size=image_size,
+        )
+
+        cover_page = StorybookPage(
+            text=title,
+            image_url=cover_image_url,
+            page_type=PageType.COVER,
+        )
+        cover_page = await _upload_page_image_to_oss(storybook_id, cover_page)
+
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(Storybook).where(Storybook.id == storybook_id)
+            )
+            storybook = result.scalar_one_or_none()
+            if not storybook:
+                return
+            pages = list(storybook.pages or [])
+            # 替换已有封面，或插入到最前面
+            if pages and pages[0].page_type == PageType.COVER:
+                pages[0] = cover_page
+            else:
+                pages.insert(0, cover_page)
+            storybook.pages = pages
+            storybook.status = "finished"
+            await session.commit()
+
+        logger.info("封面生成完成 | storybook_id=%s", storybook_id)
+
+    except LLMError as e:
+        logger.warning("封面生成被拒绝 | storybook_id=%s error=%s", storybook_id, e.user_message)
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(Storybook).where(Storybook.id == storybook_id)
+            )
+            storybook = result.scalar_one_or_none()
+            if storybook:
+                storybook.status = "error"
+                storybook.error_message = e.user_message
+                await session.commit()
+        raise
+    except Exception as e:
+        logger.exception("封面生成失败 | storybook_id=%s error=%s", storybook_id, e)
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(Storybook).where(Storybook.id == storybook_id)
+            )
+            storybook = result.scalar_one_or_none()
+            if storybook:
+                storybook.status = "error"
+                storybook.error_message = str(e)[:500]
+                await session.commit()
+        raise
+
+
+async def run_generate_cover_background(
+    storybook_id: int,
+    user_id: int,
+    selected_page_indices: Optional[List[int]] = None,
+) -> None:
+    """后台任务入口，吞掉异常（已写入 error_message）"""
+    try:
+        await generate_cover_async(storybook_id, user_id, selected_page_indices)
+    except Exception:
+        pass
+
+
+async def generate_back_cover_async(
+    storybook_id: int,
+    image_data: str,
+) -> None:
+    """
+    生成封底（同步）。
+    封底使用前端传来的 base64 图片，直接插入到绘本最后一页。
+    """
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Storybook).where(Storybook.id == storybook_id)
+        )
+        storybook = result.scalar_one_or_none()
+        if not storybook:
+            raise ValueError("绘本不存在")
+        if not storybook.pages:
+            raise ValueError("绘本暂无页面，无法生成封底")
+
+        # 检查是否已有封底
+        if any(p.page_type == PageType.BACK_COVER for p in storybook.pages):
+            raise ValueError("封底已存在，不能重复生成")
+
+        storybook.status = "updating"
+        await session.commit()
+
+        try:
+            # 上传图片到 OSS
+            from app.services import oss_service
+
+            # 从 base64 data URL 中确定文件扩展名
+            if image_data.startswith('data:image'):
+                ext = '.png' if 'png' in image_data else '.jpg'
+            else:
+                raise ValueError("无效的图片数据格式")
+
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]
+            object_key = f"storybooks/{storybook_id}/backcover_{timestamp}{ext}"
+
+            # 上传到 OSS
+            oss_url = await oss_service.upload_from_url(image_data, object_key)
+            logger.info("封底图片上传OSS成功 | storybook_id=%s object_key=%s",
+                       storybook_id, object_key)
+
+            # 创建封底页面
+            back_cover_page = StorybookPage(
+                text="",
+                image_url=oss_url,
+                page_type=PageType.BACK_COVER,
+            )
+
+            async with async_session_maker() as session:
+                result = await session.execute(
+                    select(Storybook).where(Storybook.id == storybook_id)
+                )
+                storybook = result.scalar_one_or_none()
+                if not storybook:
+                    return
+                pages = list(storybook.pages or [])
+                # 将封底添加到最后一页
+                pages.append(back_cover_page)
+                storybook.pages = pages
+                storybook.status = "finished"
+                await session.commit()
+
+            logger.info("封底创建成功 | storybook_id=%s", storybook_id)
+
+        except Exception as e:
+            async with async_session_maker() as session:
+                result = await session.execute(
+                    select(Storybook).where(Storybook.id == storybook_id)
+                )
+                storybook = result.scalar_one_or_none()
+                if storybook:
+                    storybook.status = "error"
+                    storybook.error_message = f"封底生成失败: {str(e)}"
+                    await session.commit()
+            logger.error("封底生成失败 | storybook_id=%s error=%s", storybook_id, e)
+            raise

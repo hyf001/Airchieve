@@ -57,7 +57,7 @@ class LLMClientBase(ABC):
         page_count: int = 10,
         template: Optional[Template] = None,
         images: Optional[List[str]] = None,
-    ) -> Tuple[List[str], List[Optional[Storyboard]]]:
+    ) -> Tuple[str, List[str], List[Optional[Storyboard]]]:
         """
         创建故事文本和分镜（纯文本生成）
 
@@ -68,7 +68,7 @@ class LLMClientBase(ABC):
             images: base64编码的参考图片列表（可选）
 
         Returns:
-            Tuple[List[str], List[Optional[Storyboard]]]: (故事文本列表, 分镜列表)
+            Tuple[str, List[str], List[Optional[Storyboard]]]: (故事标题, 故事文本列表, 分镜列表)
         """
         pass
 
@@ -152,3 +152,26 @@ class LLMClientBase(ABC):
         """
         pass
 
+    @abstractmethod
+    async def generate_cover(
+        self,
+        title: str,
+        cover_text: str,
+        reference_images: List[str],
+        aspect_ratio: str = "16:9",
+        image_size: str = "1k",
+    ) -> str:
+        """
+        生成绘本封面图片
+
+        Args:
+            title: 绘本标题
+            cover_text: 封面展示文字
+            reference_images: 参考图片列表（从内页自动选取）
+            aspect_ratio: 图片比例
+            image_size: 图片尺寸
+
+        Returns:
+            str: 生成的封面图片 base64 data URL
+        """
+        pass

@@ -254,8 +254,6 @@ const InstructionInputBox: React.FC<InstructionInputBoxProps> = ({
               </SelectTrigger>
               <SelectContent className="bg-white/95 border-white/70">
                 <SelectItem value="gemini">Gemini</SelectItem>
-                <SelectItem value="claude">Claude</SelectItem>
-                <SelectItem value="openai">OpenAI</SelectItem>
               </SelectContent>
             </Select>
 

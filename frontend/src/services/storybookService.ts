@@ -299,6 +299,42 @@ export const terminateStorybook = async (storybookId: number): Promise<{ success
 };
 
 /**
+ * 手动触发封面生成（异步，轮询绘本 status: updating → finished/error）
+ */
+export const generateCover = async (
+  storybookId: number,
+  selectedPageIndices: number[],
+): Promise<{ storybook_id: number; status: string }> => {
+  const res = await fetch(`${API_BASE}/${storybookId}/cover/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify({ selected_page_indices: selectedPageIndices }),
+  });
+  if (!res.ok) {
+    await handleWriteError(res, "封面生成失败");
+  }
+  return res.json() as Promise<{ storybook_id: number; status: string }>;
+};
+
+/**
+ * 生成封底（同步，直接添加到绘本最后一页）
+ */
+export const generateBackCover = async (
+  storybookId: number,
+  imageData: string,
+): Promise<{ storybook_id: number; status: string }> => {
+  const res = await fetch(`${API_BASE}/${storybookId}/backcover/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify({ image_data: imageData }),
+  });
+  if (!res.ok) {
+    await handleWriteError(res, "封底生成失败");
+  }
+  return res.json() as Promise<{ storybook_id: number; status: string }>;
+};
+
+/**
  * 删除绘本
  */
 export const deleteStorybook = async (storybookId: number): Promise<void> => {
@@ -362,9 +398,11 @@ const loadImage = async (url: string): Promise<HTMLImageElement | null> => {
 /**
  * 在浏览器端用 Canvas 为每页单独生成图片，然后合并成 PDF 下载
  * 布局与 EditorView 一致：图片全屏 + 底部渐变遮罩 + 白色文字
+ * @param watermark 是否在每页右下角添加水印（默认 true）
  */
 export const downloadStorybookImage = async (
   storybook: Storybook,
+  watermark: boolean = true,
 ): Promise<void> => {
   // 动态导入 jsPDF，避免在文件顶部导入导致类型问题
   const { default: jsPDF } = await import('jspdf');
@@ -372,8 +410,11 @@ export const downloadStorybookImage = async (
   const pages = storybook.pages || [];
   if (pages.length === 0) throw new Error('绘本无页面内容');
 
-  // 并行加载所有图片
-  const images = await Promise.all(pages.map(p => loadImage(p.image_url)));
+  // 并行加载所有图片（含水印图）
+  const [images, watermarkImg] = await Promise.all([
+    Promise.all(pages.map(p => loadImage(p.image_url))),
+    watermark ? loadImage('/watermark.png') : Promise.resolve(null),
+  ]);
   const validImages = images.filter((img): img is HTMLImageElement => img !== null);
 
   // 计算单页尺寸（使用原始图片尺寸，保持分辨率）
@@ -419,52 +460,70 @@ export const downloadStorybookImage = async (
       if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
     }
 
-    // 底部渐变遮罩（transparent → black/75）
-    const gradY = PANEL_H - gradH;
-    const grad = ctx.createLinearGradient(0, gradY, 0, PANEL_H);
-    grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, 'rgba(0,0,0,0.75)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, gradY, PANEL_W, gradH);
+    // 封页/封底不添加渐变遮罩和文字
+    const isCoverPage = page.page_type === 'cover' || page.page_type === 'back_cover';
 
-    // 白色文字（带阴影）
-    ctx.font = fontStack;
-    ctx.textBaseline = 'top';
+    if (!isCoverPage) {
+      // 底部渐变遮罩（transparent → black/75）
+      const gradY = PANEL_H - gradH;
+      const grad = ctx.createLinearGradient(0, gradY, 0, PANEL_H);
+      grad.addColorStop(0, 'rgba(0,0,0,0)');
+      grad.addColorStop(1, 'rgba(0,0,0,0.75)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, gradY, PANEL_W, gradH);
 
-    const text = page.text || '';
-    const lines: string[] = [];
-    let cur = '';
-    for (const ch of text) {
-      const test = cur + ch;
-      if (ctx.measureText(test).width > maxTextW && cur) {
-        lines.push(cur);
-        cur = ch;
-      } else {
-        cur = test;
+      // 白色文字（带阴影）
+      ctx.font = fontStack;
+      ctx.textBaseline = 'top';
+
+      const text = page.text || '';
+      const lines: string[] = [];
+      let cur = '';
+      for (const ch of text) {
+        const test = cur + ch;
+        if (ctx.measureText(test).width > maxTextW && cur) {
+          lines.push(cur);
+          cur = ch;
+        } else {
+          cur = test;
+        }
       }
-    }
-    if (cur) lines.push(cur);
+      if (cur) lines.push(cur);
 
-    const lineH = fontSize * 1.55;
-    const totalH = lines.length * lineH;
-    // 文字偏向渐变区域的下半部分，更靠近底部
-    let textY = gradY + (gradH - totalH) * 1.0;  // 1.0表示更偏向下部
-    textY = Math.max(gradY + padding / 2, textY);
+      const lineH = fontSize * 1.55;
+      const totalH = lines.length * lineH;
+      let textY = gradY + (gradH - totalH) * 1.0;
+      textY = Math.max(gradY + padding / 2, textY);
 
-    ctx.shadowColor = 'rgba(0,0,0,0.6)';
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetX = 1;
-    ctx.shadowOffsetY = 1;
-    ctx.fillStyle = 'white';
-    for (const line of lines) {
-      const lw = ctx.measureText(line).width;
-      ctx.fillText(line, (PANEL_W - lw) / 2, textY);
-      textY += lineH;
+      ctx.shadowColor = 'rgba(0,0,0,0.6)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetX = 1;
+      ctx.shadowOffsetY = 1;
+      ctx.fillStyle = 'white';
+      for (const line of lines) {
+        const lw = ctx.measureText(line).width;
+        ctx.fillText(line, (PANEL_W - lw) / 2, textY);
+        textY += lineH;
+      }
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
     }
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
+
+    // 水印（右下角，使用 watermark.png）
+    if (watermark && watermarkImg) {
+      const wmMaxW = Math.floor(PANEL_W * 0.28);
+      const wmScale = wmMaxW / watermarkImg.naturalWidth;
+      const wmW = wmMaxW;
+      const wmH = Math.round(watermarkImg.naturalHeight * wmScale);
+      const wmPad = Math.floor(PANEL_W * 0.02);
+      const wmX = PANEL_W - wmW - wmPad;
+      const wmY = PANEL_H - wmH - wmPad;
+      ctx.globalAlpha = 0.55;
+      ctx.drawImage(watermarkImg, wmX, wmY, wmW, wmH);
+      ctx.globalAlpha = 1;
+    }
 
     // 将 Canvas 转换为 JPEG Data URL
     const dataUrl = canvas.toDataURL('image/jpeg', 0.95);

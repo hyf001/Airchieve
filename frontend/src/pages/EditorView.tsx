@@ -16,6 +16,7 @@ Trash2,
   Edit2,
   Eye,
   Square,
+  BookImage,
 } from 'lucide-react';
 import {
   getStorybook,
@@ -29,6 +30,7 @@ import {
 } from '../services/storybookService';
 import { usePolling } from '../hooks/usePolling';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -38,8 +40,10 @@ import ReadMode from './editor/ReadMode';
 import EditMode from './editor/EditMode';
 import ReorderMode from './editor/ReorderMode';
 import RegenMode from './editor/RegenMode';
+import CoverMode from './editor/CoverMode';
+import BackCoverMode from './editor/BackCoverMode';
 
-type EditorMode = 'read' | 'edit' | 'reorder' | 'regen';
+type EditorMode = 'read' | 'edit' | 'reorder' | 'regen' | 'cover' | 'backcover';
 
 const statusTextMap: Record<string, string> = {
   init: '初始化',
@@ -72,6 +76,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
 
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [isDownloadDialogOpen, setIsDownloadDialogOpen] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [isTerminating, setIsTerminating] = useState(false);
   const [isTerminateConfirmOpen, setIsTerminateConfirmOpen] = useState(false);
@@ -207,11 +212,17 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
     }
   };
 
-  const handleDownloadImage = async () => {
+  const handleDownloadImage = () => {
     if (!currentStorybook || currentStorybook.status !== 'finished') return;
+    setIsDownloadDialogOpen(true);
+  };
+
+  const handleDownloadConfirm = async (watermark: boolean) => {
+    if (!currentStorybook) return;
+    setIsDownloadDialogOpen(false);
     setIsDownloading(true);
     try {
-      await downloadStorybookImage(currentStorybook);
+      await downloadStorybookImage(currentStorybook, watermark);
     } catch (err) {
       toast({ variant: 'destructive', title: '下载失败', description: err instanceof Error ? err.message : undefined });
     } finally {
@@ -248,10 +259,12 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
   const canReadPages = pages.length > 0;
 
   const modeTabs: { key: EditorMode; label: string; icon: React.ReactNode }[] = [
-    { key: 'read',    label: '阅读',   icon: <Eye size={14} /> },
-    { key: 'edit',    label: '编辑页',   icon: <Edit2 size={14} /> },
-    { key: 'reorder', label: '排序',   icon: <ArrowUpDown size={14} /> },
-    { key: 'regen',   label: '继续创作', icon: <Layers size={14} /> },
+    { key: 'read',      label: '阅读',      icon: <Eye size={14} /> },
+    { key: 'edit',      label: '编辑页',    icon: <Edit2 size={14} /> },
+    { key: 'reorder',   label: '排序',      icon: <ArrowUpDown size={14} /> },
+    { key: 'regen',     label: '继续创作',   icon: <Layers size={14} /> },
+    { key: 'cover',     label: '生成封面',   icon: <BookImage size={14} /> },
+    { key: 'backcover', label: '生成封底',   icon: <BookImage size={14} /> },
   ];
 
   const renderContent = () => {
@@ -382,6 +395,31 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
             }}
             onStartPolling={startPolling}
             onExit={() => setMode('read')}
+          />
+        );
+      }
+      if (canEditModes && mode === 'cover') {
+        content = (
+          <CoverMode
+            storybook={currentStorybook}
+            onCoverGenerating={() => {
+              setCurrentStorybook(prev => prev ? { ...prev, status: 'updating' } : prev);
+              setMode('read');
+              startPolling(currentStorybook.id);
+            }}
+          />
+        );
+      }
+      if (canEditModes && mode === 'backcover') {
+        content = (
+          <BackCoverMode
+            storybook={currentStorybook}
+            onBack={() => setMode('read')}
+            onBackCoverCreated={async () => {
+              // 重新加载绘本数据
+              await loadStorybook(currentStorybook.id);
+              setMode('read');
+            }}
           />
         );
       }
@@ -573,6 +611,18 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
         onConfirm={confirmDelete}
         onCancel={() => setDeleteConfirmId(null)}
       />
+      <Dialog open={isDownloadDialogOpen} onOpenChange={(o) => { if (!o) setIsDownloadDialogOpen(false); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>下载作品</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-500">是否在下载的图片中添加水印？</p>
+          <DialogFooter className="flex gap-2 sm:flex-row flex-col">
+            <Button variant="outline" onClick={() => handleDownloadConfirm(false)}>去水印下载</Button>
+            <Button variant="default" onClick={() => handleDownloadConfirm(true)}>带水印下载</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <ConfirmDialog
         open={isTerminateConfirmOpen}
         title="确认停止"
