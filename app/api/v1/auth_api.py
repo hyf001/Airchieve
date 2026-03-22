@@ -13,9 +13,11 @@ import random
 import string
 from datetime import datetime, timedelta, timezone
 
+import httpx
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
+from app.core.config import settings
 from app.core.security import create_access_token
 from app.models.user import User
 from app.services import user_service
@@ -49,6 +51,12 @@ class WechatLoginRequest(BaseModel):
     nickname: str           = Field(..., min_length=1, max_length=64)
     avatar_url: str | None  = Field(None, max_length=512)
     unionid:  str | None    = Field(None, description="微信 unionid（可选）")
+
+
+class WechatMiniLoginRequest(BaseModel):
+    code:       str          = Field(..., description="wx.login() 返回的临时 code")
+    nickname:   str          = Field("微信用户", min_length=1, max_length=64)
+    avatar_url: str | None   = Field(None, max_length=512)
 
 
 class SmsSendRequest(BaseModel):
@@ -184,6 +192,56 @@ async def login_sms(req: SmsLoginRequest):
             detail="该手机号尚未绑定账号，请先注册",
         )
     return _make_token(user)
+
+
+@router.post("/login/wechat-mini", response_model=TokenResponse)
+async def login_wechat_mini(req: WechatMiniLoginRequest):
+    """
+    微信小程序登录
+
+    前端调用 wx.login() 获取临时 code，传入后端。
+    后端向微信服务器换取 openid，再查找或创建用户。
+    """
+    if not settings.WECHAT_MINI_APP_ID or not settings.WECHAT_MINI_APP_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="小程序登录未配置，请联系管理员",
+        )
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            "https://api.weixin.qq.com/sns/jscode2session",
+            params={
+                "appid":      settings.WECHAT_MINI_APP_ID,
+                "secret":     settings.WECHAT_MINI_APP_SECRET,
+                "js_code":    req.code,
+                "grant_type": "authorization_code",
+            },
+            timeout=10,
+        )
+
+    data = resp.json()
+    if "errcode" in data and data["errcode"] != 0:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"微信登录失败：{data.get('errmsg', data['errcode'])}",
+        )
+
+    openid = data.get("openid")
+    if not openid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="获取 openid 失败",
+        )
+
+    user, is_new = await user_service.get_or_create_wechat_mini_user(
+        openid=openid,
+        nickname=req.nickname,
+        avatar_url=req.avatar_url,
+    )
+    resp_token = _make_token(user)
+    resp_token.is_new_user = is_new
+    return resp_token
 
 
 @router.post("/login/wechat", response_model=TokenResponse)

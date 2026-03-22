@@ -65,7 +65,8 @@ class AuthType(str, Enum):
     """登录凭证类型"""
     password   = "password"    # 账号 + 密码
     sms        = "sms"         # 手机号（验证码在缓存层校验，不持久化）
-    wechat_web = "wechat_web"  # 微信网页扫码授权（openid）
+    wechat_web  = "wechat_web"   # 微信网页扫码授权（openid）
+    wechat_mini = "wechat_mini"  # 微信小程序（code 换 openid）
 
 
 class MembershipLevel(str, Enum):

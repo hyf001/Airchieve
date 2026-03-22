@@ -239,6 +239,53 @@ async def get_or_create_wechat_user(
 
 
 # ---------------------------------------------------------------------------
+# 微信小程序
+# ---------------------------------------------------------------------------
+
+async def get_or_create_wechat_mini_user(
+    openid: str,
+    nickname: str,
+    avatar_url: str | None = None,
+) -> tuple[User, bool]:
+    """
+    微信小程序登录：通过 openid 查找或自动注册用户
+
+    Returns:
+        (User, is_new_user)
+    """
+    async with async_session_maker() as session:
+        auth = (
+            await session.execute(
+                select(UserAuth).where(
+                    UserAuth.auth_type == AuthType.wechat_mini,
+                    UserAuth.identifier == openid,
+                    UserAuth.is_active == True,
+                )
+            )
+        ).scalar_one_or_none()
+
+        if auth:
+            user = (
+                await session.execute(select(User).where(User.id == auth.user_id))
+            ).scalar_one()
+            user.updated_at = datetime.now(timezone.utc)
+            await session.commit()
+            await session.refresh(user)
+            return user, False
+
+        # 新用户
+        user = await _create_user(session, nickname, avatar_url)
+        await _add_auth(
+            session, user.id,
+            auth_type=AuthType.wechat_mini,
+            identifier=openid,
+        )
+        await session.commit()
+        await session.refresh(user)
+        return user, True
+
+
+# ---------------------------------------------------------------------------
 # 查询 / 更新资料
 # ---------------------------------------------------------------------------
 

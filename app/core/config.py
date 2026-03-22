@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     OSS_BUCKET_NAME: str = ""
     OSS_BASE_URL: str = ""        # 自定义域名，e.g. https://cdn.example.com（可选）
 
+    # WeChat Mini Program（小程序登录）
+    WECHAT_MINI_APP_ID:     str = ""   # 小程序 AppID
+    WECHAT_MINI_APP_SECRET: str = ""   # 小程序 AppSecret
+
     # WeChat Pay (微信支付 APIv3)
     WECHAT_PAY_APP_ID: str = ""           # 小程序 / 公众号 AppID
     WECHAT_PAY_MCHID: str = ""            # 商户号（10位数字）

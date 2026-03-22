@@ -1,0 +1,47 @@
+export default defineAppConfig({
+  pages: [
+    'pages/login/index',
+    'pages/home/index',
+    'pages/editor/index',
+    'pages/templates/index',
+    'pages/profile/index',
+  ],
+  tabBar: {
+    color: '#94a3b8',
+    selectedColor: '#0ea5e9',
+    backgroundColor: '#ffffff',
+    borderStyle: 'white',
+    list: [
+      {
+        pagePath: 'pages/home/index',
+        text: '首页',
+        iconPath: 'assets/tabbar/home.png',
+        selectedIconPath: 'assets/tabbar/home-active.png',
+      },
+      {
+        pagePath: 'pages/editor/index',
+        text: '我的绘本',
+        iconPath: 'assets/tabbar/book.png',
+        selectedIconPath: 'assets/tabbar/book-active.png',
+      },
+      {
+        pagePath: 'pages/templates/index',
+        text: '模板',
+        iconPath: 'assets/tabbar/template.png',
+        selectedIconPath: 'assets/tabbar/template-active.png',
+      },
+      {
+        pagePath: 'pages/profile/index',
+        text: '我的',
+        iconPath: 'assets/tabbar/user.png',
+        selectedIconPath: 'assets/tabbar/user-active.png',
+      },
+    ],
+  },
+  window: {
+    backgroundTextStyle: 'light',
+    navigationBarBackgroundColor: '#ffffff',
+    navigationBarTitleText: 'AI 绘本',
+    navigationBarTextStyle: 'black',
+  },
+})
