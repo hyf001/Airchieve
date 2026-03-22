@@ -1,0 +1,439 @@
+<view class="editor-page">
+
+  <!-- 当前绘本内容 -->
+  <view class="editor-content">
+
+    <!-- 标题 + 操作栏 -->
+    <view class="editor-header">
+      <text class="editor-book-title" number-of-lines="1">{{current.title}}</text>
+      <view class="editor-header-actions">
+        <view
+          wx:if="{{current.status === 'creating' || current.status === 'updating'}}"
+          class="editor-header-btn editor-header-btn--danger"
+          bindtap="handleTerminate"
+        >
+          <text class="editor-header-btn-text">停止</text>
+        </view>
+        <view
+          wx:if="{{current.status === 'finished' && mode === 'read' && currentPage && currentPage.image_url}}"
+          class="editor-header-btn"
+          bindtap="handleSaveToAlbum"
+        >
+          <text class="editor-header-btn-text">存图</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 模式选项卡 -->
+    <scroll-view wx:if="{{pageTotal > 0}}" class="editor-tabs" scroll-x enable-flex>
+      <view class="editor-tab {{mode === 'read' ? 'editor-tab--active' : ''}}" data-mode="read" bindtap="setMode">
+        <text class="editor-tab-text">阅读</text>
+      </view>
+      <view class="editor-tab {{mode === 'edit' ? 'editor-tab--active' : ''}}" data-mode="edit" bindtap="setMode">
+        <text class="editor-tab-text">编辑页</text>
+      </view>
+      <view class="editor-tab {{mode === 'reorder' ? 'editor-tab--active' : ''}}" data-mode="reorder" bindtap="setMode">
+        <text class="editor-tab-text">排序</text>
+      </view>
+      <view class="editor-tab {{mode === 'regen' ? 'editor-tab--active' : ''}}" data-mode="regen" bindtap="setMode">
+        <text class="editor-tab-text">续写</text>
+      </view>
+      <view class="editor-tab {{mode === 'cover' ? 'editor-tab--active' : ''}}" data-mode="cover" bindtap="setMode">
+        <text class="editor-tab-text">生成封面</text>
+      </view>
+      <view class="editor-tab {{mode === 'backcover' ? 'editor-tab--active' : ''}}" data-mode="backcover" bindtap="setMode">
+        <text class="editor-tab-text">生成封底</text>
+      </view>
+    </scroll-view>
+
+    <!-- 生成中（无页面） -->
+    <view wx:if="{{pageTotal === 0}}" class="editor-generating">
+      <view class="editor-generating-spinner"></view>
+      <text class="editor-generating-text">正在生成中，请稍候…</text>
+      <text class="editor-generating-hint">通常需要 2-3 分钟</text>
+    </view>
+
+    <!-- ── 阅读模式 ── -->
+    <block wx:elif="{{mode === 'read'}}">
+      <view class="editor-page-view" style="height: {{pageViewHeight}}px;">
+        <image
+          class="editor-page-image"
+          src="{{currentPage.image_url}}"
+          mode="aspectFill"
+          lazy-load
+          binderror="onPageImageError"
+        />
+        <!-- 页面类型标签 -->
+        <view class="editor-page-type-badge">
+          <text class="editor-page-type-text">
+            {{currentPage.page_type === 'cover' ? '封面' : currentPage.page_type === 'back_cover' ? '封底' : '内页'}}
+          </text>
+        </view>
+        <!-- 正文页才显示文字 -->
+        <view
+          wx:if="{{currentPage.page_type !== 'cover' && currentPage.page_type !== 'back_cover' && currentPage.text}}"
+          class="editor-page-text-overlay"
+        >
+          <text class="editor-page-text">{{currentPage.text}}</text>
+        </view>
+        <!-- 生成中角标 -->
+        <view wx:if="{{current.status === 'creating' || current.status === 'updating'}}" class="editor-status-badge">
+          <text class="editor-status-badge-text">生成中</text>
+        </view>
+      </view>
+
+      <!-- 翻页控制 -->
+      <view class="editor-pagination">
+        <view
+          class="editor-page-btn {{currentPageIndex === 0 ? 'editor-page-btn--disabled' : ''}}"
+          bindtap="prevPage"
+        >
+          <text class="editor-page-btn-text">‹</text>
+        </view>
+        <text class="editor-page-indicator">{{currentPageIndex + 1}} / {{pageTotal}}</text>
+        <view
+          class="editor-page-btn {{currentPageIndex >= pageTotal - 1 ? 'editor-page-btn--disabled' : ''}}"
+          bindtap="nextPage"
+        >
+          <text class="editor-page-btn-text">›</text>
+        </view>
+      </view>
+
+      <!-- 圆点导航 -->
+      <scroll-view class="editor-dots-wrap" scroll-x enable-flex>
+        <view
+          wx:for="{{current.pages}}"
+          wx:key="index"
+          class="editor-dot {{index === currentPageIndex ? 'editor-dot--active' : ''}}"
+          data-idx="{{index}}"
+          bindtap="handleDotTap"
+        ></view>
+      </scroll-view>
+    </block>
+
+    <!-- ── 编辑模式 ── -->
+    <block wx:elif="{{mode === 'edit'}}">
+      <!-- 缩略图横向滚动 -->
+      <scroll-view class="edit-thumbs" scroll-x enable-flex scroll-into-view="{{editThumbScrollId}}" scroll-with-animation>
+        <view
+          wx:for="{{current.pages}}"
+          wx:key="index"
+          id="edit-thumb-{{index}}"
+          class="edit-thumb-item {{editSelectedIdx === index ? 'edit-thumb-item--active' : ''}}"
+          data-idx="{{index}}"
+          bindtap="handleEditSelectPage"
+        >
+          <image class="edit-thumb-img" src="{{item.image_url}}" mode="aspectFill" />
+          <text class="edit-thumb-label">第{{index+1}}页</text>
+        </view>
+      </scroll-view>
+
+      <!-- 当前页预览 -->
+      <view class="editor-page-view edit-preview" style="height: {{pageViewHeight}}px;">
+        <image
+          class="editor-page-image"
+          src="{{editDisplayImage}}"
+          mode="aspectFill"
+        />
+        <view wx:if="{{editGenerating}}" class="editor-generating-overlay">
+          <view class="editor-generating-spinner editor-generating-spinner--white"></view>
+          <text class="editor-overlay-text">AI 生成中…</text>
+        </view>
+      </view>
+
+      <!-- 图片版本历史 -->
+      <scroll-view wx:if="{{editImageHistory.length > 0}}" class="edit-img-history" scroll-x enable-flex>
+        <view
+          class="edit-history-item {{editActiveImgIdx === -1 ? 'edit-history-item--active' : ''}}"
+          data-idx="{{-1}}"
+          bindtap="handleEditSelectImage"
+        >
+          <image class="edit-history-img" src="{{current.pages[editSelectedIdx].image_url}}" mode="aspectFill" />
+          <text class="edit-history-label">原图</text>
+        </view>
+        <view
+          wx:for="{{editImageHistory}}"
+          wx:key="index"
+          class="edit-history-item {{editActiveImgIdx === index ? 'edit-history-item--active' : ''}}"
+          data-idx="{{index}}"
+          bindtap="handleEditSelectImage"
+        >
+          <image class="edit-history-img" src="{{item.url}}" mode="aspectFill" />
+          <text class="edit-history-label">v{{index+1}}</text>
+        </view>
+      </scroll-view>
+
+      <!-- 编辑控制区 -->
+      <view class="edit-controls">
+        <!-- 图片指令 -->
+        <view class="edit-img-section">
+          <view class="edit-section-header">
+            <view class="edit-btn edit-btn--outline" bindtap="handleEditToggleImgInput">
+              <text class="edit-btn-text">{{editShowImgInput ? '收起' : '编辑图片'}}</text>
+            </view>
+          </view>
+          <view wx:if="{{editShowImgInput}}" class="edit-img-input-row">
+            <input
+              class="edit-input"
+              value="{{editImgInstruction}}"
+              placeholder="描述图片修改，例如：把天空改成夜晚…"
+              bindinput="onEditImgInstructionInput"
+              disabled="{{editGenerating}}"
+              confirm-type="send"
+              bindconfirm="handleEditGenerateImage"
+            />
+            <view
+              class="edit-send-btn {{editImgInstruction && !editGenerating ? '' : 'edit-send-btn--disabled'}}"
+              bindtap="handleEditGenerateImage"
+            >
+              <text class="edit-send-text">发送</text>
+            </view>
+          </view>
+          <text wx:if="{{editError}}" class="edit-error">{{editError}}</text>
+        </view>
+
+        <!-- 文字编辑 -->
+        <textarea
+          class="edit-textarea"
+          value="{{editDraftText}}"
+          placeholder="页面文字…"
+          bindinput="onEditDraftTextInput"
+          auto-height
+          maxlength="-1"
+        />
+
+        <!-- 操作按钮行 -->
+        <view class="edit-action-row">
+          <view class="edit-btn edit-btn--danger" bindtap="handleEditDeletePage">
+            <text class="edit-btn-text">删除此页</text>
+          </view>
+          <view class="edit-btn-group">
+            <view class="edit-btn edit-btn--outline" bindtap="handleEditReset">
+              <text class="edit-btn-text">重置</text>
+            </view>
+            <view
+              class="edit-btn edit-btn--primary {{editSaving ? 'edit-btn--disabled' : ''}}"
+              bindtap="handleEditSave"
+            >
+              <text class="edit-btn-text">{{editSaving ? '保存中…' : '保存'}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </block>
+
+    <!-- ── 排序模式 ── -->
+    <block wx:elif="{{mode === 'reorder'}}">
+      <view class="reorder-panel">
+        <text class="panel-tip">点击箭头调整页面顺序</text>
+
+        <view class="reorder-list">
+          <view
+            wx:for="{{reorderDraft}}"
+            wx:key="index"
+            class="reorder-item"
+          >
+            <image
+              class="reorder-thumb"
+              src="{{current.pages[item].image_url}}"
+              mode="aspectFill"
+            />
+            <view class="reorder-info">
+              <text class="reorder-pos">第 {{index+1}} 页</text>
+              <text class="reorder-page-text">{{current.pages[item].text}}</text>
+            </view>
+            <view class="reorder-btns">
+              <view
+                class="reorder-arrow {{index === 0 ? 'reorder-arrow--disabled' : ''}}"
+                data-pos="{{index}}"
+                data-dir="{{-1}}"
+                bindtap="handleReorderMove"
+              >
+                <text class="reorder-arrow-text">↑</text>
+              </view>
+              <view
+                class="reorder-arrow {{index >= reorderDraft.length - 1 ? 'reorder-arrow--disabled' : ''}}"
+                data-pos="{{index}}"
+                data-dir="{{1}}"
+                bindtap="handleReorderMove"
+              >
+                <text class="reorder-arrow-text">↓</text>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <view class="panel-footer">
+          <view class="panel-btn panel-btn--outline" bindtap="handleReorderCancel">
+            <text class="panel-btn-text">取消</text>
+          </view>
+          <view
+            class="panel-btn panel-btn--primary {{reorderSubmitting ? 'panel-btn--disabled' : ''}}"
+            bindtap="handleReorderConfirm"
+          >
+            <text class="panel-btn-text">{{reorderSubmitting ? '保存中…' : '确认排序'}}</text>
+          </view>
+        </view>
+      </view>
+    </block>
+
+    <!-- ── 续写模式 ── -->
+    <block wx:elif="{{mode === 'regen'}}">
+      <view class="regen-panel">
+        <text class="panel-tip">点击页面选择插入位置（将在该页后方插入）</text>
+        <text class="regen-pos-hint">
+          当前位置：{{regenInsertPos === 0 ? '开头' : regenInsertPos >= pageTotal ? '末尾' : '第' + regenInsertPos + '页后'}}
+        </text>
+
+        <view class="regen-pages-grid">
+          <view
+            wx:for="{{current.pages}}"
+            wx:key="index"
+            class="regen-page-item {{regenInsertPos === index + 1 ? 'regen-page-item--active' : ''}}"
+            data-pos="{{index + 1}}"
+            bindtap="handleRegenSelectPos"
+          >
+            <image class="regen-page-img" src="{{item.image_url}}" mode="aspectFill" />
+            <view wx:if="{{regenInsertPos === index + 1}}" class="regen-page-check">
+              <text class="regen-page-check-text">✓</text>
+            </view>
+            <view class="regen-page-label">
+              <text class="regen-page-label-text">第{{index+1}}页</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="regen-count-row">
+          <text class="regen-count-label">生成张数：{{regenCount}}</text>
+          <slider
+            value="{{regenCount}}"
+            min="1"
+            max="5"
+            step="1"
+            show-value
+            bindchange="handleRegenCountChange"
+            activeColor="#00CDD4"
+            backgroundColor="#e2e8f0"
+            block-color="#00CDD4"
+            style="flex:1; margin-left: 16rpx;"
+          />
+        </view>
+
+        <textarea
+          class="regen-textarea"
+          value="{{regenInstruction}}"
+          placeholder="插入指令（可留空），例如：补充一个过渡场景"
+          bindinput="onRegenInstructionInput"
+          auto-height
+          maxlength="-1"
+        />
+
+        <view class="panel-footer">
+          <view class="panel-btn panel-btn--outline" bindtap="handleRegenCancel">
+            <text class="panel-btn-text">取消</text>
+          </view>
+          <view
+            class="panel-btn panel-btn--primary {{regenSubmitting ? 'panel-btn--disabled' : ''}}"
+            bindtap="handleRegenConfirm"
+          >
+            <text class="panel-btn-text">{{regenSubmitting ? '提交中…' : '插入页面'}}</text>
+          </view>
+        </view>
+      </view>
+    </block>
+
+    <!-- ── 封面模式 ── -->
+    <block wx:elif="{{mode === 'cover'}}">
+      <view class="cover-panel">
+        <text class="panel-tip">选择最多 3 张参考页，AI 将提取画风生成封面</text>
+
+        <view wx:if="{{coverPages.length === 0}}" class="panel-empty">
+          <text class="panel-empty-text">暂无可用内页</text>
+        </view>
+        <view wx:else class="cover-pages-grid">
+          <view
+            wx:for="{{coverPages}}"
+            wx:key="originalIndex"
+            class="cover-page-item {{coverSelected.indexOf(item.originalIndex) >= 0 ? 'cover-page-item--selected' : ''}}"
+            data-idx="{{item.originalIndex}}"
+            bindtap="handleCoverTogglePage"
+          >
+            <image class="cover-page-img" src="{{item.image_url}}" mode="aspectFill" />
+            <view wx:if="{{coverSelected.indexOf(item.originalIndex) >= 0}}" class="cover-check">
+              <text class="cover-check-text">✓</text>
+            </view>
+            <view class="cover-page-num">
+              <text class="cover-page-num-text">P{{item.originalIndex+1}}</text>
+            </view>
+          </view>
+        </view>
+
+        <view
+          class="panel-btn panel-btn--primary panel-btn--full {{coverGenerating || coverSelected.length === 0 ? 'panel-btn--disabled' : ''}}"
+          bindtap="handleCoverGenerate"
+        >
+          <text class="panel-btn-text">{{coverGenerating ? '生成中…' : '生成封面（已选 ' + coverSelected.length + ' 张）'}}</text>
+        </view>
+      </view>
+    </block>
+
+    <!-- ── 封底模式 ── -->
+    <block wx:elif="{{mode === 'backcover'}}">
+      <view class="backcover-panel">
+
+        <view wx:if="{{backCoverHasExisting}}" class="backcover-exists">
+          <text class="backcover-exists-icon">📖</text>
+          <text class="backcover-exists-title">封底已存在</text>
+          <text class="backcover-exists-desc">此绘本已有封底，不可重复创建</text>
+          <view class="panel-btn panel-btn--outline" data-mode="read" bindtap="setMode">
+            <text class="panel-btn-text">返回阅读</text>
+          </view>
+        </view>
+
+        <block wx:else>
+          <view class="backcover-section">
+            <text class="backcover-section-title">背景颜色</text>
+            <view class="backcover-colors">
+              <view
+                wx:for="{{backCoverColors}}"
+                wx:key="value"
+                class="backcover-color-item {{backCoverBg === item.value ? 'backcover-color-item--selected' : ''}}"
+                style="background: {{item.value}};"
+                data-value="{{item.value}}"
+                bindtap="handleBackCoverSelectBg"
+              >
+                <text wx:if="{{backCoverBg === item.value}}" class="backcover-color-check">✓</text>
+                <text wx:else class="backcover-color-name">{{item.label}}</text>
+              </view>
+            </view>
+          </view>
+
+          <view class="backcover-section">
+            <text class="backcover-section-title">编者寄语</text>
+            <textarea
+              class="backcover-textarea"
+              value="{{backCoverMsg}}"
+              placeholder="输入寄语…"
+              bindinput="onBackCoverMsgInput"
+              maxlength="-1"
+              auto-height
+            />
+          </view>
+
+          <view class="backcover-hint-box">
+            <text class="backcover-hint-text">封底将以《{{current.title}}》为标题，搭配所选颜色与寄语自动生成</text>
+          </view>
+
+          <view
+            class="panel-btn panel-btn--primary panel-btn--full {{backCoverCreating ? 'panel-btn--disabled' : ''}}"
+            bindtap="handleBackCoverCreate"
+          >
+            <text class="panel-btn-text">{{backCoverCreating ? '创建中…' : '创建封底'}}</text>
+          </view>
+        </block>
+      </view>
+    </block>
+
+  </view>
+
+</view>

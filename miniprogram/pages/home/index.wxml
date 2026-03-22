@@ -1,0 +1,152 @@
+<view class="home-page">
+
+  <!-- 顶部问候 -->
+  <view class="home-header">
+    <view class="home-header-left">
+<text wx:if="{{user}}" class="home-greeting">Hi，{{user.nickname}} 👋</text>
+    </view>
+    <view wx:if="{{user}}" class="home-points-badge">
+      <text class="home-points-text">免费 ×{{user.free_creation_remaining}}</text>
+    </view>
+  </view>
+
+  <!-- 创建卡片 -->
+  <view class="home-create-card">
+    <view class="home-create-card-header">
+      <text class="home-create-icon">✨</text>
+      <text class="home-create-label">描述你的故事</text>
+      <!-- 设置按钮 -->
+      <view class="home-settings-btn" bindtap="toggleSettings">
+        <text class="home-settings-btn-text">{{showSettings ? '收起' : '更多选项'}}</text>
+        <text class="home-settings-arrow">{{showSettings ? '▲' : '▼'}}</text>
+      </view>
+    </view>
+
+    <!-- 指令输入 -->
+    <textarea
+      class="home-textarea"
+      placeholder="例如：一只勇敢的小兔子独自穿越魔法森林，找到了失散的家人…"
+      placeholder-class="home-textarea-placeholder"
+      value="{{instruction}}"
+      bindinput="onInstructionInput"
+      maxlength="500"
+      auto-height
+      show-confirm-bar="{{false}}"
+    />
+    <text class="home-textarea-count">{{charCount}}/500</text>
+
+    <!-- 已上传图片 -->
+    <view wx:if="{{uploadedImages.length > 0}}" class="home-images-strip">
+      <view
+        wx:for="{{uploadedImages}}"
+        wx:key="index"
+        class="home-image-thumb-wrap"
+      >
+        <image class="home-image-thumb" src="{{item}}" mode="aspectFill" />
+        <view class="home-image-remove" data-idx="{{index}}" bindtap="handleRemoveImage">
+          <text class="home-image-remove-text">×</text>
+        </view>
+      </view>
+      <view class="home-image-add-btn" bindtap="handleChooseImage">
+        <text class="home-image-add-icon">+</text>
+      </view>
+    </view>
+
+    <!-- 参数设置面板 -->
+    <view wx:if="{{showSettings}}" class="home-settings-panel">
+      <!-- AI 引擎 -->
+      <view class="home-param-row">
+        <text class="home-param-label">AI 引擎</text>
+        <view class="home-param-options">
+          <view class="home-param-opt home-param-opt--active"><text>Gemini</text></view>
+        </view>
+      </view>
+      <!-- 页数 -->
+      <view class="home-param-row">
+        <text class="home-param-label">页数</text>
+        <view class="home-param-options">
+          <view wx:for="{{[5,10,15,20]}}" wx:key="index" class="home-param-opt {{pageCount === item ? 'home-param-opt--active' : ''}}" data-value="{{item}}" bindtap="setPageCount"><text>{{item}}</text></view>
+        </view>
+      </view>
+      <!-- 图片比例 -->
+      <view class="home-param-row">
+        <text class="home-param-label">比例</text>
+        <view class="home-param-options">
+          <view class="home-param-opt {{aspectRatio === '16:9' ? 'home-param-opt--active' : ''}}" data-value="16:9" bindtap="setAspectRatio"><text>16:9</text></view>
+          <view class="home-param-opt {{aspectRatio === '4:3' ? 'home-param-opt--active' : ''}}" data-value="4:3" bindtap="setAspectRatio"><text>4:3</text></view>
+          <view class="home-param-opt {{aspectRatio === '1:1' ? 'home-param-opt--active' : ''}}" data-value="1:1" bindtap="setAspectRatio"><text>1:1</text></view>
+        </view>
+      </view>
+      <!-- 画质 -->
+      <view class="home-param-row">
+        <text class="home-param-label">画质</text>
+        <view class="home-param-options">
+          <view class="home-param-opt {{imageSize === '1k' ? 'home-param-opt--active' : ''}}" data-value="1k" bindtap="setImageSize"><text>1K</text></view>
+          <view class="home-param-opt {{imageSize === '2k' ? 'home-param-opt--active' : ''}}" data-value="2k" bindtap="setImageSize"><text>2K</text></view>
+          <view class="home-param-opt {{imageSize === '4k' ? 'home-param-opt--active' : ''}}" data-value="4k" bindtap="setImageSize"><text>4K</text></view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 上传图片按钮 + 创建按钮 -->
+    <view class="home-action-row">
+      <view class="home-upload-btn" bindtap="handleChooseImage">
+        <text class="home-upload-icon">📷</text>
+        <text class="home-upload-text">上传图片</text>
+      </view>
+      <view
+        class="home-create-btn {{creating ? 'home-create-btn--loading' : ''}}"
+        bindtap="handleCreate"
+      >
+        <text class="home-create-btn-text">{{creating ? '生成中…' : '✨ 开始生成'}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 风格模板选择 -->
+  <view class="home-section">
+    <text class="home-section-title">选择风格模板</text>
+    <view wx:if="{{loadingTemplates}}" class="home-section-loading">
+      <text class="home-section-loading-text">加载中…</text>
+    </view>
+    <scroll-view wx:elif="{{templates.length > 0}}" class="home-templates-scroll" scroll-x enable-flex>
+      <view
+        wx:for="{{templates}}"
+        wx:key="id"
+        class="home-template-card {{selectedTemplateId === item.id ? 'home-template-card--selected' : ''}}"
+        data-id="{{item.id}}"
+        bindtap="handleSelectTemplate"
+      >
+        <image wx:if="{{item.cover_image}}" class="home-template-img" src="{{item.cover_image}}" mode="aspectFill" />
+        <view wx:else class="home-template-icon">🎨</view>
+        <text class="home-template-name">{{item.name}}</text>
+        <text wx:if="{{selectedTemplateId === item.id}}" class="home-template-check">✓</text>
+      </view>
+    </scroll-view>
+    <view wx:else class="home-section-empty">
+      <text class="home-section-empty-text">暂无模板</text>
+    </view>
+  </view>
+
+  <!-- 大家的创作 -->
+  <view class="home-section">
+    <text class="home-section-title">大家的创作</text>
+    <view wx:if="{{loadingPublicBooks}}" class="home-section-loading">
+      <text class="home-section-loading-text">加载中…</text>
+    </view>
+    <view wx:elif="{{publicBooks.length > 0}}" class="home-public-grid">
+      <view
+        wx:for="{{publicBooks}}"
+        wx:key="id"
+        class="home-public-card"
+      >
+        <image class="home-public-cover" src="{{item.coverImage}}" mode="aspectFill" lazy-load />
+        <text class="home-public-title">{{item.title}}</text>
+      </view>
+    </view>
+    <view wx:else class="home-section-empty">
+      <text class="home-section-empty-text">还没有公开作品，快来创建第一个吧</text>
+    </view>
+  </view>
+
+</view>

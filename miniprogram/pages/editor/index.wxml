@@ -1,0 +1,86 @@
+<view class="works-page">
+
+  <!-- 加载中 -->
+  <view wx:if="{{loadingWorks}}" class="works-loading">
+    <text class="works-loading-text">加载中…</text>
+  </view>
+
+  <!-- 空状态 -->
+  <view wx:elif="{{works.length === 0}}" class="works-empty">
+    <text class="works-empty-icon">📚</text>
+    <text class="works-empty-text">还没有作品，去首页创建吧</text>
+  </view>
+
+  <!-- 作品卡片列表 -->
+  <view wx:else class="works-list">
+    <view
+      wx:for="{{works}}"
+      wx:key="id"
+      class="work-card"
+      data-id="{{item.id}}"
+      bindtap="handleWorkCardTap"
+    >
+      <!-- 顶部：类型 + 状态 + 删除 -->
+      <view class="work-card-top">
+        <view class="work-type">
+          <text class="work-type-icon">📖</text>
+          <text class="work-type-label">绘本</text>
+        </view>
+        <view class="work-card-top-right">
+          <text class="work-status-text work-status-text--{{item.status}}">{{item.statusText}}</text>
+          <view class="work-delete-btn" data-id="{{item.id}}" catchtap="handleDeleteWork">
+            <text class="work-delete-icon">🗑</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 分隔线 -->
+      <view class="work-divider"></view>
+
+      <!-- 封面预览 -->
+      <view class="work-cover-wrap">
+        <image
+          wx:if="{{item.coverUrl}}"
+          class="work-cover-img"
+          src="{{item.coverUrl}}"
+          mode="aspectFill"
+          lazy-load
+        />
+        <view wx:else class="work-cover-placeholder">
+          <text class="work-cover-placeholder-icon">🖼</text>
+        </view>
+      </view>
+
+      <!-- 主内容：标题 + 公开状态 -->
+      <view class="work-card-body">
+        <text class="work-title">{{item.title}}</text>
+        <text class="work-public-label {{item.is_public ? 'work-public-label--public' : 'work-public-label--private'}}">
+          {{item.is_public ? '公开' : '私密'}}
+        </text>
+      </view>
+
+      <!-- 分隔线 -->
+      <view class="work-divider"></view>
+
+      <!-- 底部操作按钮 -->
+      <view class="work-card-actions" catchtap="noop">
+        <view
+          class="work-action-pill"
+          data-id="{{item.id}}"
+          data-ispublic="{{item.is_public}}"
+          catchtap="handleTogglePublic"
+        >
+          <text class="work-action-pill-text">{{item.is_public ? '设为私密' : '公开'}}</text>
+        </view>
+        <view
+          class="work-action-pill work-action-pill--primary"
+          data-id="{{item.id}}"
+          catchtap="handleWorkCardTap"
+        >
+          <text class="work-action-pill-text work-action-pill-text--primary">编辑</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+</view>

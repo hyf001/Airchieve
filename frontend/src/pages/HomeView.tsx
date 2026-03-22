@@ -1,8 +1,8 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Sparkles, ChevronLeft, ChevronRight, FileText, BookOpen, LogOut, Coins, Crown, User, Shield } from 'lucide-react';
-import { CreateStorybookRequest, createStorybook, InsufficientPointsError, listStorybooks, getStorybook, StorybookListItem, Storybook, CliType, AspectRatio, ImageSize } from '../services/storybookService';
-import { listTemplates, TemplateListItem, Template } from '../services/templateService';
+import { CreateStorybookRequest, createStorybook, InsufficientPointsError, listStorybooks, StorybookListItem, CliType, AspectRatio, ImageSize } from '../services/storybookService';
+import { listTemplates, TemplateListItem } from '../services/templateService';
 import StorybookPreview from '../components/StorybookPreview';
 import InstructionInputBox from '../components/InstructionInputBox';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -28,8 +28,6 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateListItem | null>(null);
   const [templates, setTemplates] = useState<TemplateListItem[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
-  const [templateStorybooks, setTemplateStorybooks] = useState<Map<number, Storybook>>(new Map());
-  const [templateStorybookIds, setTemplateStorybookIds] = useState<Map<number, number>>(new Map());
   const [publicStorybooks, setPublicStorybooks] = useState<StorybookListItem[]>([]);
   const [loadingPublicBooks, setLoadingPublicBooks] = useState(true);
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
@@ -64,61 +62,12 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
     }
   }, [user, pendingCreateParams, onStart]);
 
-  // Load storybooks associated with templates
-  const loadTemplateStorybooks = async (templateList: TemplateListItem[]) => {
-    try {
-      const storybookIds = new Set<number>();
-      const templateIdMap = new Map<number, number>();
-
-      const templateDetails = await Promise.all(
-        templateList.map(async (t) => {
-          try {
-            const response = await fetch(`/api/v1/templates/${t.id}`);
-            if (response.ok) {
-              return await response.json() as Template;
-            }
-          } catch (err) {
-            console.error(`Failed to load template ${t.id} details:`, err);
-          }
-          return null;
-        })
-      );
-
-      templateDetails.forEach(t => {
-        if (t?.storybook_id) {
-          storybookIds.add(t.storybook_id);
-          templateIdMap.set(t.id, t.storybook_id);
-        }
-      });
-
-      setTemplateStorybookIds(templateIdMap);
-
-      if (storybookIds.size > 0) {
-        const storybookMap = new Map<number, Storybook>();
-        await Promise.all(
-          Array.from(storybookIds).map(async (id) => {
-            try {
-              const storybook = await getStorybook(id);
-              storybookMap.set(id, storybook);
-            } catch (err) {
-              console.error(`Failed to load storybook ${id}:`, err);
-            }
-          })
-        );
-        setTemplateStorybooks(storybookMap);
-      }
-    } catch (err) {
-      console.error('Failed to load template storybooks:', err);
-    }
-  };
-
   useEffect(() => {
     const fetchTemplates = async () => {
       try {
         setLoadingTemplates(true);
         const data = await listTemplates({ is_active: true, limit: 50 });
         setTemplates(data);
-        await loadTemplateStorybooks(data);
       } catch (err) {
         console.error('Failed to load templates:', err);
         toast({ variant: "destructive", title: "无法加载模版列表" });
@@ -321,8 +270,18 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
                   </div>
                 ) : (
                   (needsCarousel ? [...templates, ...templates] : templates).map((tmpl, idx) => {
-                    const storybookId = templateStorybookIds.get(tmpl.id);
-                    const sampleStorybook = storybookId ? templateStorybooks.get(storybookId) : null;
+                    const previewStorybook = tmpl.storybook_id && tmpl.cover_image
+                      ? {
+                          id: tmpl.storybook_id,
+                          title: tmpl.name,
+                          description: tmpl.description,
+                          creator: tmpl.creator,
+                          status: 'finished' as const,
+                          is_public: false,
+                          created_at: tmpl.created_at,
+                          pages: [{ image_url: tmpl.cover_image, text: '', page_type: 'cover' as const }],
+                        }
+                      : null;
 
                     return (
                       <div
@@ -344,14 +303,9 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
                           </div>
                         )}
                         {/* 样本绘本预览 */}
-                        {sampleStorybook ? (
+                        {previewStorybook ? (
                           <div className="rounded-t-2xl overflow-hidden">
-                            <StorybookPreview
-                              storybook={sampleStorybook as any}
-                              popupPosition="center"
-                              popupMaxWidth="80vw"
-                              popupScale={2.5}
-                            />
+                            <StorybookPreview storybook={previewStorybook as any} />
                           </div>
                         ) : (
                           <div className="h-40 bg-slate-700/50 rounded-t-2xl flex items-center justify-center">
@@ -365,7 +319,7 @@ const HomeView: React.FC<HomeViewProps> = ({ onStart, onShowMyWorks, onShowMyTem
                         >
                           <h3 className="font-bold text-slate-100 mb-1">{tmpl.name}</h3>
                           <p className="text-xs text-slate-400 line-clamp-2">{tmpl.description || '暂无描述'}</p>
-                          {sampleStorybook && (
+                          {previewStorybook && (
                             <div className="flex items-center gap-1 mt-2 text-xs text-teal-400">
                               <BookOpen size={12} />
                               <span>样本绘本</span>

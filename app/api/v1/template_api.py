@@ -7,9 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import select
+
 from app.api.deps import get_current_user
-from app.db.session import get_db
+from app.db.session import get_db, async_session_maker
 from app.models.user import User
+from app.models.storybook import Storybook
 from app.services.template_service import (
     create_template,
     get_template,
@@ -74,6 +77,8 @@ class TemplateListResponse(BaseModel):
     is_active: bool
     sort_order: int
     created_at: str
+    storybook_id: Optional[int] = None
+    cover_image: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -148,6 +153,19 @@ async def list_templates_endpoint(
         offset=offset
     )
 
+    # 批量查关联绘本的第一页图片作为封面
+    storybook_ids = [t.storybook_id for t in templates if t.storybook_id]
+    cover_map: dict[int, str] = {}
+    if storybook_ids:
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(Storybook).where(Storybook.id.in_(storybook_ids))
+            )
+            for sb in result.scalars().all():
+                pages = sb.pages or []
+                if pages and pages[0].image_url:
+                    cover_map[sb.id] = pages[0].image_url
+
     # 转换为响应格式
     response_data = []
     for template in templates:
@@ -158,7 +176,9 @@ async def list_templates_endpoint(
             "creator": template.creator,
             "is_active": template.is_active,
             "sort_order": template.sort_order,
-            "created_at": template.created_at.isoformat() if template.created_at else ""
+            "created_at": template.created_at.isoformat() if template.created_at else "",
+            "storybook_id": template.storybook_id,
+            "cover_image": cover_map.get(template.storybook_id) if template.storybook_id else None,
         })
 
     return response_data

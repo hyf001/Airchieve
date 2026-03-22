@@ -1,0 +1,61 @@
+<!-- 已登录 -->
+<view wx:if="{{isAuthenticated && user}}" class="profile-page">
+
+  <!-- 用户信息卡 -->
+  <view class="profile-card">
+    <image
+      class="profile-avatar"
+      src="{{user.avatar_url || '/assets/default-avatar.png'}}"
+      mode="aspectFill"
+    />
+    <view class="profile-info">
+      <text class="profile-nickname">{{user.nickname}}</text>
+      <view class="profile-membership-badge">
+        <text class="profile-membership-text">{{membershipLabel}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 数据统计 -->
+  <view class="profile-stats-card">
+    <view class="profile-stat">
+      <text class="profile-stat-value">{{user.points_balance}}</text>
+      <text class="profile-stat-label">积分余量</text>
+    </view>
+    <view class="profile-stat-divider"></view>
+    <view class="profile-stat">
+      <text class="profile-stat-value">{{user.free_creation_remaining}}</text>
+      <text class="profile-stat-label">免费次数</text>
+    </view>
+  </view>
+
+  <!-- 功能菜单 -->
+  <view class="profile-menu">
+    <view class="profile-menu-item">
+      <text class="profile-menu-icon">💎</text>
+      <text class="profile-menu-label">会员中心</text>
+      <text class="profile-menu-arrow">›</text>
+    </view>
+    <view class="profile-menu-item">
+      <text class="profile-menu-icon">🎁</text>
+      <text class="profile-menu-label">积分充值</text>
+      <text class="profile-menu-arrow">›</text>
+    </view>
+  </view>
+
+  <!-- 退出登录 -->
+  <view class="profile-actions">
+    <button class="profile-logout-btn" bindtap="handleLogout">退出登录</button>
+  </view>
+
+</view>
+
+<!-- 未登录 -->
+<view wx:else class="profile-login-prompt">
+  <view class="profile-prompt-icon">
+    <text class="profile-prompt-emoji">👤</text>
+  </view>
+  <text class="profile-prompt-title">还没有登录</text>
+  <text class="profile-prompt-subtitle">登录后查看个人信息和作品</text>
+  <button class="profile-login-btn" bindtap="goLogin">立即登录</button>
+</view>

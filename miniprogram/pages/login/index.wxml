@@ -1,0 +1,47 @@
+<view class="login-page">
+
+  <view class="login-hero">
+    <view class="login-logo-wrap">
+      <image class="login-logo-img" src="/assets/caterpillar.png" mode="aspectFit" />
+    </view>
+    <text class="login-title">毛毛虫定制绘本</text>
+    <text class="login-subtitle">用一句话，生成专属故事书</text>
+  </view>
+
+  <view class="login-profile-section">
+    <button class="avatar-btn" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
+      <image wx:if="{{avatarUrl}}" class="avatar-img" src="{{avatarUrl}}" mode="aspectFill" />
+      <view wx:else class="avatar-placeholder">
+        <text class="avatar-placeholder-icon">👤</text>
+        <text class="avatar-tap-hint">点击获取头像和昵称</text>
+      </view>
+      <view wx:if="{{avatarUrl}}" class="avatar-edit-badge">
+        <text class="avatar-edit-text">换</text>
+      </view>
+    </button>
+    <input
+      id="nicknameInput"
+      class="nickname-input {{avatarUrl ? '' : 'nickname-input--hidden'}}"
+      type="nickname"
+      placeholder="微信昵称"
+      value="{{nickname}}"
+      bindinput="onNicknameInput"
+      bindconfirm="onNicknameConfirm"
+      confirm-type="done"
+      focus="{{nicknameFocus}}"
+    />
+  </view>
+
+  <view class="login-actions">
+    <text wx:if="{{error}}" class="login-error">{{error}}</text>
+    <button
+      wx:if="{{nickname}}"
+      class="login-btn"
+      loading="{{loading}}"
+      disabled="{{loading}}"
+      bindtap="handleLogin"
+    >登录</button>
+    <text class="login-hint">登录即表示同意《用户协议》和《隐私政策》</text>
+  </view>
+
+</view>

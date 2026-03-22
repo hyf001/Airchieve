@@ -1,0 +1,7 @@
+<view class="templates-page">
+  <view class="templates-empty">
+    <text class="templates-empty-icon">🎨</text>
+    <text class="templates-empty-title">模板库</text>
+    <text class="templates-empty-subtitle">即将上线，敬请期待</text>
+  </view>
+</view>

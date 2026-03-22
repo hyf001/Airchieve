@@ -1,8 +1,8 @@
-# 微信小程序开发规划
+# 微信小程序开发规划（原生版）
 
 ## 项目定位
 
-复用现有 `/api/v1/*` 后端接口，用 **Taro + React** 开发微信小程序端，与 Web 端实现功能对等（创建 + 编辑 + 阅读绘本）。
+复用现有 `/api/v1/*` 后端接口，用**原生微信小程序**（无 Taro/React）开发，直接使用 WXML + WXSS + JS + `wx.*` API，零构建依赖，微信开发者工具直接打开运行。
 
 ---
 
@@ -10,303 +10,287 @@
 
 | 分类 | 选型 | 说明 |
 |------|------|------|
-| 框架 | **Taro 4** | React 语法，与 Web 端知识复用 |
-| 语言 | TypeScript | 与 Web 端统一 |
-| 样式 | **Taro NutUI** 或 **TDesign Mini** | 微信小程序专用组件库 |
-| 状态管理 | React Context（延续 Web 端） | 无需引入 Redux |
-| 网络请求 | `Taro.request` 封装（替代 fetch） | 小程序不支持 fetch |
-| 本地存储 | `Taro.setStorageSync` | 替代 localStorage |
-| 图片上传 | `Taro.chooseMedia` | 替代 `<input type="file">` |
-| 支付 | 微信小程序支付（jsapi） | 后端需新增 miniprogram 支付渠道 |
+| 框架 | **原生微信小程序** | WXML + WXSS + JS，无第三方框架 |
+| 语言 | **JavaScript（ES2020）** | 微信开发者工具内置转译，无需 Babel |
+| 样式 | **WXSS** | 支持 rpx 自适应，类 CSS 语法 |
+| 状态管理 | **`getApp().globalData`** | 全局存用户/token，页面间共享 |
+| 网络请求 | **`wx.request` 封装** | utils/request.js |
+| 本地存储 | **`wx.setStorageSync`** | utils/storage.js |
+| 图片上传 | **`wx.chooseMedia`** | 替代 Web 的 `<input type="file">` |
 
----
-
-## 与 Web 端的关键差异
-
-### 1. 认证方式
-
-小程序**只提供微信一键登录**，不支持账号密码和手机验证码。登录流程：
-
-```
-用户点击「微信一键登录」按钮
-→ wx.login() 获取临时 code
-→ wx.getUserProfile() 获取昵称和头像（需用户授权）
-→ POST /api/v1/auth/login/wechat-mini  （后端需新增）
-  body: { code, nickname, avatar_url }
-→ 后端用 code 换取 openid/session_key
-→ 返回 access_token + user（与现有 TokenResponse 结构一致）
-→ token 存入 Taro.setStorageSync，后续请求自动携带
-```
-
-登录入口设计：
-- 未登录用户进入 home 页可浏览公开绘本，但触发创建/编辑时跳转 login 页
-- login 页只有一个「微信一键登录」按钮，登录成功后自动返回上一页
-- 无需注册流程，首次登录自动创建账号（后端已有 `is_new_user` 字段）
-
-**后端需新增**：`POST /api/v1/auth/login/wechat-mini`，接受 `{ code, nickname, avatar_url }`，内部用 code 换取 openid，关联或创建用户。
-
-### 2. 网络请求
-
-```typescript
-// Web 端
-fetch('/api/v1/storybooks', { headers: { Authorization: 'Bearer ...' } })
-
-// 小程序端（Taro 封装后接口一致）
-Taro.request({ url: `${BASE_URL}/api/v1/storybooks`, header: { Authorization: 'Bearer ...' } })
-```
-
-需要将所有 service 层的 `fetch` 替换为 `Taro.request` 封装，其余业务逻辑可复用。
-
-### 3. 本地存储
-
-```typescript
-// Web 端
-localStorage.setItem('auth_token', token)
-
-// 小程序端
-Taro.setStorageSync('auth_token', token)
-```
-
-### 4. 图片处理
-
-| 场景 | Web 端 | 小程序端 |
-|------|--------|----------|
-| 选择图片 | `<input type="file">` + FileReader | `Taro.chooseMedia` |
-| 图片转 base64 | FileReader.readAsDataURL | `Taro.getFileSystemManager().readFileSync` |
-| Canvas 绘图 | `document.createElement('canvas')` | `Taro.createCanvasContext` / `OffscreenCanvas` |
-| 图片下载保存 | jsPDF 生成 PDF | `Taro.saveImageToPhotosAlbum`（保存到相册） |
-
-> ⚠️ **jsPDF 不支持小程序**，PDF 导出改为「逐页保存为图片到相册」，或转为小程序内 Canvas 生成长图分享。
-
-### 5. CanvasEditor（图片编辑器）
-
-Web 端依赖 `@mediapipe/tasks-vision`（换脸工具）、`@imgly/background-removal`，这两个库**不兼容微信小程序环境**。
-
-小程序版 CanvasEditor 方案：
-- **保留**：文字叠加、贴纸、亮度/对比度调节（用 Canvas 2D API 实现）
-- **去除**：MediaPipe 换脸、AI 背景消除（这两个功能依赖 WebAssembly，小程序限制较多）
-- **可后续考虑**：调用后端 AI 接口实现换脸/抠图，前端只负责展示
-
-### 6. 支付
-
-现有 paymentService 支持 `h5 | native` 两种渠道，小程序需增加 `miniprogram` 渠道：
-
-```
-后端需新增：POST /api/v1/payment/recharge（miniprogram 渠道）
-返回：{ order_no, timeStamp, nonceStr, package, signType, paySign }
-前端调用：Taro.requestPayment(...)
-```
-
----
-
-## 页面规划
-
-### 路由结构（Taro Pages）
-
-```
-pages/
-├── home/index          # 首页（创建入口 + 公开绘本展示）
-├── editor/index        # 编辑器（绘本列表 + 工作区）
-├── reader/index        # 沉浸式阅读（全屏翻页）
-├── templates/index     # 模板库
-├── profile/index       # 个人中心（积分/会员/订单）
-└── login/index         # 登录页（微信一键登录）
-
-tabBar 底部导航:
-  首页 | 我的绘本 | 模板 | 我的
-```
-
-### 各页面对应关系
-
-| 小程序页面 | Web 端对应 | 主要差异 |
-|-----------|-----------|---------|
-| home | HomeView | 布局适配移动端，图片上传用 chooseMedia |
-| editor | EditorView | 绘本列表改为下拉/抽屉，模式标签在底部 |
-| reader | ReadMode | 全屏展示，左右滑动翻页 |
-| templates | TemplatesView | 基本一致 |
-| profile | UserProfileView | 增加微信一键登录、小程序支付入口 |
+**放弃 Taro 的原因：**
+- Taro 引入 React 运行时，包体积膨胀，且编译产物难以调试
+- 原生小程序开发体验更直接，`wx.*` API 与 WXML 数据绑定天然契合
+- 无需 npm install / build 步骤，开发者工具直接打开 `miniprogram-native/` 目录即可
 
 ---
 
 ## 目录结构
 
 ```
-miniprogram/               # 与 frontend/ 平级
-├── src/
-│   ├── app.tsx            # Taro App 入口
-│   ├── app.config.ts      # 路由、tabBar、窗口配置
-│   ├── app.scss           # 全局样式
-│   │
-│   ├── pages/
-│   │   ├── home/
-│   │   │   ├── index.tsx
-│   │   │   └── index.config.ts
-│   │   ├── editor/
-│   │   │   ├── index.tsx
-│   │   │   └── editor-modes/    # ReadMode/EditMode/RegenMode 等
-│   │   ├── reader/
-│   │   ├── templates/
-│   │   ├── profile/
-│   │   └── login/
-│   │
-│   ├── components/        # 小程序专用组件（复用 Web 端逻辑，改造 UI）
-│   │   ├── StorybookCard/
-│   │   ├── InstructionInput/
-│   │   ├── ProgressBar/
-│   │   ├── CanvasEditor/  # 精简版（无 MediaPipe）
-│   │   └── LoginButton/   # 微信一键授权按钮
-│   │
-│   ├── services/          # 复用 Web 端大部分逻辑，替换 fetch → Taro.request
-│   │   ├── request.ts     # 统一请求封装（含 token 注入、401 处理）
-│   │   ├── authService.ts
-│   │   ├── storybookService.ts
-│   │   ├── templateService.ts
-│   │   └── paymentService.ts
-│   │
-│   ├── hooks/
-│   │   ├── usePolling.ts  # 直接复用（逻辑无差异）
-│   │   └── useAuth.ts
-│   │
-│   ├── contexts/
-│   │   └── AuthContext.tsx # 替换 localStorage → Taro.setStorageSync
-│   │
-│   └── utils/
-│       ├── storage.ts     # 封装 Taro Storage，与 Web localStorage API 一致
-│       └── image.ts       # chooseMedia、base64 转换工具
+miniprogram-native/          # 新建目录，替代现有 miniprogram/
+├── app.js                   # App() 入口，全局 globalData
+├── app.json                 # 路由、tabBar、窗口配置
+├── app.wxss                 # 全局样式（重置 + CSS 变量）
 │
-├── project.config.json    # 微信开发者工具配置
-├── project.private.config.json
-└── package.json
+├── pages/
+│   ├── login/
+│   │   ├── index.js         # Page({ data, onLoad, ... })
+│   │   ├── index.json       # 页面级配置（标题等）
+│   │   ├── index.wxml       # 模板
+│   │   └── index.wxss       # 页面样式
+│   ├── home/
+│   ├── editor/
+│   ├── templates/
+│   └── profile/
+│
+├── utils/
+│   ├── request.js           # wx.request 封装（含 token 注入、401 处理）
+│   └── storage.js           # wx.getStorageSync 封装
+│
+└── services/
+    ├── authService.js       # 登录、用户信息 API
+    └── storybookService.js  # 绘本 CRUD API
 ```
+
+`project.config.json` 中 `miniprogramRoot` 改为 `miniprogram-native/`。
+
+---
+
+## 全局状态设计（替代 React Context）
+
+```js
+// app.js
+App({
+  globalData: {
+    token: null,      // string | null
+    user: null,       // UserOut | null
+  },
+
+  onLaunch() {
+    // 读取持久化 token，验证有效性
+    const token = wx.getStorageSync('auth_token')
+    const user  = wx.getStorageSync('auth_user')
+    if (token && user) {
+      this.globalData.token = token
+      this.globalData.user  = user
+      // 异步验证 token（调 /users/me），失败则清除
+    }
+  },
+
+  // 任何页面通过 getApp().login(token, user) 登录
+  login(token, user) {
+    this.globalData.token = token
+    this.globalData.user  = user
+    wx.setStorageSync('auth_token', token)
+    wx.setStorageSync('auth_user', user)
+  },
+
+  logout() {
+    this.globalData.token = null
+    this.globalData.user  = null
+    wx.removeStorageSync('auth_token')
+    wx.removeStorageSync('auth_user')
+    wx.reLaunch({ url: '/pages/login/index' })
+  },
+})
+```
+
+页面访问：
+```js
+const app = getApp()
+const { token, user } = app.globalData
+```
+
+---
+
+## 网络请求封装
+
+```js
+// utils/request.js
+const BASE_URL = 'https://www.nanbende.com'  // 生产；开发时改为 http://localhost:8000
+
+function request(path, options = {}) {
+  const { method = 'GET', data, auth = true } = options
+  const app = getApp()
+  const header = { 'Content-Type': 'application/json' }
+  if (auth && app.globalData.token) {
+    header['Authorization'] = `Bearer ${app.globalData.token}`
+  }
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: BASE_URL + path,
+      method,
+      data: data ? JSON.stringify(data) : undefined,
+      header,
+      success(res) {
+        if (res.statusCode === 401) {
+          getApp().logout()
+          reject(new Error('请先登录'))
+          return
+        }
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(res.data)
+          return
+        }
+        const detail = res.data?.detail
+        const msg = typeof detail === 'string' ? detail : `请求失败 (${res.statusCode})`
+        reject(new Error(msg))
+      },
+      fail(err) { reject(new Error(err.errMsg || '网络请求失败')) },
+    })
+  })
+}
+
+export const get   = (path, auth = true)       => request(path, { auth })
+export const post  = (path, data, auth = true) => request(path, { method: 'POST', data, auth })
+export const put   = (path, data)              => request(path, { method: 'PUT', data })
+export const patch = (path, data)              => request(path, { method: 'PATCH', data })
+export const del   = (path)                    => request(path, { method: 'DELETE' })
+```
+
+---
+
+## 页面规划
+
+### tabBar 底部导航
+
+| Tab | 页面路径 | 图标 |
+|-----|---------|------|
+| 首页 | pages/home/index | home / home-active |
+| 我的绘本 | pages/editor/index | book / book-active |
+| 模板 | pages/templates/index | template / template-active |
+| 我的 | pages/profile/index | user / user-active |
+
+login 页不在 tabBar 中，通过 `wx.navigateTo` 跳转。
+
+### 各页面功能
+
+| 页面 | 核心功能 |
+|------|---------|
+| **login** | `wx.getUserProfile` 获取昵称头像 → `wx.login` 获取 code → POST /auth/login/wechat-mini → 存 token |
+| **home** | textarea 输入故事指令 → POST /storybooks 创建 → 跳转 editor 并传 storybookId |
+| **editor** | 横向 scroll-view 展示绘本列表；选中后展示当前页图文；轮询状态；翻页导航 |
+| **templates** | 模板列表（开发中占位） |
+| **profile** | 展示用户信息、积分余量、免费次数；退出登录按钮 |
+
+---
+
+## 轮询实现（替代 React usePolling hook）
+
+原生小程序用 `setTimeout` + 页面变量实现，逻辑与原 `usePolling.ts` 一致：
+
+```js
+// editor/index.js
+Page({
+  data: { ... },
+  _pollTimer: null,
+  _pollingId: null,
+
+  startPolling(id) {
+    this.stopPolling()
+    this._pollingId = id
+    this._pollTick()
+  },
+
+  stopPolling() {
+    if (this._pollTimer) clearTimeout(this._pollTimer)
+    this._pollTimer = null
+    this._pollingId = null
+  },
+
+  async _pollTick() {
+    if (!this._pollingId) return
+    try {
+      const book = await getStorybook(this._pollingId)
+      this.applyBookUpdate(book)
+      const TERMINAL = ['finished', 'error', 'terminated']
+      if (!TERMINAL.includes(book.status)) {
+        this._pollTimer = setTimeout(() => this._pollTick(), 5000)
+      }
+    } catch {
+      this._pollTimer = setTimeout(() => this._pollTick(), 5000)
+    }
+  },
+
+  onUnload() { this.stopPolling() },
+})
+```
+
+---
+
+## 与原 Taro 版本的对照
+
+| 能力 | Taro 版 | 原生版 |
+|------|---------|------|
+| 组件 | `<View>` `<Text>` `<Image>` | `<view>` `<text>` `<image>` |
+| 路由 | `Taro.navigateTo` | `wx.navigateTo` |
+| 存储 | `Taro.setStorageSync` | `wx.setStorageSync` |
+| 请求 | `Taro.request` | `wx.request` |
+| 状态 | React Context + useState | `getApp().globalData` + `this.setData()` |
+| 生命周期 | `useLoad` hook | `onLoad(options)` |
+| 样式 | SCSS → 编译 | WXSS 直写（支持 `rpx`） |
+| 构建 | `npm run dev:weapp` | 无需构建，直接用开发者工具打开 |
 
 ---
 
 ## 开发阶段规划
 
-### Phase 1 — 脚手架 & 基础能力（约 1 周）
+### Phase 1 — 脚手架 & 基础能力（当前）
 
-- [ ] Taro 项目初始化，配置 TypeScript + SCSS
-- [ ] 配置 tabBar 和所有页面路由
-- [ ] 封装 `request.ts`（替代 fetch，统一注入 Authorization 头）
-- [ ] 封装 `storage.ts`（同 API 替换 localStorage）
-- [ ] 移植 `AuthContext`（微信一键登录流程）
-- [ ] 移植 `usePolling`（无需改动）
-- [ ] 搭建 login 页（`wx.login` → 后端换 token → 存储）
+- [ ] 创建 `miniprogram-native/` 目录，建立完整文件骨架
+- [ ] `app.js` 全局状态（globalData + login/logout）
+- [ ] `app.json` 路由、tabBar、窗口配置
+- [ ] `utils/request.js` 封装（token 注入、401 处理、错误提取）
+- [ ] `services/authService.js` + `services/storybookService.js`
+- [ ] **login 页**：微信一键登录完整流程
+- [ ] **home 页**：指令输入 + 创建绘本
+- [ ] **editor 页**：绘本列表 + 状态展示 + 翻页 + 轮询
+- [ ] **profile 页**：用户信息 + 退出登录
+- [ ] **templates 页**：占位页
+- [ ] 修改 `project.config.json` 指向新目录
 
-**后端配合**：新增 `POST /api/v1/auth/login/wechat-mini` 接口
+### Phase 2 — 编辑功能（后续）
 
-### Phase 2 — 核心流程（约 1.5 周）
+- [ ] EditMode：文字编辑 + AI 图片重绘指令
+- [ ] RegenMode：插入页、重新生成
+- [ ] 封面 / 封底生成
+- [ ] 图片保存到相册（`wx.saveImageToPhotosAlbum`）
+- [ ] 分享（`onShareAppMessage`）
 
-- [ ] home 页：创建表单（指令输入 + 模板选择 + 参数配置）
-- [ ] home 页：图片上传（`Taro.chooseMedia` + base64 转换）
-- [ ] editor 页：绘本列表 + 状态展示
-- [ ] editor 页：ReadMode（翻页阅读 + 进度展示）
-- [ ] 轮询逻辑接入（复用 usePolling，接口与 Web 端一致）
-- [ ] 全局 Toast / Loading 组件
+### Phase 3 — 支付 & 会员（后续）
 
-### Phase 3 — 编辑功能（约 1.5 周）
-
-- [ ] EditMode：文字编辑 + AI 图片重绘
-- [ ] RegenMode：继续创作（插入页、重新生成）
-- [ ] ReorderMode：拖拽排序（小程序用 `movable-view` 实现）
-- [ ] CoverMode / BackCoverMode：封面封底生成
-- [ ] 精简版 CanvasEditor（文字 + 贴纸 + 滤镜，去除 MediaPipe 依赖）
-
-### Phase 4 — 下载 & 分享（约 0.5 周）
-
-- [ ] 逐页生成图片 → `Taro.saveImageToPhotosAlbum` 保存相册
-- [ ] 生成小程序分享卡片（封面图 + 标题）
-- [ ] `onShareAppMessage` / `onShareTimeline` 配置
-
-### Phase 5 — 支付 & 个人中心（约 1 周）
-
-- [ ] profile 页：用户信息、积分余量、会员状态
-- [ ] 小程序支付（`Taro.requestPayment`）接入积分充值和会员订阅
-- [ ] 订单查询轮询（复用 paymentService 模式）
-
-**后端配合**：支付接口增加 `miniprogram` 渠道，返回小程序支付所需签名参数
+- [ ] 积分充值（`wx.requestPayment`）
+- [ ] 会员订阅
 
 ---
 
-## 关键技术问题 & 解决方案
-
-### 问题 1：OSS 图片 CORS
-
-Web 端通过 Vite 代理 `/api/v1/oss/...` 解决。
-小程序无代理，但**小程序不受 CORS 限制**，可直接使用 OSS 直链，无需转换。
-→ `toApiUrl()` 函数在小程序中直接返回原始 URL 即可。
-
-### 问题 2：图片 Canvas 绘制（PDF 替代方案）
-
-```typescript
-// 小程序端：用 Canvas 2D 绘制单页，保存到相册
-const canvas = await Taro.createOffscreenCanvas({ type: '2d', width, height })
-// ... 绘制图片 + 渐变 + 文字
-const tempPath = await canvasToTempFilePath(canvas)
-await Taro.saveImageToPhotosAlbum({ filePath: tempPath })
-```
-
-### 问题 3：base64 图片上传
-
-```typescript
-// Web 端：FileReader → base64
-// 小程序端：
-const res = await Taro.chooseMedia({ count: 9, mediaType: ['image'] })
-const base64 = Taro.getFileSystemManager()
-  .readFileSync(res.tempFiles[0].tempFilePath, 'base64')
-```
-
-### 问题 4：ReorderMode 拖拽
-
-Web 端用 CSS drag API，小程序用内置的 `movable-area` + `movable-view` 组件实现拖拽排序。
-
-### 问题 5：小程序分包
-
-绘本功能页面较多，建议将 editor 相关页面和 CanvasEditor 打入分包，主包只保留 home/login/profile，控制主包体积在 **2MB** 以内。
-
-```
-主包：home、login、profile
-分包A：editor、reader（含 CanvasEditor）
-分包B：templates
-```
-
----
-
-## 后端需要新增的接口
+## 后端依赖接口（已实现）
 
 | 接口 | 说明 |
 |------|------|
-| `POST /api/v1/auth/login/wechat-mini` | 接受微信小程序 code，换取 openid，返回 TokenResponse |
-| `POST /api/v1/payment/recharge`（增加 miniprogram 渠道） | 返回小程序支付签名参数 |
-| `POST /api/v1/payment/subscription`（增加 miniprogram 渠道） | 同上 |
-
-其余所有接口**无需改动**，直接复用。
-
----
-
-## 代码复用策略
-
-可直接复用（零改动）的逻辑：
-- `usePolling.ts` — 轮询逻辑
-- `types/index.ts` — 基础类型
-- Service 层的**类型定义**和**业务逻辑**
-
-需适配改造的：
-- Service 层的**网络请求**（fetch → Taro.request）
-- `AuthContext`（localStorage → Taro.setStorageSync）
-- 所有 UI 组件（Tailwind CSS → 小程序 SCSS，HTML 标签 → Taro 组件）
-
-建议将 Service 层类型和纯逻辑提取为共享包（`packages/shared/`），供 Web 端和小程序端同时引用，避免代码重复。
+| `POST /api/v1/auth/login/wechat-mini` | 微信小程序登录，接受 code + nickname + avatar_url |
+| `GET /api/v1/users/me` | 获取当前用户信息 |
+| `POST /api/v1/storybooks` | 创建绘本 |
+| `GET /api/v1/storybooks` | 绘本列表 |
+| `GET /api/v1/storybooks/{id}` | 绘本详情（含 pages） |
 
 ---
 
-## 里程碑总览
+## project.config.json 配置
 
-| 阶段 | 目标 | 预计周期 |
-|------|------|---------|
-| Phase 1 | 脚手架 + 登录通 | 第 1 周 |
-| Phase 2 | 创建 + 阅读主流程可用 | 第 2-3 周 |
-| Phase 3 | 完整编辑功能 | 第 4-5 周 |
-| Phase 4 | 分享 + 下载 | 第 5 周 |
-| Phase 5 | 支付 + 个人中心 | 第 6-7 周 |
-| 测试上线 | 真机测试 + 审核提交 | 第 7-8 周 |
+```json
+{
+  "miniprogramRoot": "miniprogram-native/",
+  "appid": "wx23bbed625a584e5b",
+  "compileType": "miniprogram",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": true,
+    "minified": false
+  }
+}
+```
+
+`urlCheck: false` 开发阶段关闭域名校验，上线前改回 `true` 并在后台配置合法域名。

@@ -35,6 +35,8 @@ export interface TemplateListItem {
   is_active: boolean;
   sort_order: number;
   created_at: string;
+  storybook_id: number | null;
+  cover_image: string | null;
 }
 
 export interface CreateTemplateRequest {
