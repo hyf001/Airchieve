@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StorybookPage, AspectRatio } from '../../services/storybookService';
 
@@ -66,11 +66,18 @@ const ReadMode: React.FC<ReadModeProps> = ({ pages, currentIndex, onIndexChange,
         {/* Page card */}
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
           <div className={`relative ${getAspectRatioClass(aspectRatio)} bg-slate-100 overflow-hidden h-[400px] md:h-[500px]`}>
-            <img
-              src={page.image_url}
-              alt={`第 ${currentIndex + 1} 页`}
-              className="w-full h-full object-cover"
-            />
+            {page.image_url ? (
+              <img
+                src={page.image_url}
+                alt={`第 ${currentIndex + 1} 页`}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-slate-100">
+                <Loader2 size={36} className="text-[#00CDD4] animate-spin" />
+                <span className="text-sm text-slate-400">图片生成中…</span>
+              </div>
+            )}
             <div className="absolute top-3 left-3 bg-black/50 text-white text-xs px-2 py-1 rounded-md">
               {pageTypeLabel}
             </div>

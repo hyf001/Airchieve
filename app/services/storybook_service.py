@@ -596,20 +596,23 @@ async def run_insert_pages_background(
 
         # 构建完整故事上下文
         all_story_texts = [page.text for page in reference_pages]
+        # 将 insert_position（基于全页列表含封面）转换为 reference_pages 的索引
+        has_cover = bool(storybook.pages) and storybook.pages[0].page_type == PageType.COVER
+        ref_insert_position = insert_position - (1 if has_cover else 0)
         # 插入新页面的文本到上下文中
         for i, text in enumerate(story_texts):
-            all_story_texts.insert(insert_position + i, text)
+            all_story_texts.insert(ref_insert_position + i, text)
 
         # 提取前后参考图片（封面和封底不作为参考）
         reference_images = []
-        if (insert_position > 0
-            and reference_pages[insert_position - 1].image_url
-            and reference_pages[insert_position - 1].page_type == PageType.CONTENT):
-            reference_images.append(reference_pages[insert_position - 1].image_url)
-        if (insert_position < len(reference_pages)
-            and reference_pages[insert_position].image_url
-            and reference_pages[insert_position].page_type == PageType.CONTENT):
-            reference_images.append(reference_pages[insert_position].image_url)
+        if (ref_insert_position > 0
+            and reference_pages[ref_insert_position - 1].image_url
+            and reference_pages[ref_insert_position - 1].page_type == PageType.CONTENT):
+            reference_images.append(reference_pages[ref_insert_position - 1].image_url)
+        if (ref_insert_position < len(reference_pages)
+            and reference_pages[ref_insert_position].image_url
+            and reference_pages[ref_insert_position].page_type == PageType.CONTENT):
+            reference_images.append(reference_pages[ref_insert_position].image_url)
 
         for i, (story_text, storyboard) in enumerate(zip(story_texts, storyboards)):
             # 检查是否中止

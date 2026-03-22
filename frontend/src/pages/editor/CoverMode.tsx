@@ -12,6 +12,8 @@ import {
 
 interface CoverModeProps {
   storybook: Storybook;
+  onStorybookChange: (storybook: Storybook) => void;
+  onStartPolling: (id: number) => void;
   onCoverGenerating: () => void;
 }
 
@@ -28,7 +30,7 @@ function defaultSelectedIndices(pages: StorybookPage[]): number[] {
   return [contentIndices[0], contentIndices[mid], contentIndices[n - 1]];
 }
 
-const CoverMode: React.FC<CoverModeProps> = ({ storybook, onCoverGenerating }) => {
+const CoverMode: React.FC<CoverModeProps> = ({ storybook, onStorybookChange, onStartPolling, onCoverGenerating }) => {
   const { toast } = useToast();
   const pages = storybook.pages || [];
 
@@ -51,7 +53,11 @@ const CoverMode: React.FC<CoverModeProps> = ({ storybook, onCoverGenerating }) =
     setIsGenerating(true);
     try {
       await generateCover(storybook.id, selected);
+      // 先切 mode，再更新状态，最后启动轮询
+      // 避免 poll 极快返回时 mode 仍是 'cover' 导致 CoverMode 重新渲染
       onCoverGenerating();
+      onStorybookChange({ ...storybook, status: 'updating' });
+      onStartPolling(storybook.id);
       toast({ title: '封面生成中', description: '请稍候，生成完成后将自动刷新' });
     } catch (e) {
       if (e instanceof InsufficientPointsError) {
@@ -73,7 +79,7 @@ const CoverMode: React.FC<CoverModeProps> = ({ storybook, onCoverGenerating }) =
       {/* 说明 */}
       <p className="text-sm text-slate-500">
         选择 <span className="font-medium text-slate-700">3 张</span> 参考页，AI 将提取画风和角色生成封面。
-        已默认选取首、中、尾页，点击可替换。
+        点击页面的顺序即为参考顺序（已默认选取首、中、尾页）
       </p>
 
       {/* 图片选择网格 */}
@@ -115,21 +121,6 @@ const CoverMode: React.FC<CoverModeProps> = ({ storybook, onCoverGenerating }) =
               </button>
             );
           })}
-        </div>
-      )}
-
-      {/* 已选预览 */}
-      {selected.length > 0 && (
-        <div className="flex gap-2">
-          {selected.map((idx, order) => (
-            <div key={idx} className="flex-1 aspect-video rounded-lg overflow-hidden border border-[#00CDD4]/40">
-              <img
-                src={toApiUrl(pages[idx].image_url)}
-                alt={`参考 ${order + 1}`}
-                className="w-full h-full object-cover"
-              />
-            </div>
-          ))}
         </div>
       )}
 

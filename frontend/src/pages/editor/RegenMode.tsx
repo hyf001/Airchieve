@@ -80,28 +80,29 @@ const RegenMode: React.FC<RegenModeProps> = ({
       </div>
 
       {/* Page selection grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 w-full max-w-4xl">
+      <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 w-full max-w-6xl overflow-y-auto max-h-[60vh] pr-1">
         {pages.map((page, idx) => (
-          <div
-            key={idx}
-            onClick={() => setInsertPosition(idx + 1)}
-            className={`relative ${getAspectRatioClass(aspectRatio)} rounded-xl overflow-hidden cursor-pointer ring-4 transition-all h-[200px] md:h-[250px] ${
-              insertPosition === idx + 1
-                ? 'ring-[#00CDD4] scale-[0.97]'
-                : 'ring-transparent hover:ring-slate-300'
-            }`}
-          >
-            <img src={page.image_url} alt={`第 ${idx + 1} 页`} className="w-full h-full object-cover" />
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-3 pb-2 pt-6">
-              <p className="text-white text-xs line-clamp-2">{page.text}</p>
-            </div>
-            {insertPosition === idx + 1 && (
-              <div className="absolute top-2 right-2 bg-[#00CDD4] rounded-full p-1">
-                <Check size={14} className="text-white" />
+          <div key={idx} className={`relative w-full ${getAspectRatioClass(aspectRatio)}`}>
+            <div
+              onClick={() => setInsertPosition(idx + 1)}
+              className={`absolute inset-0 rounded-xl overflow-hidden cursor-pointer ring-4 transition-all ${
+                insertPosition === idx + 1
+                  ? 'ring-[#00CDD4] scale-[0.97]'
+                  : 'ring-transparent hover:ring-slate-300'
+              }`}
+            >
+              <img src={page.image_url} alt={`第 ${idx + 1} 页`} className="w-full h-full object-cover" />
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-3 pb-2 pt-6">
+                <p className="text-white text-xs line-clamp-2">{page.text}</p>
               </div>
-            )}
-            <div className="absolute top-2 left-2 bg-black/50 rounded px-1.5 py-0.5 text-white text-xs">
-              第 {idx + 1} 页
+              {insertPosition === idx + 1 && (
+                <div className="absolute top-2 right-2 bg-[#00CDD4] rounded-full p-1">
+                  <Check size={14} className="text-white" />
+                </div>
+              )}
+              <div className="absolute top-2 left-2 bg-black/50 rounded px-1.5 py-0.5 text-white text-xs">
+                第 {idx + 1} 页
+              </div>
             </div>
           </div>
         ))}

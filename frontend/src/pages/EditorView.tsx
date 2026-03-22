@@ -307,7 +307,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
         <div className="w-full flex flex-col items-center gap-3">
           <div className="w-full max-w-4xl flex items-center justify-center gap-2 py-1.5 bg-[#00CDD4]/10 text-[#009fa5] text-xs font-medium rounded-lg">
             <LoadingSpinner size={20} />
-            正在生成更多页面… 已完成 {pages.length} 页
+            正在生成中… 已完成 {pages.length} 页
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -404,11 +404,9 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
         content = (
           <CoverMode
             storybook={currentStorybook}
-            onCoverGenerating={() => {
-              setCurrentStorybook(prev => prev ? { ...prev, status: 'updating' } : prev);
-              setMode('read');
-              startPolling(currentStorybook.id);
-            }}
+            onStorybookChange={setCurrentStorybook}
+            onStartPolling={startPolling}
+            onCoverGenerating={() => setMode('read')}
           />
         );
       }
