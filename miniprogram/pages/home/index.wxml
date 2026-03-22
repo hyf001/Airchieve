@@ -105,7 +105,10 @@
 
   <!-- 风格模板选择 -->
   <view class="home-section">
-    <text class="home-section-title">选择风格模板</text>
+    <view class="home-section-title-row">
+      <text class="home-section-title">选择风格模板</text>
+      <text class="home-section-subtitle">已选：{{selectedTemplateName || '无'}}</text>
+    </view>
     <view wx:if="{{loadingTemplates}}" class="home-section-loading">
       <text class="home-section-loading-text">加载中…</text>
     </view>
@@ -114,13 +117,16 @@
         wx:for="{{templates}}"
         wx:key="id"
         class="home-template-card {{selectedTemplateId === item.id ? 'home-template-card--selected' : ''}}"
-        data-id="{{item.id}}"
-        bindtap="handleSelectTemplate"
       >
-        <image wx:if="{{item.cover_image}}" class="home-template-img" src="{{item.cover_image}}" mode="aspectFill" />
-        <view wx:else class="home-template-icon">🎨</view>
-        <text class="home-template-name">{{item.name}}</text>
-        <text wx:if="{{selectedTemplateId === item.id}}" class="home-template-check">✓</text>
+        <view class="home-template-body" data-id="{{item.id}}" bindtap="handleSelectTemplate">
+          <image wx:if="{{item.cover_image}}" class="home-template-img" src="{{item.cover_image}}" mode="aspectFill" />
+          <view wx:else class="home-template-icon">🎨</view>
+          <text class="home-template-name">{{item.name}}</text>
+          <text wx:if="{{selectedTemplateId === item.id}}" class="home-template-check">✓</text>
+        </view>
+        <view class="home-card-detail-btn" data-id="{{item.storybook_id}}" bindtap="handleViewTemplate">
+          <text class="home-card-detail-text">查看详情</text>
+        </view>
       </view>
     </scroll-view>
     <view wx:else class="home-section-empty">
@@ -140,8 +146,13 @@
         wx:key="id"
         class="home-public-card"
       >
-        <image class="home-public-cover" src="{{item.coverImage}}" mode="aspectFill" lazy-load />
+        <view class="home-public-cover-wrap">
+          <image class="home-public-cover" src="{{item.coverImage}}" mode="aspectFill" lazy-load />
+        </view>
         <text class="home-public-title">{{item.title}}</text>
+        <view class="home-card-detail-btn" data-id="{{item.id}}" bindtap="handleViewBook">
+          <text class="home-card-detail-text">查看详情</text>
+        </view>
       </view>
     </view>
     <view wx:else class="home-section-empty">

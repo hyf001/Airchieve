@@ -25,7 +25,7 @@
     </view>
 
     <!-- 模式选项卡 -->
-    <scroll-view wx:if="{{pageTotal > 0}}" class="editor-tabs" scroll-x enable-flex>
+    <scroll-view wx:if="{{pageTotal > 0 && !readonly}}" class="editor-tabs" scroll-x enable-flex>
       <view class="editor-tab {{mode === 'read' ? 'editor-tab--active' : ''}}" data-mode="read" bindtap="setMode">
         <text class="editor-tab-text">阅读</text>
       </view>

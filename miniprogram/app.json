@@ -4,7 +4,8 @@
     "pages/home/index",
     "pages/editor/index",
     "pages/templates/index",
-    "pages/profile/index"
+    "pages/profile/index",
+    "pages/editor/detail/index"
   ],
   "tabBar": {
     "color": "#94a3b8",

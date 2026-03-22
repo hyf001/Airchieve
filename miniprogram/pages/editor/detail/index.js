@@ -30,6 +30,7 @@ Page({
     pageTotal: 0,
     mode: 'read',
     pageViewHeight: 0,
+    readonly: false,
 
     editThumbScrollId: 'edit-thumb-0',
     editSelectedIdx: 0,
@@ -66,8 +67,10 @@ Page({
   _pollingId: null,
 
   onLoad: function(options) {
+    const readonly = options.readonly === '1'
+    this.setData({ readonly })
     const app = getApp()
-    if (!app.globalData.user) {
+    if (!readonly && !app.globalData.user) {
       wx.navigateTo({ url: '/pages/login/index' })
       return
     }

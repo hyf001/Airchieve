@@ -22,6 +22,7 @@ Page({
     templates: [],
     loadingTemplates: true,
     selectedTemplateId: null,
+    selectedTemplateName: '',
 
     // ── 公开绘本展示 ──
     publicBooks: [],
@@ -128,9 +129,28 @@ Page({
   // ── 模板选择 ──
   handleSelectTemplate: function(e) {
     const id = Number(e.currentTarget.dataset.id)
+    const isDeselect = this.data.selectedTemplateId === id
+    const tpl = isDeselect ? null : this.data.templates.find(function(t) { return t.id === id })
     this.setData({
-      selectedTemplateId: this.data.selectedTemplateId === id ? null : id,
+      selectedTemplateId: isDeselect ? null : id,
+      selectedTemplateName: tpl ? tpl.name : '',
     })
+  },
+
+  // ── 查看详情 ──
+  handleViewTemplate: function(e) {
+    const sid = e.currentTarget.dataset.id
+    if (!sid) {
+      wx.showToast({ title: '暂无示例作品', icon: 'none' })
+      return
+    }
+    wx.navigateTo({ url: '/pages/editor/detail/index?id=' + sid + '&readonly=1' })
+  },
+
+  handleViewBook: function(e) {
+    const id = e.currentTarget.dataset.id
+    if (!id) return
+    wx.navigateTo({ url: '/pages/editor/detail/index?id=' + id + '&readonly=1' })
   },
 
   // ── 创建绘本 ──
