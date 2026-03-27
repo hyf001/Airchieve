@@ -1,0 +1,7 @@
+{
+  "name": "ai-storybook-miniprogram",
+  "version": "1.0.0",
+  "description": "AI绘本小程序",
+  "main": "app.js",
+  "scripts": {}
+}

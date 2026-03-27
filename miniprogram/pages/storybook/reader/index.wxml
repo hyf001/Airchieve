@@ -1,0 +1,111 @@
+<view
+  class="reader-page"
+  catchtouchmove="preventTouchMove"
+>
+
+  <!-- 标题 + 操作栏 -->
+  <view class="reader-header" wx:if="{{!isFullscreen}}">
+    <text class="reader-book-title" number-of-lines="1">{{current.title}}</text>
+    <view class="reader-header-actions">
+      <view
+        wx:if="{{isOwner}}"
+        class="reader-header-btn"
+        bindtap="handleEditMode"
+      >
+        <text class="reader-header-btn-text">编辑</text>
+      </view>
+      <view
+        class="reader-header-btn"
+        bindtap="toggleLandscape"
+      >
+        <text class="reader-header-btn-text">{{isLandscape ? '竖屏' : '横屏'}}</text>
+      </view>
+      <view
+        class="reader-header-btn"
+        bindtap="toggleFullscreen"
+      >
+        <text class="reader-header-btn-text">{{isFullscreen ? '退出' : '全屏'}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 生成中（无页面） -->
+  <view wx:if="{{pageTotal === 0}}" class="reader-generating">
+    <view class="reader-generating-spinner"></view>
+    <text class="reader-generating-text">正在生成中，请稍候…</text>
+    <text class="reader-generating-hint">通常需要 2-3 分钟</text>
+  </view>
+
+  <!-- 页面内容 -->
+  <block wx:else>
+    <!-- 全屏或横屏模式下的控制按钮 -->
+    <view wx:if="{{isFullscreen || isLandscape}}" class="reader-fullscreen-controls">
+      <view class="reader-fullscreen-btn" bindtap="toggleFullscreen">
+        <text class="reader-fullscreen-btn-text">退出全屏</text>
+      </view>
+      <view class="reader-fullscreen-btn" bindtap="toggleLandscape">
+        <text class="reader-fullscreen-btn-text">{{isLandscape ? '切换竖屏' : '切换横屏'}}</text>
+      </view>
+    </view>
+
+    <view
+      class="reader-page-view {{isFullscreen ? 'reader-page-view--fullscreen' : ''}} {{isLandscape ? 'reader-page-view--landscape' : ''}}"
+      style="height: {{pageViewHeight}}px;"
+      catchtouchstart="onReadTouchStart"
+      catchtouchend="onReadTouchEnd"
+      catchtouchmove="preventTouchMove"
+    >
+      <image
+        class="reader-page-image"
+        src="{{currentPage.image_url}}"
+        mode="aspectFill"
+        lazy-load
+        binderror="onPageImageError"
+      />
+      <!-- AI生成标识 -->
+      <view class="reader-page-type-badge">
+        <text class="reader-page-type-text">AI生成</text>
+      </view>
+      <!-- 正文页才显示文字 -->
+      <view
+        wx:if="{{currentPage.page_type !== 'cover' && currentPage.page_type !== 'back_cover' && currentPage.text}}"
+        class="reader-page-text-overlay"
+      >
+        <text class="reader-page-text">{{currentPage.text}}</text>
+      </view>
+      <!-- 生成中角标 -->
+      <view wx:if="{{current.status === 'creating' || current.status === 'updating'}}" class="reader-status-badge">
+        <text class="reader-status-badge-text">生成中</text>
+      </view>
+    </view>
+
+    <!-- 翻页控制 -->
+    <view class="reader-pagination" wx:if="{{!isFullscreen}}">
+      <view
+        class="reader-page-btn {{currentPageIndex === 0 ? 'reader-page-btn--disabled' : ''}}"
+        bindtap="prevPage"
+      >
+        <text class="reader-page-btn-text">‹</text>
+      </view>
+      <text class="reader-page-indicator">{{currentPageIndex + 1}} / {{pageTotal}}</text>
+      <view
+        class="reader-page-btn {{currentPageIndex >= pageTotal - 1 ? 'reader-page-btn--disabled' : ''}}"
+        bindtap="nextPage"
+      >
+        <text class="reader-page-btn-text">›</text>
+      </view>
+    </view>
+
+    <!-- 圆点导航 -->
+    <scroll-view class="reader-dots-wrap" scroll-x enable-flex wx:if="{{!isFullscreen}}">
+      <view
+        wx:for="{{current.pages}}"
+        wx:key="index"
+        class="reader-dot {{index === currentPageIndex ? 'reader-dot--active' : ''}}"
+        data-idx="{{index}}"
+        bindtap="handleDotTap"
+      ></view>
+    </scroll-view>
+  </block>
+
+</view>

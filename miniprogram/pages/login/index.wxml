@@ -38,10 +38,17 @@
       wx:if="{{nickname}}"
       class="login-btn"
       loading="{{loading}}"
-      disabled="{{loading}}"
+      disabled="{{loading || !agreedToTerms}}"
       bindtap="handleLogin"
     >登录</button>
-    <text class="login-hint">登录即表示同意《用户协议》和《隐私政策》</text>
+
+    <view class="agreement-section">
+      <checkbox class="agreement-checkbox" checked="{{agreedToTerms}}" bindtap="toggleAgreement" />
+      <text class="agreement-text">我已阅读并同意</text>
+      <text class="agreement-link" bindtap="showUserProtocol">《用户协议》</text>
+      <text class="agreement-text">和</text>
+      <text class="agreement-link" bindtap="showPrivacyPolicy">《隐私政策》</text>
+    </view>
   </view>
 
 </view>

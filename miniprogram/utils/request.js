@@ -29,7 +29,7 @@ function request(path, options) {
       header: header,
       success: function(res) {
         if (res.statusCode === 401) {
-          getApp().logout()
+          getApp().handleAuthRequired()
           reject(new Error('请先登录'))
           return
         }

@@ -1,11 +1,14 @@
 {
   "pages": [
-    "pages/login/index",
     "pages/home/index",
-    "pages/editor/index",
+    "pages/login/index",
+    "pages/storybook/list/index",
     "pages/templates/index",
     "pages/profile/index",
-    "pages/editor/detail/index"
+    "pages/storybook/editor/index",
+    "pages/storybook/reader/index",
+    "pages/agreement/user-protocol",
+    "pages/agreement/privacy-policy"
   ],
   "tabBar": {
     "color": "#94a3b8",
@@ -20,7 +23,7 @@
         "selectedIconPath": "assets/tabbar/home-active.png"
       },
       {
-        "pagePath": "pages/editor/index",
+        "pagePath": "pages/storybook/list/index",
         "text": "作品",
         "iconPath": "assets/tabbar/book.png",
         "selectedIconPath": "assets/tabbar/book-active.png"

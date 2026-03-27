@@ -25,12 +25,8 @@ const BACK_COVER_COLORS = [
 Page({
   data: {
     current: null,
-    currentPageIndex: 0,
-    currentPage: null,
-    pageTotal: 0,
-    mode: 'read',
+    mode: 'edit',
     pageViewHeight: 0,
-    readonly: false,
 
     editThumbScrollId: 'edit-thumb-0',
     editSelectedIdx: 0,
@@ -67,10 +63,8 @@ Page({
   _pollingId: null,
 
   onLoad: function(options) {
-    const readonly = options.readonly === '1'
-    this.setData({ readonly })
     const app = getApp()
-    if (!readonly && !app.globalData.user) {
+    if (!app.globalData.user) {
       wx.navigateTo({ url: '/pages/login/index' })
       return
     }
@@ -106,7 +100,6 @@ Page({
 
   _applyBook: function(book) {
     var pages = book.pages || []
-    var newIdx = Math.min(this.data.currentPageIndex, pages.length > 0 ? pages.length - 1 : 0)
     var ar = book.aspect_ratio || '16:9'
     var ratio = ar === '4:3' ? 3 / 4 : ar === '1:1' ? 1 : 9 / 16
     var info = wx.getSystemInfoSync()
@@ -114,12 +107,12 @@ Page({
     var pageViewHeight = Math.round((info.windowWidth - marginPx) * ratio)
     this.setData({
       current: { id: book.id, title: book.title, status: book.status, pages: pages, aspect_ratio: book.aspect_ratio, is_public: book.is_public },
-      currentPageIndex: newIdx,
-      currentPage: pages[newIdx] || null,
-      pageTotal: pages.length,
-      mode: 'read',
       pageViewHeight: pageViewHeight,
     })
+    // 初始化编辑模式
+    if (pages.length > 0) {
+      this.setMode({ currentTarget: { dataset: { mode: 'edit' } } })
+    }
   },
 
   // ── 模式切换 ──
@@ -149,8 +142,12 @@ Page({
       updates.regenInstruction = ''
       updates.regenSubmitting = false
     } else if (mode === 'cover') {
-      updates.coverPages = this._buildCoverPages(current.pages)
-      updates.coverSelected = this._defaultCoverSelection(current.pages)
+      const coverSelected = this._defaultCoverSelection(current.pages)
+      const coverPages = this._buildCoverPages(current.pages, coverSelected)
+      console.log('[封面模式初始化] coverPages:', coverPages.map(function(p) { return { originalIndex: p.originalIndex, selected: p.selected } }))
+      console.log('[封面模式初始化] coverSelected:', coverSelected)
+      updates.coverPages = coverPages
+      updates.coverSelected = coverSelected
       updates.coverGenerating = false
     } else if (mode === 'backcover') {
       updates.backCoverCreating = false
@@ -159,19 +156,30 @@ Page({
     this.setData(updates)
   },
 
-  _buildCoverPages: function(pages) {
+  _buildCoverPages: function(pages, selectedIndices) {
+    const selectedSet = selectedIndices ? new Set(selectedIndices) : new Set()
     var result = pages
-      .map(function(p, i) { return Object.assign({}, p, { originalIndex: i }) })
-      .filter(function(p) { return p.page_type === 'content' })
+      .map(function(p, i) {
+        return Object.assign({}, p, {
+          originalIndex: i,
+          selected: selectedSet.has(i)
+        })
+      })
+      .filter(function(p) { return !p.page_type || p.page_type === 'content' })
     if (result.length === 0) {
-      result = pages.map(function(p, i) { return Object.assign({}, p, { originalIndex: i }) })
+      result = pages.map(function(p, i) {
+        return Object.assign({}, p, {
+          originalIndex: i,
+          selected: selectedSet.has(i)
+        })
+      })
     }
     return result
   },
 
   _defaultCoverSelection: function(pages) {
     const contentIdx = pages
-      .map(function(p, i) { return p.page_type === 'content' ? i : -1 })
+      .map(function(p, i) { return (!p.page_type || p.page_type === 'content') ? i : -1 })
       .filter(function(i) { return i >= 0 })
     const n = contentIdx.length
     if (n === 0) return pages.slice(0, Math.min(3, pages.length)).map(function(_, i) { return i })
@@ -180,33 +188,10 @@ Page({
     return [contentIdx[0], contentIdx[mid], contentIdx[n - 1]]
   },
 
-  // ── 阅读模式 ──
-  onPageImageError: function(e) {
-    const { currentPage } = this.data
-    const url = currentPage && currentPage.image_url || ''
-    console.error('[detail] image load error', url.substring(0, 100), e.detail)
-  },
-
-  handleDotTap: function(e) {
-    const idx = Number(e.currentTarget.dataset.idx)
-    const pages = (this.data.current && this.data.current.pages) || []
-    if (idx < 0 || idx >= pages.length) return
-    this.setData({ currentPageIndex: idx, currentPage: pages[idx] })
-  },
-
-  prevPage: function() {
-    const idx = this.data.currentPageIndex
-    if (idx <= 0) return
-    const newIdx = idx - 1
-    this.setData({ currentPageIndex: newIdx, currentPage: this.data.current.pages[newIdx] })
-  },
-
-  nextPage: function() {
-    const { currentPageIndex, current } = this.data
-    const pages = (current && current.pages) || []
-    if (currentPageIndex >= pages.length - 1) return
-    const newIdx = currentPageIndex + 1
-    this.setData({ currentPageIndex: newIdx, currentPage: pages[newIdx] })
+  handleReadMode: function() {
+    const { current } = this.data
+    if (!current || !current.id) return
+    wx.navigateTo({ url: '/pages/storybook/reader/index?id=' + current.id })
   },
 
   handleTerminate: function() {
@@ -228,29 +213,6 @@ Page({
           wx.showToast({ title: '停止失败', icon: 'none' })
         }
       },
-    })
-  },
-
-  handleSaveToAlbum: function() {
-    const { currentPage } = this.data
-    if (!currentPage || !currentPage.image_url) return
-    wx.downloadFile({
-      url: currentPage.image_url,
-      success: function(res) {
-        if (res.statusCode !== 200) { wx.showToast({ title: '下载失败', icon: 'none' }); return }
-        wx.saveImageToPhotosAlbum({
-          filePath: res.tempFilePath,
-          success: function() { wx.showToast({ title: '已保存到相册', icon: 'success' }) },
-          fail: function(err) {
-            if (err.errMsg && err.errMsg.indexOf('auth') >= 0) {
-              wx.showModal({ title: '需要相册权限', content: '请在设置中允许访问相册', confirmText: '去设置', success: function(r) { if (r.confirm) wx.openSetting() } })
-            } else {
-              wx.showToast({ title: '保存失败', icon: 'none' })
-            }
-          },
-        })
-      },
-      fail: function() { wx.showToast({ title: '下载失败', icon: 'none' }) },
     })
   },
 
@@ -364,7 +326,7 @@ Page({
     try {
       const updated = await reorderPages(this.data.current.id, this.data.reorderDraft)
       this._applyBook(updated)
-      this.setData({ mode: 'read', reorderSubmitting: false })
+      this.setData({ mode: 'edit', reorderSubmitting: false })
       wx.showToast({ title: '排序已保存', icon: 'success' })
     } catch (err) {
       wx.showToast({ title: err.message || '排序失败', icon: 'none' })
@@ -372,7 +334,7 @@ Page({
     }
   },
 
-  handleReorderCancel: function() { this.setData({ mode: 'read' }) },
+  handleReorderCancel: function() { this.setData({ mode: 'edit' }) },
 
   // ── 续写模式 ──
   handleRegenSelectPos: function(e) { this.setData({ regenInsertPos: Number(e.currentTarget.dataset.pos) }) },
@@ -386,7 +348,7 @@ Page({
       const { current, regenInsertPos, regenCount, regenInstruction } = this.data
       await insertPages(current.id, regenInsertPos, regenCount, regenInstruction || undefined)
       const updatedCurrent = Object.assign({}, current, { status: 'updating' })
-      this.setData({ current: updatedCurrent, mode: 'read', regenSubmitting: false })
+      this.setData({ current: updatedCurrent, mode: 'edit', regenSubmitting: false })
       this._startPolling(current.id)
       wx.showToast({ title: '生成任务已提交', icon: 'none' })
     } catch (err) {
@@ -395,11 +357,12 @@ Page({
     }
   },
 
-  handleRegenCancel: function() { this.setData({ mode: 'read' }) },
+  handleRegenCancel: function() { this.setData({ mode: 'edit' }) },
 
   // ── 封面模式 ──
   handleCoverTogglePage: function(e) {
     const idx = Number(e.currentTarget.dataset.idx)
+    console.log('[封面选择] 点击的索引:', idx, '当前选中:', this.data.coverSelected)
     var selected = this.data.coverSelected.slice()
     const pos = selected.indexOf(idx)
     if (pos >= 0) {
@@ -409,7 +372,19 @@ Page({
     } else {
       selected.push(idx)
     }
-    this.setData({ coverSelected: selected })
+    console.log('[封面选择] 更新后选中:', selected)
+
+    // 更新 coverPages 中每个页面的 selected 状态
+    const updatedCoverPages = this.data.coverPages.map(function(page) {
+      return Object.assign({}, page, {
+        selected: selected.indexOf(page.originalIndex) >= 0
+      })
+    })
+
+    this.setData({
+      coverSelected: selected,
+      coverPages: updatedCoverPages
+    })
   },
 
   handleCoverGenerate: async function() {
@@ -418,7 +393,7 @@ Page({
     try {
       await generateCover(this.data.current.id, this.data.coverSelected)
       const updatedCurrent = Object.assign({}, this.data.current, { status: 'updating' })
-      this.setData({ current: updatedCurrent, mode: 'read', coverGenerating: false })
+      this.setData({ current: updatedCurrent, mode: 'edit', coverGenerating: false })
       this._startPolling(this.data.current.id)
       wx.showToast({ title: '封面生成中', icon: 'none' })
     } catch (err) {
@@ -441,7 +416,7 @@ Page({
       wx.showToast({ title: '封底创建成功', icon: 'success' })
       const updated = await getStorybook(self.data.current.id)
       self._applyBook(updated)
-      self.setData({ mode: 'read', backCoverCreating: false })
+      self.setData({ mode: 'edit', backCoverCreating: false })
     } catch (err) {
       wx.showToast({ title: err.message || '创建失败', icon: 'none' })
       this.setData({ backCoverCreating: false })

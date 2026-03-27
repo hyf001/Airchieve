@@ -89,12 +89,23 @@
 
 .home-textarea-placeholder { color: var(--color-text-muted); }
 
+/* Textarea底部信息栏 */
+.home-textarea-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8rpx;
+}
+
 .home-textarea-count {
-  display: block;
-  text-align: right;
   font-size: 22rpx;
   color: var(--color-text-muted);
-  margin-top: 8rpx;
+}
+
+.home-ai-tip-text {
+  font-size: 22rpx;
+  color: var(--color-text-muted);
+  line-height: 1.4;
 }
 
 /* ── Images strip ── */

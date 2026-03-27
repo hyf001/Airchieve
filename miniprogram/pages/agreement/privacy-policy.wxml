@@ -1,0 +1,55 @@
+<view class="agreement-page">
+  <view class="agreement-content">
+    <view class="agreement-title">隐私政策</view>
+
+    <view class="agreement-section">
+      <text class="section-title">引言</text>
+      <text class="section-content">毛毛虫定制绘本（以下简称"我们"）非常重视用户的隐私保护。本隐私政策说明了我们如何收集、使用、存储和保护您的个人信息。使用我们的服务即表示您同意本隐私政策的条款。</text>
+    </view>
+
+    <view class="agreement-section">
+      <text class="section-title">1. 我们收集的信息</text>
+      <text class="section-content">1.1 账户信息：当您注册和使用服务时，我们可能收集您的微信头像、昵称等基本信息。\n\n1.2 内容信息：您输入的用于生成绘本的文字描述、创作的内容。\n\n1.3 设备信息：设备型号、操作系统版本、唯一设备标识符等。\n\n1.4 日志信息：IP地址、访问时间、访问记录等。</text>
+    </view>
+
+    <view class="agreement-section">
+      <text class="section-title">2. 信息使用目的</text>
+      <text class="section-content">2.1 提供、维护和改进我们的服务\n\n2.2 处理您的请求和交易\n\n2.3 发送重要通知和更新\n\n2.4 分析服务使用情况，优化用户体验\n\n2.5 防止欺诈和确保安全</text>
+    </view>
+
+    <view class="agreement-section">
+      <text class="section-title">3. 信息共享</text>
+      <text class="section-content">3.1 我们不会向第三方出售、出租或交易您的个人信息。\n\n3.2 以下情况除外：\n• 获得您的明确同意\n• 法律法规要求\n• 保护我们的合法权益\n• 与可信赖的服务提供商合作（仅限于提供服务所需）</text>
+    </view>
+
+    <view class="agreement-section">
+      <text class="section-title">4. 信息存储</text>
+      <text class="section-content">4.1 我们在中华人民共和国境内收集和存储的个人信息。\n\n4.2 信息存储期限：为实现服务目的所必需的期间，或法律要求的期限内。\n\n4.3 如您停止使用服务，我们将根据法律规定删除或匿名化您的个人信息。</text>
+    </view>
+
+    <view class="agreement-section">
+      <text class="section-title">5. 信息安全</text>
+      <text class="section-content">5.1 我们采用行业标准的安全措施保护您的信息。\n\n5.2 包括但不限于：数据加密、访问控制、安全审计等。\n\n5.3 尽管我们努力保护信息安全，但互联网传输仍存在风险，请您注意保护个人信息。</text>
+    </view>
+
+    <view class="agreement-section">
+      <text class="section-title">6. 您的权利</text>
+      <text class="section-content">6.1 访问和查看您的个人信息\n\n6.2 更正或更新不准确的信息\n\n6.3 删除您的账户和相关个人信息\n\n6.4 撤销已给予的同意\n\n6.5 如需行使上述权利，请通过小程序内客服功能联系我们</text>
+    </view>
+
+    <view class="agreement-section">
+      <text class="section-title">7. 未成年人保护</text>
+      <text class="section-content">7.1 我们的服务面向所有年龄段的用户。\n\n7.2 如果您是未成年人的监护人，请监督孩子使用我们的服务。\n\n7.3 我们不会故意收集未成年人的个人信息。</text>
+    </view>
+
+    <view class="agreement-section">
+      <text class="section-title">8. 政策更新</text>
+      <text class="section-content">8.1 我们可能会不时更新本隐私政策。\n\n8.2 重大变更时，我们会通过显著方式通知您。\n\n8.3 继续使用服务即表示您接受更新后的政策。</text>
+    </view>
+
+    <view class="agreement-section">
+      <text class="section-title">9. 联系我们</text>
+      <text class="section-content">如您对本隐私政策有任何疑问、意见或建议，请通过小程序内客服功能联系我们。\n\n最后更新时间：2026年3月</text>
+    </view>
+  </view>
+</view>

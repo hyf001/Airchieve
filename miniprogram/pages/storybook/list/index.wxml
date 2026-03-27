@@ -65,7 +65,7 @@
       <!-- 底部操作按钮 -->
       <view class="work-card-actions" catchtap="noop">
         <view
-          class="work-action-pill"
+          class="work-action-pill {{selectedAction.workId === item.id && selectedAction.actionType === 'togglePublic' ? 'work-action-pill--active' : ''}}"
           data-id="{{item.id}}"
           data-ispublic="{{item.is_public}}"
           catchtap="handleTogglePublic"
@@ -73,9 +73,16 @@
           <text class="work-action-pill-text">{{item.is_public ? '设为私密' : '公开'}}</text>
         </view>
         <view
-          class="work-action-pill work-action-pill--primary"
+          class="work-action-pill {{selectedAction.workId === item.id && selectedAction.actionType === 'download' ? 'work-action-pill--active' : ''}}"
           data-id="{{item.id}}"
-          catchtap="handleWorkCardTap"
+          catchtap="handleDownloadPDF"
+        >
+          <text class="work-action-pill-text">📥 下载PDF</text>
+        </view>
+        <view
+          class="work-action-pill work-action-pill--primary {{selectedAction.workId === item.id && selectedAction.actionType === 'edit' ? 'work-action-pill--active' : ''}}"
+          data-id="{{item.id}}"
+          catchtap="handleEditWork"
         >
           <text class="work-action-pill-text work-action-pill-text--primary">编辑</text>
         </view>

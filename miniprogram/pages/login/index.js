@@ -7,6 +7,7 @@ Page({
     nicknameFocus: false,
     loading: false,
     error: '',
+    agreedToTerms: false,
   },
 
   onLoad: function(options) {
@@ -28,8 +29,32 @@ Page({
     })
   },
 
+  toggleAgreement: function() {
+    this.setData({
+      agreedToTerms: !this.data.agreedToTerms
+    })
+  },
+
+  showUserProtocol: function() {
+    wx.navigateTo({
+      url: '/pages/agreement/user-protocol'
+    })
+  },
+
+  showPrivacyPolicy: function() {
+    wx.navigateTo({
+      url: '/pages/agreement/privacy-policy'
+    })
+  },
+
   handleLogin: function() {
     if (this.data.loading) return
+
+    if (!this.data.agreedToTerms) {
+      this.setData({ error: '请先阅读并同意用户协议和隐私政策' })
+      return
+    }
+
     this.setData({ loading: true, error: '' })
 
     const self = this

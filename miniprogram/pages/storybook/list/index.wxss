@@ -1,0 +1,205 @@
+.works-page {
+  min-height: 100vh;
+  background: var(--color-bg);
+  padding: 24rpx 32rpx 60rpx;
+}
+
+.works-loading,
+.works-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 0;
+  gap: 16rpx;
+}
+
+.works-loading-text,
+.works-empty-text {
+  font-size: 26rpx;
+  color: var(--color-text-muted);
+}
+
+.works-empty-icon {
+  font-size: 80rpx;
+}
+
+.works-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+/* 卡片整体 */
+.work-card {
+  background: var(--color-bg-card);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+}
+
+/* 顶部行 */
+.work-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 28rpx 20rpx;
+}
+
+.work-type {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.work-type-icon {
+  font-size: 30rpx;
+}
+
+.work-type-label {
+  font-size: 26rpx;
+  color: var(--color-text-secondary);
+}
+
+.work-card-top-right {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.work-status-text {
+  font-size: 24rpx;
+  color: var(--color-text-muted);
+}
+
+.work-status-text--finished { color: #16a34a; }
+.work-status-text--creating,
+.work-status-text--updating { color: #d97706; }
+.work-status-text--error,
+.work-status-text--terminated { color: #dc2626; }
+
+.work-delete-btn {
+  padding: 4rpx 8rpx;
+}
+
+.work-delete-icon {
+  font-size: 28rpx;
+  color: var(--color-text-muted);
+}
+
+.work-divider {
+  height: 1rpx;
+  background: var(--color-border);
+  margin: 0 28rpx;
+}
+
+/* 封面预览 */
+.work-cover-wrap {
+  width: 100%;
+  height: 320rpx;
+  background: #f1f5f9;
+  overflow: hidden;
+}
+
+.work-cover-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.work-cover-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.work-cover-placeholder-icon {
+  font-size: 72rpx;
+  opacity: 0.4;
+}
+
+/* 主内容 */
+.work-card-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 28rpx 20rpx;
+  gap: 16rpx;
+}
+
+.work-title {
+  flex: 1;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.5;
+}
+
+.work-public-label {
+  font-size: 20rpx;
+  border-radius: 8rpx;
+  padding: 4rpx 14rpx;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.work-public-label--public {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.work-public-label--private {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+/* 底部操作按钮行 */
+.work-card-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 20rpx;
+  padding: 20rpx 28rpx 24rpx;
+}
+
+.work-action-pill {
+  flex: 1;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 40rpx;
+  border: 1rpx solid var(--color-border);
+}
+
+.work-action-pill--primary {
+  border-color: var(--color-primary);
+}
+
+.work-action-pill--download {
+  /* 与其他按钮保持一致，移除渐变背景 */
+}
+
+.work-action-pill-text {
+  font-size: 26rpx;
+  color: var(--color-text-secondary);
+}
+
+.work-action-pill-text--primary {
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+/* 按钮选中状态 */
+.work-action-pill--active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.work-action-pill--active .work-action-pill-text,
+.work-action-pill--active .work-action-pill-text--primary {
+  color: #fff !important;
+}

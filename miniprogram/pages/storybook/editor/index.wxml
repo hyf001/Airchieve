@@ -15,20 +15,16 @@
           <text class="editor-header-btn-text">停止</text>
         </view>
         <view
-          wx:if="{{current.status === 'finished' && mode === 'read' && currentPage && currentPage.image_url}}"
           class="editor-header-btn"
-          bindtap="handleSaveToAlbum"
+          bindtap="handleReadMode"
         >
-          <text class="editor-header-btn-text">存图</text>
+          <text class="editor-header-btn-text">阅读</text>
         </view>
       </view>
     </view>
 
     <!-- 模式选项卡 -->
-    <scroll-view wx:if="{{pageTotal > 0 && !readonly}}" class="editor-tabs" scroll-x enable-flex>
-      <view class="editor-tab {{mode === 'read' ? 'editor-tab--active' : ''}}" data-mode="read" bindtap="setMode">
-        <text class="editor-tab-text">阅读</text>
-      </view>
+    <scroll-view wx:if="{{current.pages && current.pages.length > 0}}" class="editor-tabs" scroll-x enable-flex>
       <view class="editor-tab {{mode === 'edit' ? 'editor-tab--active' : ''}}" data-mode="edit" bindtap="setMode">
         <text class="editor-tab-text">编辑页</text>
       </view>
@@ -46,73 +42,13 @@
       </view>
     </scroll-view>
 
-    <!-- 生成中（无页面） -->
-    <view wx:if="{{pageTotal === 0}}" class="editor-generating">
-      <view class="editor-generating-spinner"></view>
-      <text class="editor-generating-text">正在生成中，请稍候…</text>
-      <text class="editor-generating-hint">通常需要 2-3 分钟</text>
+    <!-- 无页面提示 -->
+    <view wx:if="{{!current.pages || current.pages.length === 0}}" class="editor-empty">
+      <text class="editor-empty-text">暂无页面</text>
     </view>
 
-    <!-- ── 阅读模式 ── -->
-    <block wx:elif="{{mode === 'read'}}">
-      <view class="editor-page-view" style="height: {{pageViewHeight}}px;">
-        <image
-          class="editor-page-image"
-          src="{{currentPage.image_url}}"
-          mode="aspectFill"
-          lazy-load
-          binderror="onPageImageError"
-        />
-        <!-- 页面类型标签 -->
-        <view class="editor-page-type-badge">
-          <text class="editor-page-type-text">
-            {{currentPage.page_type === 'cover' ? '封面' : currentPage.page_type === 'back_cover' ? '封底' : '内页'}}
-          </text>
-        </view>
-        <!-- 正文页才显示文字 -->
-        <view
-          wx:if="{{currentPage.page_type !== 'cover' && currentPage.page_type !== 'back_cover' && currentPage.text}}"
-          class="editor-page-text-overlay"
-        >
-          <text class="editor-page-text">{{currentPage.text}}</text>
-        </view>
-        <!-- 生成中角标 -->
-        <view wx:if="{{current.status === 'creating' || current.status === 'updating'}}" class="editor-status-badge">
-          <text class="editor-status-badge-text">生成中</text>
-        </view>
-      </view>
-
-      <!-- 翻页控制 -->
-      <view class="editor-pagination">
-        <view
-          class="editor-page-btn {{currentPageIndex === 0 ? 'editor-page-btn--disabled' : ''}}"
-          bindtap="prevPage"
-        >
-          <text class="editor-page-btn-text">‹</text>
-        </view>
-        <text class="editor-page-indicator">{{currentPageIndex + 1}} / {{pageTotal}}</text>
-        <view
-          class="editor-page-btn {{currentPageIndex >= pageTotal - 1 ? 'editor-page-btn--disabled' : ''}}"
-          bindtap="nextPage"
-        >
-          <text class="editor-page-btn-text">›</text>
-        </view>
-      </view>
-
-      <!-- 圆点导航 -->
-      <scroll-view class="editor-dots-wrap" scroll-x enable-flex>
-        <view
-          wx:for="{{current.pages}}"
-          wx:key="index"
-          class="editor-dot {{index === currentPageIndex ? 'editor-dot--active' : ''}}"
-          data-idx="{{index}}"
-          bindtap="handleDotTap"
-        ></view>
-      </scroll-view>
-    </block>
-
     <!-- ── 编辑模式 ── -->
-    <block wx:elif="{{mode === 'edit'}}">
+    <block wx:if="{{mode === 'edit'}}">
       <!-- 缩略图横向滚动 -->
       <scroll-view class="edit-thumbs" scroll-x enable-flex scroll-into-view="{{editThumbScrollId}}" scroll-with-animation>
         <view
@@ -223,7 +159,7 @@
     </block>
 
     <!-- ── 排序模式 ── -->
-    <block wx:elif="{{mode === 'reorder'}}">
+    <block wx:if="{{mode === 'reorder'}}">
       <view class="reorder-panel">
         <text class="panel-tip">点击箭头调整页面顺序</text>
 
@@ -278,7 +214,7 @@
     </block>
 
     <!-- ── 续写模式 ── -->
-    <block wx:elif="{{mode === 'regen'}}">
+    <block wx:if="{{mode === 'regen'}}">
       <view class="regen-panel">
         <text class="panel-tip">点击页面选择插入位置（将在该页后方插入）</text>
         <text class="regen-pos-hint">
@@ -343,7 +279,7 @@
     </block>
 
     <!-- ── 封面模式 ── -->
-    <block wx:elif="{{mode === 'cover'}}">
+    <block wx:if="{{mode === 'cover'}}">
       <view class="cover-panel">
         <text class="panel-tip">选择最多 3 张参考页，AI 将提取画风生成封面</text>
 
@@ -353,13 +289,13 @@
         <view wx:else class="cover-pages-grid">
           <view
             wx:for="{{coverPages}}"
-            wx:key="originalIndex"
-            class="cover-page-item {{coverSelected.indexOf(item.originalIndex) >= 0 ? 'cover-page-item--selected' : ''}}"
+            wx:key="index"
+            class="cover-page-item {{item.selected ? 'cover-page-item--selected' : ''}}"
             data-idx="{{item.originalIndex}}"
             bindtap="handleCoverTogglePage"
           >
             <image class="cover-page-img" src="{{item.image_url}}" mode="aspectFill" />
-            <view wx:if="{{coverSelected.indexOf(item.originalIndex) >= 0}}" class="cover-check">
+            <view wx:if="{{item.selected}}" class="cover-check">
               <text class="cover-check-text">✓</text>
             </view>
             <view class="cover-page-num">
@@ -378,15 +314,15 @@
     </block>
 
     <!-- ── 封底模式 ── -->
-    <block wx:elif="{{mode === 'backcover'}}">
+    <block wx:if="{{mode === 'backcover'}}">
       <view class="backcover-panel">
 
         <view wx:if="{{backCoverHasExisting}}" class="backcover-exists">
           <text class="backcover-exists-icon">📖</text>
           <text class="backcover-exists-title">封底已存在</text>
           <text class="backcover-exists-desc">此绘本已有封底，不可重复创建</text>
-          <view class="panel-btn panel-btn--outline" data-mode="read" bindtap="setMode">
-            <text class="panel-btn-text">返回阅读</text>
+          <view class="panel-btn panel-btn--outline" data-mode="edit" bindtap="setMode">
+            <text class="panel-btn-text">返回编辑</text>
           </view>
         </view>
 

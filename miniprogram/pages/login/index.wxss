@@ -177,3 +177,31 @@
   color: var(--color-text-muted);
   text-align: center;
 }
+
+/* 协议部分 */
+.agreement-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4rpx;
+  width: 100%;
+}
+
+.agreement-checkbox {
+  transform: scale(0.65);
+  flex-shrink: 0;
+}
+
+.agreement-text {
+  font-size: 22rpx;
+  color: var(--color-text-secondary);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.agreement-link {
+  color: #0ea5e9;
+  text-decoration: underline;
+  white-space: nowrap;
+  display: inline-block;
+}

@@ -144,22 +144,17 @@ Page({
       wx.showToast({ title: '暂无示例作品', icon: 'none' })
       return
     }
-    wx.navigateTo({ url: '/pages/editor/detail/index?id=' + sid + '&readonly=1' })
+    wx.navigateTo({ url: '/pages/storybook/reader/index?id=' + sid })
   },
 
   handleViewBook: function(e) {
     const id = e.currentTarget.dataset.id
     if (!id) return
-    wx.navigateTo({ url: '/pages/editor/detail/index?id=' + id + '&readonly=1' })
+    wx.navigateTo({ url: '/pages/storybook/reader/index?id=' + id })
   },
 
   // ── 创建绘本 ──
   handleCreate: async function() {
-    const app = getApp()
-    if (!app.globalData.token) {
-      wx.navigateTo({ url: '/pages/login/index' })
-      return
-    }
     const instruction = this.data.instruction.trim()
     if (!instruction) {
       wx.showToast({ title: '请输入故事内容', icon: 'none' })
@@ -176,11 +171,10 @@ Page({
         templateId:    this.data.selectedTemplateId || undefined,
         images:        this.data.uploadedImages,
       })
-      wx.navigateTo({ url: '/pages/editor/detail/index?id=' + res.id })
+      wx.navigateTo({ url: '/pages/storybook/reader/index?id=' + res.id })
     } catch (err) {
-      wx.showToast({ title: err.message || '创建失败', icon: 'none', duration: 2500 })
-    } finally {
       this.setData({ creating: false })
+      wx.showToast({ title: err.message || '创建失败', icon: 'none', duration: 2500 })
     }
   },
 })

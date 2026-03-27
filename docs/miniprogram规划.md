@@ -158,7 +158,7 @@ export const del   = (path)                    => request(path, { method: 'DELET
 | Tab | 页面路径 | 图标 |
 |-----|---------|------|
 | 首页 | pages/home/index | home / home-active |
-| 我的绘本 | pages/editor/index | book / book-active |
+| 我的绘本 | pages/storybook/list/index | book / book-active |
 | 模板 | pages/templates/index | template / template-active |
 | 我的 | pages/profile/index | user / user-active |
 

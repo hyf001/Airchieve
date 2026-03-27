@@ -1,0 +1,278 @@
+@import '../list/index.wxss';
+
+/* ── 只读页面专用样式 ── */
+.reader-page {
+  height: 100vh;
+  background: var(--color-bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.reader-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 40rpx;
+}
+
+/* ── 标题栏 ── */
+.reader-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12rpx 32rpx 0;
+  gap: 16rpx;
+}
+
+.reader-book-title {
+  flex: 1;
+  font-size: 34rpx;
+  font-weight: 700;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reader-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-shrink: 0;
+}
+
+.reader-header-btn {
+  padding: 10rpx 24rpx;
+  border-radius: 32rpx;
+  background: var(--color-bg-card);
+  border: 1rpx solid var(--color-border);
+}
+
+.reader-header-btn-text {
+  font-size: 24rpx;
+  color: var(--color-text-secondary);
+}
+
+.reader-header-btn-icon {
+  font-size: 32rpx;
+  color: var(--color-text-secondary);
+  line-height: 1;
+}
+
+/* ── 生成中 ── */
+.reader-generating {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24rpx;
+  padding: 80rpx 0;
+}
+
+.reader-generating-spinner {
+  width: 80rpx;
+  height: 80rpx;
+  border: 6rpx solid var(--color-primary-light);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.reader-generating-text {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.reader-generating-hint {
+  font-size: 24rpx;
+  color: var(--color-text-muted);
+}
+
+/* ── 页面视图 ── */
+.reader-page-view {
+  position: relative;
+  width: calc(100% - 64rpx);
+  margin: 16rpx 32rpx 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+  background: #1e293b;
+  transition: all 0.3s ease;
+}
+
+/* 全屏模式 */
+.reader-page-view--fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh !important;
+  margin: 0;
+  border-radius: 0;
+  z-index: 9999;
+}
+
+/* 横屏模式 */
+.reader-page-view--landscape {
+  width: 100vh;
+  height: 100vw !important;
+  margin: 0;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(90deg);
+  border-radius: 0;
+  z-index: 9999;
+  overflow: visible;
+}
+
+.reader-page-view--fullscreen.reader-page-view--landscape {
+  width: 100vh;
+  height: 100vw !important;
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.reader-page-image {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: block;
+  z-index: 1;
+}
+
+.reader-page-type-badge {
+  position: absolute;
+  top: 16rpx; left: 16rpx;
+  background: rgba(0,0,0,0.5);
+  border-radius: 8rpx;
+  padding: 6rpx 14rpx;
+  z-index: 10;
+}
+
+.reader-page-type-text {
+  font-size: 20rpx;
+  color: #ffffff;
+}
+
+.reader-page-text-overlay {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  background: linear-gradient(transparent, rgba(0,0,0,0.65));
+  padding: 40rpx 28rpx 24rpx;
+  z-index: 5;
+}
+
+.reader-page-text {
+  font-size: 26rpx;
+  color: #ffffff;
+  line-height: 1.7;
+  text-shadow: 0 1rpx 4rpx rgba(0,0,0,0.5);
+}
+
+.reader-status-badge {
+  position: absolute;
+  top: 16rpx; right: 16rpx;
+  background: rgba(245,158,11,0.9);
+  border-radius: 20rpx;
+  padding: 6rpx 16rpx;
+  z-index: 10;
+}
+
+.reader-status-badge-text {
+  font-size: 22rpx;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* ── 全屏模式控制 ── */
+.reader-fullscreen-controls {
+  position: fixed;
+  top: 20rpx;
+  right: 20rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  z-index: 10000;
+}
+
+.reader-fullscreen-btn {
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10rpx);
+  border-radius: 40rpx;
+  padding: 16rpx 32rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.2);
+}
+
+.reader-fullscreen-btn-text {
+  font-size: 26rpx;
+  color: #fff;
+  font-weight: 500;
+}
+
+/* ── 翻页控制 ── */
+.reader-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 40rpx;
+  margin-top: 28rpx;
+}
+
+.reader-page-btn {
+  width: 80rpx; height: 80rpx;
+  border-radius: 50%;
+  background: var(--color-bg-card);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1rpx solid var(--color-border);
+}
+
+.reader-page-btn--disabled { opacity: 0.35; }
+
+.reader-page-btn-text {
+  font-size: 52rpx;
+  color: var(--color-text);
+  line-height: 1;
+  margin-top: -4rpx;
+}
+
+.reader-page-indicator {
+  font-size: 26rpx;
+  color: var(--color-text-secondary);
+  min-width: 100rpx;
+  text-align: center;
+}
+
+/* ── 圆点导航 ── */
+.reader-dots-wrap {
+  width: 100%;
+  height: 36rpx;
+  margin-top: 20rpx;
+  padding: 0 32rpx;
+  white-space: nowrap;
+}
+
+.reader-dot {
+  display: inline-block;
+  width: 12rpx; height: 12rpx;
+  border-radius: 50%;
+  background: #cbd5e1;
+  margin: 0 6rpx;
+  vertical-align: middle;
+  transition: all 0.3s;
+}
+
+.reader-dot--active {
+  width: 32rpx;
+  border-radius: 6rpx;
+  background: var(--color-primary);
+}
