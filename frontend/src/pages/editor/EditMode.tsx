@@ -12,6 +12,7 @@ import {
 import ConfirmDialog from '../../components/ConfirmDialog';
 import AIEditTool from '../../components/editor/AIEditTool';
 import TextEditTool, { TextLayer, TextEditToolOverlay, TextEditToolRef } from '../../components/editor/TextEditTool';
+import DrawTool, { Stroke, StrokePoint, DrawToolOverlay, DrawToolRef } from '../../components/editor/DrawTool';
 
 interface TempImage {
   url: string;
@@ -54,6 +55,8 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
 
   // TextEditTool 的 ref
   const textEditToolRef = useRef<TextEditToolRef>(null);
+  // DrawTool 的 ref
+  const drawToolRef = useRef<DrawToolRef>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
 
   // 文字工具的状态（从 TextEditTool 获取）
@@ -61,6 +64,13 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+
+  // 涂鸦笔工具的状态（从 DrawTool 获取）
+  const [drawStrokes, setDrawStrokes] = useState<Stroke[]>([]);
+  const [currentDrawStroke, setCurrentDrawStroke] = useState<StrokePoint[] | null>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [brushColor, setBrushColor] = useState('#FF0000');
+  const [brushSize, setBrushSize] = useState(8);
 
   // 切换页面确认状态
   const [pendingPageChange, setPendingPageChange] = useState<number | null>(null);
@@ -218,6 +228,25 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
                   }}
                   isDragging={isDragging}
                   isResizing={isResizing}
+                />
+              )}
+              {/* 涂鸦笔叠加层 */}
+              {activeCanvasTool === 'draw' && (
+                <DrawToolOverlay
+                  strokes={drawStrokes}
+                  currentStroke={currentDrawStroke}
+                  isDrawing={isDrawing}
+                  currentBrushColor={brushColor}
+                  currentBrushSize={brushSize}
+                  onStartStroke={(e) => {
+                    drawToolRef.current?.startStroke(e);
+                  }}
+                  onContinueStroke={(e) => {
+                    drawToolRef.current?.continueStroke(e);
+                  }}
+                  onEndStroke={() => {
+                    drawToolRef.current?.endStroke();
+                  }}
                 />
               )}
               </div>
@@ -386,6 +415,19 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
                   onApply={(imageUrl) => handleAIImageGenerated(imageUrl, '文字编辑')}
                 />
               )}
+              {activeCanvasTool === 'draw' && (
+                <DrawTool
+                  ref={drawToolRef}
+                  baseImageUrl={currentDisplayImage}
+                  containerRef={canvasRef}
+                  onStrokesChange={setDrawStrokes}
+                  onCurrentStrokeChange={setCurrentDrawStroke}
+                  onIsDrawingChange={setIsDrawing}
+                  onBrushColorChange={setBrushColor}
+                  onBrushSizeChange={setBrushSize}
+                  onApply={(imageUrl) => handleAIImageGenerated(imageUrl, '涂鸦')}
+                />
+              )}
               {activeCanvasTool === 'ai-edit' && (
                 <AIEditTool
                   storybookId={String(storybook.id)}
@@ -421,12 +463,6 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
                 <div className="text-center text-slate-400 text-sm py-8 space-y-2">
                   <p>边框</p>
                   <p className="text-xs">添加各种风格的边框</p>
-                </div>
-              )}
-              {activeCanvasTool === 'draw' && (
-                <div className="text-center text-slate-400 text-sm py-8 space-y-2">
-                  <p>涂鸦笔</p>
-                  <p className="text-xs">自由绘制和创作</p>
                 </div>
               )}
               {activeCanvasTool === 'mosaic' && (
