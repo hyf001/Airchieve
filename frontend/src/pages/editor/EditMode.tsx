@@ -50,7 +50,7 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
   const [isSaving, setIsSaving] = useState(false);
   const [deleteConfirmIndex, setDeleteConfirmIndex] = useState<number | null>(null);
 
-  const [activeCanvasTool, setActiveCanvasTool] = useState<'text' | 'ai-edit' | 'adjust' | 'color' | 'filter' | 'eraser' | 'border' | 'draw' | 'mosaic' | 'marker' | 'optimize' | 'blur' | 'cutout' | 'background' | 'effect' | 'creative' | 'repair'>('text');
+  const [activeCanvasTool, setActiveCanvasTool] = useState<'text' | 'ai-edit' | 'adjust' | 'color' | 'filter' | 'eraser' | 'border' | 'draw' | 'mosaic' | 'marker' | 'optimize' | 'blur' | 'cutout' | 'background' | 'effect' | 'creative' | 'repair'>('ai-edit');
 
   // TextEditTool 的 ref
   const textEditToolRef = useRef<TextEditToolRef>(null);
@@ -160,7 +160,7 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
 
   return (
     <>
-      <div className="w-full flex gap-4 h-[calc(100vh-200px)]">
+      <div className="w-full flex gap-4 h-full">
         {/* === 左侧：缩略图导航栏 === */}
         <div className="flex flex-col gap-2 overflow-y-auto p-2 w-32 shrink-0 custom-scrollbar">
           {pages.map((p, idx) => (
@@ -184,11 +184,13 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
         {/* === 中间：主内容区域 === */}
         <div className="flex-1 flex flex-col gap-4 overflow-y-auto min-w-0">
           {/* 页面图片区域 */}
-          <div className="bg-white rounded-2xl shadow-xl">
-            <div
-              ref={canvasRef}
-              className={`relative ${getAspectRatioClass(aspectRatio)} bg-slate-100 w-full`}
-            >
+          <div className="bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col shrink-0">
+            <div className="p-4 flex justify-center bg-white shrink-0">
+              <div
+                ref={canvasRef}
+                className={`relative ${getAspectRatioClass(aspectRatio)} bg-slate-100 max-h-[350px]`}
+                style={{ width: 'auto' }}
+              >
               <img
                 src={currentDisplayImage}
                 alt={`第 ${selectedIndex + 1} 页`}
@@ -218,55 +220,78 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
                   isResizing={isResizing}
                 />
               )}
+              </div>
             </div>
 
-            {/* 图片历史版本条 */}
-            {imageHistory.length > 0 && (
-              <div className="flex items-center gap-2 px-4 py-2 overflow-x-auto bg-slate-50 border-t">
-                <button
-                  onClick={() => setActiveImageIndex(-1)}
-                  className={`relative shrink-0 w-12 h-12 rounded-lg overflow-hidden ring-2 transition-all ${
-                    activeImageIndex === -1 ? 'ring-[#00CDD4]' : 'ring-transparent hover:ring-slate-300'
-                  }`}
-                  title="原图"
-                >
-                  <img src={page.image_url} alt="原图" className="w-full h-full object-cover" />
-                  <span className="absolute bottom-0 left-0 right-0 text-center text-[9px] text-white bg-black/50 leading-4">原图</span>
-                </button>
-                {imageHistory.map((img, i) => (
+            {/* 编辑历史区域 - 固定高度 */}
+            <div className="h-[120px] bg-slate-50 border-t flex flex-col">
+              <div className="px-4 py-2 border-b border-slate-200 flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-600">编辑历史（点击编辑历史回到任意编辑时刻）</span>
+                {imageHistory.length > 0 && (
                   <button
-                    key={i}
-                    onClick={() => setActiveImageIndex(i)}
-                    className={`relative shrink-0 w-12 h-12 rounded-lg overflow-hidden ring-2 transition-all ${
-                      activeImageIndex === i ? 'ring-[#00CDD4]' : 'ring-transparent hover:ring-slate-300'
-                    }`}
-                    title={img.instruction}
+                    onClick={() => {
+                      setImageHistory([]);
+                      setActiveImageIndex(-1);
+                    }}
+                    className="text-xs text-red-500 hover:text-red-600"
                   >
-                    <img src={img.url} alt={`v${i + 1}`} className="w-full h-full object-cover" />
-                    <span className="absolute bottom-0 left-0 right-0 text-center text-[9px] text-white bg-black/50 leading-4">v{i + 1}</span>
+                    清空历史
                   </button>
-                ))}
+                )}
               </div>
-            )}
+              <div className="flex-1 flex items-center gap-2 px-4 overflow-x-auto">
+                {imageHistory.length === 0 ? (
+                  <div className="w-full text-center text-xs text-slate-400">
+                    暂无编辑历史
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setActiveImageIndex(-1)}
+                      className={`relative shrink-0 w-14 h-14 rounded-lg overflow-hidden ring-2 transition-all ${
+                        activeImageIndex === -1 ? 'ring-[#00CDD4]' : 'ring-transparent hover:ring-slate-300'
+                      }`}
+                      title="原图"
+                    >
+                      <img src={page.image_url} alt="原图" className="w-full h-full object-cover" />
+                      <span className="absolute bottom-0 left-0 right-0 text-center text-[9px] text-white bg-black/50 leading-3">原图</span>
+                    </button>
+                    {imageHistory.map((img, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setActiveImageIndex(i)}
+                        className={`relative shrink-0 w-14 h-14 rounded-lg overflow-hidden ring-2 transition-all ${
+                          activeImageIndex === i ? 'ring-[#00CDD4]' : 'ring-transparent hover:ring-slate-300'
+                        }`}
+                        title={img.instruction}
+                      >
+                        <img src={img.url} alt={`v${i + 1}`} className="w-full h-full object-cover" />
+                        <span className="absolute bottom-0 left-0 right-0 text-center text-[9px] text-white bg-black/50 leading-3">v{i + 1}</span>
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* 页面文字区域 */}
-          <div className="bg-white rounded-2xl shadow-xl p-4">
+          <div className="bg-white rounded-2xl shadow-xl p-3">
             <textarea
               value={draftText}
               onChange={e => setDraftText(e.target.value)}
-              rows={4}
+              rows={2}
               className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 resize-none outline-none focus:ring-2 focus:ring-[#00CDD4]/30 focus:border-[#00CDD4] leading-relaxed placeholder:text-slate-400"
               placeholder="页面文字…"
             />
-            <div className="mt-2 text-xs text-slate-400 text-right">
+            <div className="mt-1.5 text-xs text-slate-400 text-right">
               {draftText.length} 字符
             </div>
           </div>
 
           {/* ��面操作区域 */}
-          <div className="bg-white rounded-2xl shadow-xl p-4">
-            <h3 className="text-sm font-semibold text-slate-700 mb-3">页面操作</h3>
+          <div className="bg-white rounded-2xl shadow-xl p-3 shrink-0">
+            <h3 className="text-sm font-semibold text-slate-700 mb-2">页面操作</h3>
             <div className="flex gap-2">
               <Button
                 variant="outline"
@@ -300,14 +325,14 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
         </div>
 
         {/* === 右侧：编辑工具栏 === */}
-        <div className="w-80 shrink-0 flex flex-col">
+        <div className="w-[480px] shrink-0 flex flex-col">
           {/* 编辑工具栏 */}
           <div className="bg-white rounded-2xl shadow-xl p-4 flex flex-col h-full overflow-hidden">
             <h3 className="text-sm font-semibold text-slate-700 mb-3">图片工具</h3>
 
             {/* 工具网格 - 可滚动区域 */}
             <div className="max-h-[200px] overflow-y-auto mb-3 pr-1">
-              <div className="grid grid-cols-5 gap-2">
+              <div className="grid grid-cols-8 gap-2">
                 {[
                   { id: 'ai-edit' as const, label: 'AI改图', icon: '🤖' },
                   { id: 'text' as const, label: '文字', icon: '✏️' },
