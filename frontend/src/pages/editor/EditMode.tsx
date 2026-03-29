@@ -1,19 +1,17 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Trash2, Loader2, Send, X, Check, ImageIcon, ChevronLeft, ChevronRight, PenLine } from 'lucide-react';
-import LoadingSpinner from '../../components/LoadingSpinner';
-import { Button } from '@/components/ui/button';
+import React, { useState, useEffect, useRef } from 'react';
+import { Trash2, Loader2, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
 import {
   StorybookPage,
-  editPageImage,
   savePage,
   deletePage,
-  InsufficientPointsError,
   Storybook,
   toApiUrl,
 } from '../../services/storybookService';
 import ConfirmDialog from '../../components/ConfirmDialog';
-import CanvasEditorModal from '../../components/CanvasEditor/CanvasEditorModal';
+import AIEditTool from '../../components/editor/AIEditTool';
+import TextEditTool, { TextLayer, TextEditToolOverlay, TextEditToolRef } from '../../components/editor/TextEditTool';
 
 interface TempImage {
   url: string;
@@ -49,14 +47,23 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
   const [draftText, setDraftText] = useState('');
   const [imageHistory, setImageHistory] = useState<TempImage[]>([]);
   const [activeImageIndex, setActiveImageIndex] = useState<number>(-1);
-  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-  const [showImageInput, setShowImageInput] = useState(false);
-  const [imageInstruction, setImageInstruction] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [imageError, setImageError] = useState<string | null>(null);
   const [deleteConfirmIndex, setDeleteConfirmIndex] = useState<number | null>(null);
-  const [showCanvasEditor, setShowCanvasEditor] = useState(false);
-  const textAreaRef = useRef<HTMLTextAreaElement>(null);
+
+  const [activeCanvasTool, setActiveCanvasTool] = useState<'text' | 'ai-edit' | 'adjust' | 'color' | 'filter' | 'eraser' | 'border' | 'draw' | 'mosaic' | 'marker' | 'optimize' | 'blur' | 'cutout' | 'background' | 'effect' | 'creative' | 'repair'>('text');
+
+  // TextEditTool 的 ref
+  const textEditToolRef = useRef<TextEditToolRef>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+
+  // 文字工具的状态（从 TextEditTool 获取）
+  const [textLayers, setTextLayers] = useState<TextLayer[]>([]);
+  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // 切换页面确认状态
+  const [pendingPageChange, setPendingPageChange] = useState<number | null>(null);
+  const [showPageChangeConfirm, setShowPageChangeConfirm] = useState(false);
 
   // Reset edit state when page selection changes
   useEffect(() => {
@@ -65,37 +72,20 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
     setDraftText(page.text);
     setImageHistory([]);
     setActiveImageIndex(-1);
-    setShowImageInput(false);
-    setImageInstruction('');
-    setImageError(null);
   }, [selectedIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const page = pages[selectedIndex];
   const currentDisplayImage =
-    activeImageIndex >= 0 ? imageHistory[activeImageIndex].url : page?.image_url ?? '';
+    activeImageIndex >= 0 ? imageHistory[activeImageIndex].url : toApiUrl(page?.image_url ?? '');
 
-  const handleGenerateImage = async () => {
-    if (!imageInstruction.trim() || isGeneratingImage || !page) return;
-    setIsGeneratingImage(true);
-    setImageError(null);
-    const baseImage = activeImageIndex >= 0 ? imageHistory[activeImageIndex].url : page.image_url;
-    try {
-      const newUrl = await editPageImage(storybook.id, baseImage, imageInstruction);
-      const newEntry = { url: newUrl, instruction: imageInstruction };
-      const newIndex = imageHistory.length;
-      setImageHistory(prev => [...prev, newEntry]);
-      setActiveImageIndex(newIndex);
-      setImageInstruction('');
-      setShowImageInput(false);
-    } catch (err) {
-      if (err instanceof InsufficientPointsError) {
-        toast({ variant: 'destructive', title: '积分不足', description: err.message });
-      } else {
-        setImageError(err instanceof Error ? err.message : '图片生成失败');
-      }
-    } finally {
-      setIsGeneratingImage(false);
-    }
+  // 处理 AI 生成的图片
+  const handleAIImageGenerated = (imageUrl: string, instruction: string) => {
+    const newEntry = { url: imageUrl, instruction };
+    setImageHistory(prev => {
+      const newHistory = [...prev, newEntry];
+      setActiveImageIndex(newHistory.length - 1);
+      return newHistory;
+    });
   };
 
   const handleSave = async () => {
@@ -112,7 +102,7 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
       setActiveImageIndex(-1);
       toast({ title: '已保存' });
     } catch (err) {
-      setImageError(err instanceof Error ? err.message : '保存失败');
+      toast({ variant: 'destructive', title: '保存失败', description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSaving(false);
     }
@@ -131,18 +121,52 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
     }
   };
 
+  // 检查当前页面是否有未保存的编辑
+  const hasUnsavedChanges = () => {
+    return imageHistory.length > 0 || (page && draftText !== page.text);
+  };
+
+  // 处理页面切换
+  const handlePageSelect = (index: number) => {
+    if (index === selectedIndex) return;
+
+    // 如果有未保存的编辑，显示确认对话框
+    if (hasUnsavedChanges()) {
+      setPendingPageChange(index);
+      setShowPageChangeConfirm(true);
+    } else {
+      setSelectedIndex(index);
+    }
+  };
+
+  // 确认切换页面
+  const handleConfirmPageChange = () => {
+    if (pendingPageChange !== null) {
+      setSelectedIndex(pendingPageChange);
+      setPendingPageChange(null);
+      setShowPageChangeConfirm(false);
+    }
+  };
+
+  // 取消切换页面
+  const handleCancelPageChange = () => {
+    setPendingPageChange(null);
+    setShowPageChangeConfirm(false);
+  };
+
+
   if (!page) return null;
 
   return (
     <>
-      <div className="w-full flex gap-4 justify-center items-start">
-        {/* Thumbnail strip - left sidebar */}
-        <div className="flex flex-col gap-2 overflow-y-auto p-2 custom-scrollbar max-h-[70vh] w-32 shrink-0">
+      <div className="w-full flex gap-4 h-[calc(100vh-200px)]">
+        {/* === 左侧：缩略图导航栏 === */}
+        <div className="flex flex-col gap-2 overflow-y-auto p-2 w-32 shrink-0 custom-scrollbar">
           {pages.map((p, idx) => (
             <button
               key={idx}
-              onClick={() => setSelectedIndex(idx)}
-              className={`relative shrink-0 w-24 rounded-lg overflow-hidden ring-2 transition-all ${getAspectRatioClass(aspectRatio)} mx-auto ${
+              onClick={() => handlePageSelect(idx)}
+              className={`relative shrink-0 w-24 rounded-lg overflow-hidden ring-2 transition-all mx-auto ${
                 selectedIndex === idx
                   ? 'ring-[#00CDD4] scale-[1.04]'
                   : 'ring-transparent hover:ring-slate-300'
@@ -156,161 +180,284 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
           ))}
         </div>
 
-        {/* Selected page edit area */}
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-          {/* Page preview */}
-          <div className={`relative ${getAspectRatioClass(aspectRatio)} bg-slate-100 overflow-hidden h-[400px] md:h-[500px]`}>
-            <img
-              src={currentDisplayImage}
-              alt={`第 ${selectedIndex + 1} 页`}
-              className="w-full h-full object-cover"
-            />
-            {isGeneratingImage && (
-              <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-2">
-                <LoadingSpinner size={32} />
-                <span className="text-white text-sm font-medium">AI 生成中，请不要刷新页面…</span>
+        {/* === 中间：主内容区域 === */}
+        <div className="flex-1 flex flex-col gap-4 overflow-y-auto min-w-0">
+          {/* 页面图片区域 */}
+          <div className="bg-white rounded-2xl shadow-xl">
+            <div
+              ref={canvasRef}
+              className={`relative ${getAspectRatioClass(aspectRatio)} bg-slate-100 w-full`}
+            >
+              <img
+                src={currentDisplayImage}
+                alt={`第 ${selectedIndex + 1} 页`}
+                className="w-full h-full object-contain"
+              />
+              {/* 文字图层叠加层 */}
+              {activeCanvasTool === 'text' && textLayers.length > 0 && textEditToolRef.current && (
+                <TextEditToolOverlay
+                  layers={textLayers}
+                  selectedLayerId={selectedLayerId}
+                  onLayerMouseDown={(e, layer) => {
+                    textEditToolRef.current?.handleLayerMouseDown(e, layer);
+                  }}
+                  onTextChange={(id, text) => {
+                    textEditToolRef.current?.handleTextChange(id, text);
+                  }}
+                  onDeleteLayer={(id) => {
+                    textEditToolRef.current?.deleteLayer(id);
+                  }}
+                  onLayerClick={(id) => {
+                    textEditToolRef.current?.selectLayer(id);
+                  }}
+                  isDragging={isDragging}
+                />
+              )}
+            </div>
+
+            {/* 图片历史版本条 */}
+            {imageHistory.length > 0 && (
+              <div className="flex items-center gap-2 px-4 py-2 overflow-x-auto bg-slate-50 border-t">
+                <button
+                  onClick={() => setActiveImageIndex(-1)}
+                  className={`relative shrink-0 w-12 h-12 rounded-lg overflow-hidden ring-2 transition-all ${
+                    activeImageIndex === -1 ? 'ring-[#00CDD4]' : 'ring-transparent hover:ring-slate-300'
+                  }`}
+                  title="原图"
+                >
+                  <img src={page.image_url} alt="原图" className="w-full h-full object-cover" />
+                  <span className="absolute bottom-0 left-0 right-0 text-center text-[9px] text-white bg-black/50 leading-4">原图</span>
+                </button>
+                {imageHistory.map((img, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setActiveImageIndex(i)}
+                    className={`relative shrink-0 w-12 h-12 rounded-lg overflow-hidden ring-2 transition-all ${
+                      activeImageIndex === i ? 'ring-[#00CDD4]' : 'ring-transparent hover:ring-slate-300'
+                    }`}
+                    title={img.instruction}
+                  >
+                    <img src={img.url} alt={`v${i + 1}`} className="w-full h-full object-cover" />
+                    <span className="absolute bottom-0 left-0 right-0 text-center text-[9px] text-white bg-black/50 leading-4">v{i + 1}</span>
+                  </button>
+                ))}
               </div>
             )}
-            {/* Page navigation buttons inside preview */}
-            <Button
-              variant="ghost" size="icon"
-              onClick={() => setSelectedIndex(p => Math.max(0, p - 1))}
-              disabled={selectedIndex === 0}
-              className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/70 hover:bg-white/90 text-slate-700 rounded-full shadow-md z-10 disabled:opacity-0 h-9 w-9"
-            >
-              <ChevronLeft size={20} />
-            </Button>
-            <Button
-              variant="ghost" size="icon"
-              onClick={() => setSelectedIndex(p => Math.min(pages.length - 1, p + 1))}
-              disabled={selectedIndex >= pages.length - 1}
-              className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/70 hover:bg-white/90 text-slate-700 rounded-full shadow-md z-10 disabled:opacity-0 h-9 w-9"
-            >
-              <ChevronRight size={20} />
-            </Button>
           </div>
 
-          {/* Image history strip */}
-          {imageHistory.length > 0 && (
-            <div className="flex items-center gap-2 px-4 py-2 overflow-x-auto bg-slate-50 border-b border-slate-100">
-              <button
-                onClick={() => setActiveImageIndex(-1)}
-                className={`relative shrink-0 w-12 h-12 rounded-lg overflow-hidden ring-2 transition-all ${
-                  activeImageIndex === -1 ? 'ring-[#00CDD4]' : 'ring-transparent hover:ring-slate-300'
-                }`}
-                title="原图"
-              >
-                <img src={page.image_url} alt="原图" className="w-full h-full object-cover" />
-                <span className="absolute bottom-0 left-0 right-0 text-center text-[9px] text-white bg-black/50 leading-4">原图</span>
-              </button>
-              {imageHistory.map((img, i) => (
-                <button
-                  key={i}
-                  onClick={() => setActiveImageIndex(i)}
-                  className={`relative shrink-0 w-12 h-12 rounded-lg overflow-hidden ring-2 transition-all ${
-                    activeImageIndex === i ? 'ring-[#00CDD4]' : 'ring-transparent hover:ring-slate-300'
-                  }`}
-                  title={img.instruction}
-                >
-                  <img src={img.url} alt={`v${i + 1}`} className="w-full h-full object-cover" />
-                  <span className="absolute bottom-0 left-0 right-0 text-center text-[9px] text-white bg-black/50 leading-4">v{i + 1}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Edit controls */}
-          <div className="px-4 pb-4 pt-3 space-y-3">
-            {/* Image edit */}
-            <div className="space-y-2">
-              <div className="flex gap-2">
-                <Button
-                  variant="outline" size="sm"
-                  onClick={() => { setShowImageInput(v => !v); setImageError(null); }}
-                  className="gap-1.5 text-slate-600"
-                >
-                  <ImageIcon size={14} />
-                  编辑图片
-                </Button>
-                <Button
-                  variant="outline" size="sm"
-                  onClick={() => setShowCanvasEditor(true)}
-                  className="gap-1.5 text-slate-600"
-                >
-                  <PenLine size={14} />
-                  画布编辑
-                </Button>
-              </div>
-              {showImageInput && (
-                <div className="flex gap-2">
-                  <input
-                    value={imageInstruction}
-                    onChange={e => setImageInstruction(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleGenerateImage(); } }}
-                    placeholder="描述图片修改，例如：把天空改成夜晚…"
-                    className="flex-1 min-w-0 text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-[#00CDD4]/30 focus:border-[#00CDD4] placeholder:text-slate-400"
-                    disabled={isGeneratingImage}
-                    autoFocus
-                  />
-                  <Button
-                    size="sm"
-                    onClick={handleGenerateImage}
-                    disabled={!imageInstruction.trim() || isGeneratingImage}
-                    className="bg-[#00CDD4] hover:bg-[#00b8be] text-white shrink-0"
-                  >
-                    {isGeneratingImage ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                  </Button>
-                </div>
-              )}
-              {imageError && <p className="text-xs text-red-500">{imageError}</p>}
-            </div>
-
-            {/* Text edit */}
+          {/* 页面文字区域 */}
+          <div className="bg-white rounded-2xl shadow-xl p-4">
             <textarea
-              ref={textAreaRef}
               value={draftText}
               onChange={e => setDraftText(e.target.value)}
-              rows={3}
+              rows={4}
               className="w-full text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-3 py-2 resize-none outline-none focus:ring-2 focus:ring-[#00CDD4]/30 focus:border-[#00CDD4] leading-relaxed placeholder:text-slate-400"
               placeholder="页面文字…"
             />
+            <div className="mt-2 text-xs text-slate-400 text-right">
+              {draftText.length} 字符
+            </div>
+          </div>
 
-            {/* Action row */}
-            <div className="flex items-center justify-between">
+          {/* ��面操作区域 */}
+          <div className="bg-white rounded-2xl shadow-xl p-4">
+            <h3 className="text-sm font-semibold text-slate-700 mb-3">页面操作</h3>
+            <div className="flex gap-2">
               <Button
-                variant="ghost" size="sm"
+                variant="outline"
+                size="sm"
                 onClick={() => setDeleteConfirmIndex(selectedIndex)}
-                className="text-slate-400 hover:text-red-500 hover:bg-red-50 gap-1.5"
+                className="flex-1 border-red-200 text-red-500 hover:bg-red-50 hover:text-red-600 justify-center gap-2"
               >
                 <Trash2 size={14} />
                 删除此页
               </Button>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline" size="sm"
-                  onClick={() => {
-                    const p = pages[selectedIndex];
-                    if (p) { setDraftText(p.text); setImageHistory([]); setActiveImageIndex(-1); }
-                  }}
-                  disabled={isSaving}
-                >
-                  <X size={14} className="mr-1" />重置
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleSave}
-                  disabled={isSaving}
-                  className="bg-[#00CDD4] hover:bg-[#00b8be] text-white"
-                >
-                  {isSaving ? <Loader2 size={14} className="animate-spin mr-1" /> : <Check size={14} className="mr-1" />}
-                  保存
-                </Button>
+              <Button
+                size="sm"
+                onClick={handleSave}
+                disabled={isSaving}
+                className="flex-1 bg-[#00CDD4] hover:bg-[#00b8be] text-white justify-center gap-1.5"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    保存中…
+                  </>
+                ) : (
+                  <>
+                    <Check size={14} />
+                    保存
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* === 右侧：编辑工具栏 === */}
+        <div className="w-80 shrink-0 flex flex-col">
+          {/* 编辑工具栏 */}
+          <div className="bg-white rounded-2xl shadow-xl p-4 flex flex-col h-full overflow-hidden">
+            <h3 className="text-sm font-semibold text-slate-700 mb-3">图片工具</h3>
+
+            {/* 工具网格 - 可滚动区域 */}
+            <div className="max-h-[200px] overflow-y-auto mb-3 pr-1">
+              <div className="grid grid-cols-5 gap-2">
+                {[
+                  { id: 'text' as const, label: '文字', icon: '✏️' },
+                  { id: 'ai-edit' as const, label: 'AI改图', icon: '🤖' },
+                  { id: 'adjust' as const, label: '编辑', icon: '⚙️' },
+                  { id: 'color' as const, label: '调色', icon: '🌈' },
+                  { id: 'filter' as const, label: '滤镜', icon: '🎨' },
+                  { id: 'eraser' as const, label: '消除笔', icon: '🧹' },
+                  { id: 'border' as const, label: '边框', icon: '🖼️' },
+                  { id: 'draw' as const, label: '涂鸦笔', icon: '🖌️' },
+                  { id: 'mosaic' as const, label: '马赛克', icon: '▦' },
+                  { id: 'marker' as const, label: '标记', icon: '📍' },
+                  { id: 'optimize' as const, label: '智能优化', icon: '✨' },
+                  { id: 'blur' as const, label: '背景虚化', icon: '💫' },
+                  { id: 'cutout' as const, label: '抠图', icon: '✂️' },
+                  { id: 'background' as const, label: '背景', icon: '🏞️' },
+                  { id: 'effect' as const, label: '特效', icon: '💥' },
+                  { id: 'creative' as const, label: '创意玩法', icon: '🎪' },
+                  { id: 'repair' as const, label: '画质修复', icon: '🔧' },
+                ].map(tool => (
+                  <Button
+                    key={tool.id}
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setActiveCanvasTool(tool.id)}
+                    className={`relative flex flex-col items-center gap-1 p-2 h-auto rounded-lg text-xs transition-colors z-10 ${
+                      activeCanvasTool === tool.id
+                        ? 'bg-[#00CDD4]/15 text-[#00CDD4] ring-2 ring-[#00CDD4]/30 ring-inset'
+                        : 'text-slate-500 hover:bg-slate-100'
+                    }`}
+                    title={tool.label}
+                  >
+                    <span className="text-xl">{tool.icon}</span>
+                    <span className="text-[10px] leading-tight">{tool.label}</span>
+                  </Button>
+                ))}
               </div>
+            </div>
+
+            {/* 工具面板内容 - 可滚动区域 */}
+            <div className="flex-1 overflow-y-auto min-h-0 p-3 bg-slate-50 rounded-lg">
+              {activeCanvasTool === 'text' && (
+                <TextEditTool
+                  ref={textEditToolRef}
+                  baseImageUrl={currentDisplayImage}
+                  initialText={draftText}
+                  containerRef={canvasRef}
+                  onLayersChange={setTextLayers}
+                  onSelectedLayerChange={setSelectedLayerId}
+                  onIsDraggingChange={setIsDragging}
+                  onApply={(imageUrl) => handleAIImageGenerated(imageUrl, '文字编辑')}
+                />
+              )}
+              {activeCanvasTool === 'ai-edit' && (
+                <AIEditTool
+                  storybookId={String(storybook.id)}
+                  baseImageUrl={currentDisplayImage}
+                  onImageGenerated={handleAIImageGenerated}
+                />
+              )}
+              {activeCanvasTool === 'adjust' && (
+                <div className="text-center text-slate-400 text-sm py-8 space-y-2">
+                  <p>编辑工具</p>
+                  <p className="text-xs">裁剪、旋转、调节亮度对比度等</p>
+                </div>
+              )}
+              {activeCanvasTool === 'color' && (
+                <div className="text-center text-slate-400 text-sm py-8 space-y-2">
+                  <p>调色工具</p>
+                  <p className="text-xs">调节色彩温度、饱和度、色相</p>
+                </div>
+              )}
+              {activeCanvasTool === 'filter' && (
+                <div className="text-center text-slate-400 text-sm py-8 space-y-2">
+                  <p>滤镜工具</p>
+                  <p className="text-xs">各种精美滤镜效果</p>
+                </div>
+              )}
+              {activeCanvasTool === 'eraser' && (
+                <div className="text-center text-slate-400 text-sm py-8 space-y-2">
+                  <p>消除笔</p>
+                  <p className="text-xs">智能移除图片中的物体</p>
+                </div>
+              )}
+              {activeCanvasTool === 'border' && (
+                <div className="text-center text-slate-400 text-sm py-8 space-y-2">
+                  <p>边框</p>
+                  <p className="text-xs">添加各种风格的边框</p>
+                </div>
+              )}
+              {activeCanvasTool === 'draw' && (
+                <div className="text-center text-slate-400 text-sm py-8 space-y-2">
+                  <p>涂鸦笔</p>
+                  <p className="text-xs">自由绘制和创作</p>
+                </div>
+              )}
+              {activeCanvasTool === 'mosaic' && (
+                <div className="text-center text-slate-400 text-sm py-8 space-y-2">
+                  <p>马赛克</p>
+                  <p className="text-xs">添加马赛克效果</p>
+                </div>
+              )}
+              {activeCanvasTool === 'marker' && (
+                <div className="text-center text-slate-400 text-sm py-8 space-y-2">
+                  <p>标��</p>
+                  <p className="text-xs">添加箭头、标记等</p>
+                </div>
+              )}
+              {activeCanvasTool === 'optimize' && (
+                <div className="text-center text-slate-400 text-sm py-8 space-y-2">
+                  <p>智能优化</p>
+                  <p className="text-xs">一键优化图片质量</p>
+                </div>
+              )}
+              {activeCanvasTool === 'blur' && (
+                <div className="text-center text-slate-400 text-sm py-8 space-y-2">
+                  <p>背景虚化</p>
+                  <p className="text-xs">智能虚化背景突出主体</p>
+                </div>
+              )}
+              {activeCanvasTool === 'cutout' && (
+                <div className="text-center text-slate-400 text-sm py-8 space-y-2">
+                  <p>抠图</p>
+                  <p className="text-xs">智能抠出主体</p>
+                </div>
+              )}
+              {activeCanvasTool === 'background' && (
+                <div className="text-center text-slate-400 text-sm py-8 space-y-2">
+                  <p>背景</p>
+                  <p className="text-xs">更换背景颜色或图片</p>
+                </div>
+              )}
+              {activeCanvasTool === 'effect' && (
+                <div className="text-center text-slate-400 text-sm py-8 space-y-2">
+                  <p>特效</p>
+                  <p className="text-xs">添加各种特效效果</p>
+                </div>
+              )}
+              {activeCanvasTool === 'creative' && (
+                <div className="text-center text-slate-400 text-sm py-8 space-y-2">
+                  <p>创意玩法</p>
+                  <p className="text-xs">有趣的创意功能</p>
+                </div>
+              )}
+              {activeCanvasTool === 'repair' && (
+                <div className="text-center text-slate-400 text-sm py-8 space-y-2">
+                  <p>画质修复</p>
+                  <p className="text-xs">修复模糊提升清晰度</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
 
+      {/* 删除确认对话框 */}
       <ConfirmDialog
         open={deleteConfirmIndex !== null}
         title="确认删除此页"
@@ -319,19 +466,14 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
         onCancel={() => setDeleteConfirmIndex(null)}
       />
 
-      {showCanvasEditor && page && (
-        <CanvasEditorModal
-          baseImageUrl={toApiUrl(currentDisplayImage)}
-          pageText={draftText}
-          onApply={base64 => {
-            const newIndex = imageHistory.length;
-            setImageHistory(prev => [...prev, { url: base64, instruction: '画布编辑' }]);
-            setActiveImageIndex(newIndex);
-            setShowCanvasEditor(false);
-          }}
-          onClose={() => setShowCanvasEditor(false)}
-        />
-      )}
+      {/* 页面切换确认对话框 */}
+      <ConfirmDialog
+        open={showPageChangeConfirm}
+        title="未保存的编辑"
+        description="当前页面有未保存的编辑，切换页面将丢失这些修改。是否确定要切换？"
+        onConfirm={handleConfirmPageChange}
+        onCancel={handleCancelPageChange}
+      />
     </>
   );
 };
