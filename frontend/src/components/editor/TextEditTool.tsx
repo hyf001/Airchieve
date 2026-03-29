@@ -21,10 +21,12 @@ export interface TextEditToolRef {
   getLayers: () => TextLayer[];
   getSelectedLayerId: () => string | null;
   getIsDragging: () => boolean;
+  getIsResizing: () => boolean;
   updateLayer: (id: string, updates: Partial<TextLayer>) => void;
   deleteLayer: (id: string) => void;
   selectLayer: (id: string | null) => void;
   handleLayerMouseDown: (e: React.MouseEvent, layer: TextLayer) => void;
+  handleResizeMouseDown: (e: React.MouseEvent, layer: TextLayer, handle: string) => void;
   handleTextChange: (id: string, text: string) => void;
 }
 
@@ -36,15 +38,15 @@ interface TextEditToolProps {
   onLayersChange?: (layers: TextLayer[]) => void;
   onSelectedLayerChange?: (layerId: string | null) => void;
   onIsDraggingChange?: (isDragging: boolean) => void;
+  onIsResizingChange?: (isResizing: boolean) => void;
 }
 
 const FONT_OPTIONS = [
   { label: '黑体', value: '"PingFang SC", "Microsoft YaHei", sans-serif' },
   { label: '宋体', value: '"Songti SC", "SimSun", serif' },
   { label: '楷体', value: '"KaiTi", "STKaiti", serif' },
-  { label: '圆体', value: '"PingFang SC", "Noto Sans SC", sans-serif' },
-  { label: '手写体', value: '"Brush Script MT", "cursive", sans-serif' },
-  { label: '艺术体', value: '"Impact", "Arial Black", sans-serif' },
+  { label: '圆体', value: '"YouYuan", "STYuanti", "Rounded Mplus 1c", sans-serif' },
+  { label: '手写体', value: '"Xingkai SC", "STXingkai", "Huawen Xingkai", "cursive", serif' },
 ];
 
 const COLOR_PRESETS = [
@@ -60,13 +62,17 @@ const TextEditTool = forwardRef<TextEditToolRef, TextEditToolProps>(({
   onLayersChange,
   onSelectedLayerChange,
   onIsDraggingChange,
+  onIsResizingChange,
 }, ref) => {
   // 内部管理文字图层状态
   const [textLayers, setTextLayers] = useState<TextLayer[]>([]);
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const [isApplying, setIsApplying] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const [resizeHandle, setResizeHandle] = useState<string | null>(null);
 
   const selectedLayer = textLayers.find(l => l.id === selectedLayerId);
 
@@ -86,10 +92,10 @@ const TextEditTool = forwardRef<TextEditToolRef, TextEditToolProps>(({
         y: 200 - 30,
         width: 300,
         height: 60,
-        fontSize: 32,
+        fontSize: 15,
         fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif',
         color: '#ffffff',
-        bold: true,
+        bold: false,
       };
       setTextLayers([newLayer]);
       setSelectedLayerId(newLayer.id);
@@ -110,6 +116,11 @@ const TextEditTool = forwardRef<TextEditToolRef, TextEditToolProps>(({
   useEffect(() => {
     onIsDraggingChange?.(isDragging);
   }, [isDragging, onIsDraggingChange]);
+
+  // 当调整大小状态变化时，通知父组件
+  useEffect(() => {
+    onIsResizingChange?.(isResizing);
+  }, [isResizing, onIsResizingChange]);
 
   const hasChanges = textLayers.length > 0;
 
@@ -151,26 +162,29 @@ const TextEditTool = forwardRef<TextEditToolRef, TextEditToolProps>(({
         throw new Error('图片尺寸无效');
       }
 
-      // 获取图片容器尺寸
-      const containerWidth = 800;
-      const containerHeight = 400;
+      // 获取容器实际显示尺寸
+      const container = containerRef?.current;
+      if (!container) throw new Error('找不到容器元素');
+      const containerRect = container.getBoundingClientRect();
+      const containerWidth = containerRect.width;
 
       // 设置canvas尺寸为原始图片尺寸
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
 
-      // 计算缩放比例
-      const scaleX = img.naturalWidth / containerWidth;
-      const scaleY = img.naturalHeight / containerHeight;
+      // 计算缩放比例（保持一致的缩放）
+      const scale = img.naturalWidth / containerWidth;
 
       // 绘制背景图片
       ctx.drawImage(img, 0, 0);
 
       // 绘制文字图层
       textLayers.forEach(layer => {
-        const scaledX = layer.x * scaleX;
-        const scaledY = layer.y * scaleY;
-        const scaledFontSize = layer.fontSize * Math.min(scaleX, scaleY);
+        const scaledX = layer.x * scale;
+        const scaledY = layer.y * scale;
+        const scaledFontSize = layer.fontSize * scale;
+        const scaledWidth = layer.width * scale;
+        const scaledHeight = layer.height * scale;
 
         ctx.font = `${layer.bold ? 'bold' : ''} ${scaledFontSize}px ${layer.fontFamily}`;
         ctx.fillStyle = layer.color;
@@ -179,17 +193,53 @@ const TextEditTool = forwardRef<TextEditToolRef, TextEditToolProps>(({
 
         // 添加文字阴影
         ctx.shadowColor = 'rgba(0,0,0,0.85)';
-        ctx.shadowBlur = 4 * Math.min(scaleX, scaleY);
+        ctx.shadowBlur = 4 * scale;
         ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 1 * Math.min(scaleX, scaleY);
+        ctx.shadowOffsetY = 1 * scale;
 
         const text = layer.text || '';
-        const lines = text.split('\n');
+
+        // 自动换行函数
+        const wrapText = (text: string, maxWidth: number): string[] => {
+          const paragraphs = text.split('\n');
+          const lines: string[] = [];
+
+          paragraphs.forEach(paragraph => {
+            const words = paragraph.split('');
+            let currentLine = '';
+
+            for (let i = 0; i < words.length; i++) {
+              const testLine = currentLine + words[i];
+              const metrics = ctx.measureText(testLine);
+              const testWidth = metrics.width;
+
+              if (testWidth > maxWidth && currentLine.length > 0) {
+                lines.push(currentLine);
+                currentLine = words[i];
+              } else {
+                currentLine = testLine;
+              }
+            }
+            if (currentLine) {
+              lines.push(currentLine);
+            }
+          });
+
+          return lines;
+        };
+
+        // 自动换行，每行的最大宽度为文本框宽度减去一些内边距
+        const padding = scaledFontSize * 0.5;
+        const maxWidth = scaledWidth - padding * 2;
+        const lines = wrapText(text, maxWidth);
         const lineHeight = scaledFontSize * 1.2;
-        const startY = scaledY + (layer.height * scaleY) / 2 - ((lines.length - 1) * lineHeight) / 2;
+
+        // 计算起始Y位置，使文字在文本框中垂直居中
+        const totalHeight = lines.length * lineHeight;
+        const startY = scaledY + (scaledHeight - totalHeight) / 2 + lineHeight / 2;
 
         lines.forEach((line, index) => {
-          const x = scaledX + (layer.width * scaleX) / 2;
+          const x = scaledX + scaledWidth / 2;
           const y = startY + index * lineHeight;
           ctx.fillText(line, x, y);
         });
@@ -217,6 +267,20 @@ const TextEditTool = forwardRef<TextEditToolRef, TextEditToolProps>(({
     });
   };
 
+  // 调整大小处理
+  const handleResizeMouseDown = (e: React.MouseEvent, layer: TextLayer, handle: string) => {
+    e.stopPropagation();
+    setSelectedLayerId(layer.id);
+    setIsResizing(true);
+    setResizeHandle(handle);
+    setResizeStart({
+      x: e.clientX,
+      y: e.clientY,
+      width: layer.width,
+      height: layer.height,
+    });
+  };
+
   // 更新文字内容
   const handleTextChange = (id: string, newText: string) => {
     handleUpdateLayer(id, { text: newText });
@@ -229,25 +293,52 @@ const TextEditTool = forwardRef<TextEditToolRef, TextEditToolProps>(({
 
   // 监听鼠标移动和松开（document级别）
   useEffect(() => {
-    if (!isDragging || !selectedLayerId || !containerRef?.current) return;
+    if ((!isDragging && !isResizing) || !selectedLayerId || !containerRef?.current) return;
 
     const handleMouseMove = (e: MouseEvent) => {
       const layer = textLayers.find(l => l.id === selectedLayerId);
       if (!layer) return;
 
       const rect = containerRef.current!.getBoundingClientRect();
-      const newX = e.clientX - dragStart.x;
-      const newY = e.clientY - dragStart.y;
 
-      // 限制在画布范围内
-      const constrainedX = Math.max(0, Math.min(newX, rect.width - layer.width));
-      const constrainedY = Math.max(0, Math.min(newY, rect.height - layer.height));
+      if (isDragging) {
+        const newX = e.clientX - dragStart.x;
+        const newY = e.clientY - dragStart.y;
 
-      handleUpdateLayer(selectedLayerId, { x: constrainedX, y: constrainedY });
+        // 限制在画布范围内
+        const constrainedX = Math.max(0, Math.min(newX, rect.width - layer.width));
+        const constrainedY = Math.max(0, Math.min(newY, rect.height - layer.height));
+
+        handleUpdateLayer(selectedLayerId, { x: constrainedX, y: constrainedY });
+      } else if (isResizing && resizeHandle) {
+        const deltaX = e.clientX - resizeStart.x;
+        const deltaY = e.clientY - resizeStart.y;
+
+        let newWidth = resizeStart.width;
+        let newHeight = resizeStart.height;
+
+        // 根据拖拽手柄调整尺寸
+        if (resizeHandle.includes('e')) {
+          newWidth = Math.max(50, resizeStart.width + deltaX);
+        }
+        if (resizeHandle.includes('s')) {
+          newHeight = Math.max(30, resizeStart.height + deltaY);
+        }
+        if (resizeHandle.includes('w')) {
+          newWidth = Math.max(50, resizeStart.width - deltaX);
+        }
+        if (resizeHandle.includes('n')) {
+          newHeight = Math.max(30, resizeStart.height - deltaY);
+        }
+
+        handleUpdateLayer(selectedLayerId, { width: newWidth, height: newHeight });
+      }
     };
 
     const handleMouseUp = () => {
       setIsDragging(false);
+      setIsResizing(false);
+      setResizeHandle(null);
     };
 
     document.addEventListener('mousemove', handleMouseMove);
@@ -256,19 +347,21 @@ const TextEditTool = forwardRef<TextEditToolRef, TextEditToolProps>(({
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, selectedLayerId, textLayers, dragStart, containerRef]);
+  }, [isDragging, isResizing, selectedLayerId, textLayers, dragStart, resizeStart, resizeHandle, containerRef]);
 
   // 暴露方法给父组件
   useImperativeHandle(ref, () => ({
     getLayers: () => textLayers,
     getSelectedLayerId: () => selectedLayerId,
     getIsDragging: () => isDragging,
+    getIsResizing: () => isResizing,
     updateLayer: handleUpdateLayer,
     deleteLayer: handleDeleteLayer,
     selectLayer: setSelectedLayerId,
     handleLayerMouseDown,
+    handleResizeMouseDown,
     handleTextChange,
-  }), [textLayers, selectedLayerId, isDragging]);
+  }), [textLayers, selectedLayerId, isDragging, isResizing]);
 
   // 未选中图层时显示提示
   if (!selectedLayer) {
@@ -342,7 +435,21 @@ const TextEditTool = forwardRef<TextEditToolRef, TextEditToolProps>(({
         <div className="flex-1 overflow-y-auto">
           <TabsContent value="font" className="space-y-4 mt-0">
             <div>
-              <Label className="text-xs text-slate-500 mb-2 block">字��风格</Label>
+              <div className="flex items-center gap-3 mb-2">
+                <Label className="text-xs text-slate-500">字体风格</Label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    id="bold"
+                    checked={selectedLayer.bold}
+                    onChange={e => handleUpdateLayer(selectedLayer.id, { bold: e.target.checked })}
+                    className="accent-[#00CDD4] w-4 h-4"
+                  />
+                  <Label htmlFor="bold" className="cursor-pointer font-medium text-xs text-slate-500">
+                    加粗
+                  </Label>
+                </div>
+              </div>
               <div className="space-y-1.5">
                 {FONT_OPTIONS.map(font => (
                   <Button
@@ -351,7 +458,7 @@ const TextEditTool = forwardRef<TextEditToolRef, TextEditToolProps>(({
                     onClick={() => handleUpdateLayer(selectedLayer.id, { fontFamily: font.value })}
                     className={`w-full justify-start text-sm transition-all ${
                       selectedLayer.fontFamily === font.value
-                        ? 'bg-[#00CDD4] text-white border-[#00CDD4]'
+                        ? 'bg-[#00CDD4] text-white border-[#00CDD4] hover:bg-[#00d7df]'
                         : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-transparent'
                     }`}
                     style={{ fontFamily: font.value }}
@@ -360,19 +467,6 @@ const TextEditTool = forwardRef<TextEditToolRef, TextEditToolProps>(({
                   </Button>
                 ))}
               </div>
-            </div>
-
-            <div className="flex items-center gap-3 bg-slate-50 rounded-lg px-4 py-3 border border-slate-200">
-              <input
-                type="checkbox"
-                id="bold"
-                checked={selectedLayer.bold}
-                onChange={e => handleUpdateLayer(selectedLayer.id, { bold: e.target.checked })}
-                className="accent-[#00CDD4] w-4 h-4"
-              />
-              <Label htmlFor="bold" className="cursor-pointer font-medium flex-1">
-                加粗
-              </Label>
             </div>
           </TabsContent>
 
@@ -398,8 +492,8 @@ const TextEditTool = forwardRef<TextEditToolRef, TextEditToolProps>(({
 
             <div>
               <Label className="text-xs text-slate-500 mb-2 block">快捷选择</Label>
-              <div className="grid grid-cols-4 gap-2">
-                {[16, 24, 32, 48, 64, 80, 96, 120].map(size => (
+              <div className="grid grid-cols-6 gap-2">
+                {Array.from({ length: 17 }, (_, i) => 8 + i).map(size => (
                   <Button
                     key={size}
                     variant={selectedLayer.fontSize === size ? "default" : "outline"}
@@ -491,86 +585,145 @@ export const TextEditToolOverlay: React.FC<{
   layers: TextLayer[];
   selectedLayerId: string | null;
   onLayerMouseDown: (e: React.MouseEvent, layer: TextLayer) => void;
+  onResizeMouseDown: (e: React.MouseEvent, layer: TextLayer, handle: string) => void;
   onTextChange: (id: string, text: string) => void;
   onDeleteLayer: (id: string) => void;
   onLayerClick: (id: string) => void;
   isDragging: boolean;
-}> = ({ layers, selectedLayerId, onLayerMouseDown, onTextChange, onDeleteLayer, onLayerClick, isDragging }) => {
+  isResizing: boolean;
+}> = ({ layers, selectedLayerId, onLayerMouseDown, onResizeMouseDown, onTextChange, onDeleteLayer, onLayerClick, isDragging, isResizing }) => {
+  const resizeHandles = ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'];
+
+  const getHandleCursor = (handle: string) => {
+    if (handle === 'nw' || handle === 'se') return 'nwse-resize';
+    if (handle === 'ne' || handle === 'sw') return 'nesw-resize';
+    if (handle === 'n' || handle === 's') return 'ns-resize';
+    if (handle === 'w' || handle === 'e') return 'ew-resize';
+    return 'default';
+  };
+
+  const getHandleStyle = (handle: string): React.CSSProperties => {
+    const size = 8;
+    const offset = -size / 2;
+    const baseStyle: React.CSSProperties = {
+      position: 'absolute',
+      width: size,
+      height: size,
+      backgroundColor: isResizing ? '#00b8be' : '#00CDD4',
+      border: '1px solid white',
+      borderRadius: '1px',
+      cursor: getHandleCursor(handle),
+      zIndex: 10,
+    };
+
+    if (handle.includes('n')) baseStyle.top = offset;
+    if (handle.includes('s')) baseStyle.bottom = offset;
+    if (handle.includes('w')) baseStyle.left = offset;
+    if (handle.includes('e')) baseStyle.right = offset;
+    if (handle === 'n' || handle === 's') {
+      baseStyle.left = '50%';
+      baseStyle.transform = 'translateX(-50%)';
+    }
+    if (handle === 'w' || handle === 'e') {
+      baseStyle.top = '50%';
+      baseStyle.transform = 'translateY(-50%)';
+    }
+
+    return baseStyle;
+  };
+
   return (
     <>
-      {layers.map(layer => (
-        <div
-          key={layer.id}
-          style={{
-            position: 'absolute',
-            left: layer.x,
-            top: layer.y,
-            width: layer.width,
-            height: layer.height,
-            cursor: isDragging && selectedLayerId === layer.id ? 'grabbing' : 'grab',
-            outline: selectedLayerId === layer.id ? '2px solid #00CDD4' : '2px dashed transparent',
-            userSelect: 'none',
-          }}
-          onMouseDown={(e) => onLayerMouseDown(e, layer)}
-          onClick={() => onLayerClick(layer.id)}
-        >
-          {selectedLayerId === layer.id ? (
-            <textarea
-              value={layer.text}
-              onChange={(e) => onTextChange(layer.id, e.target.value)}
-              style={{
-                width: '100%',
-                height: '100%',
-                fontSize: `${layer.fontSize}px`,
-                fontFamily: layer.fontFamily,
-                color: layer.color,
-                fontWeight: layer.bold ? 'bold' : 'normal',
-                textShadow: '0 1px 4px rgba(0,0,0,0.85)',
-                background: 'transparent',
-                border: 'none',
-                outline: 'none',
-                resize: 'none',
-                textAlign: 'center',
-                cursor: 'text',
-              }}
-            />
-          ) : (
-            <div
-              style={{
-                width: '100%',
-                height: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: `${layer.fontSize}px`,
-                fontFamily: layer.fontFamily,
-                color: layer.color,
-                fontWeight: layer.bold ? 'bold' : 'normal',
-                textShadow: '0 1px 4px rgba(0,0,0,0.85)',
-                textAlign: 'center',
-                wordBreak: 'break-word',
-                pointerEvents: 'none',
-              }}
-            >
-              {layer.text}
-            </div>
-          )}
+      {layers.map(layer => {
+        const isSelected = selectedLayerId === layer.id;
+        return (
+          <div
+            key={layer.id}
+            style={{
+              position: 'absolute',
+              left: layer.x,
+              top: layer.y,
+              width: layer.width,
+              height: layer.height,
+              cursor: isDragging && isSelected ? 'grabbing' : 'grab',
+              outline: isSelected ? '2px solid #00CDD4' : '2px dashed transparent',
+              userSelect: 'none',
+            }}
+            onMouseDown={(e) => onLayerMouseDown(e, layer)}
+            onClick={() => onLayerClick(layer.id)}
+          >
+            {isSelected ? (
+              <textarea
+                value={layer.text}
+                onChange={(e) => onTextChange(layer.id, e.target.value)}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  fontSize: `${layer.fontSize}px`,
+                  fontFamily: layer.fontFamily,
+                  color: layer.color,
+                  fontWeight: layer.bold ? 'bold' : 'normal',
+                  textShadow: '0 1px 4px rgba(0,0,0,0.85)',
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  resize: 'none',
+                  textAlign: 'center',
+                  cursor: 'text',
+                  overflow: 'hidden',
+                  whiteSpace: 'pre-wrap',
+                  wordWrap: 'break-word',
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: `${layer.fontSize}px`,
+                  fontFamily: layer.fontFamily,
+                  color: layer.color,
+                  fontWeight: layer.bold ? 'bold' : 'normal',
+                  textShadow: '0 1px 4px rgba(0,0,0,0.85)',
+                  textAlign: 'center',
+                  wordBreak: 'break-word',
+                  pointerEvents: 'none',
+                  whiteSpace: 'pre-wrap',
+                  overflow: 'hidden',
+                }}
+              >
+                {layer.text}
+              </div>
+            )}
 
-          {/* 选中时显示删除按钮 */}
-          {selectedLayerId === layer.id && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDeleteLayer(layer.id);
-              }}
-              className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center text-white shadow-lg"
-              style={{ fontSize: '12px' }}
-            >
-              ×
-            </button>
-          )}
-        </div>
-      ))}
+            {/* 调整大小的手柄 */}
+            {isSelected && resizeHandles.map(handle => (
+              <div
+                key={handle}
+                style={getHandleStyle(handle)}
+                onMouseDown={(e) => onResizeMouseDown(e, layer, handle)}
+              />
+            ))}
+
+            {/* 选中时显示删除按钮 */}
+            {isSelected && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteLayer(layer.id);
+                }}
+                className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center text-white shadow-lg"
+                style={{ fontSize: '12px', zIndex: 11 }}
+              >
+                ×
+              </button>
+            )}
+          </div>
+        );
+      })}
     </>
   );
 };

@@ -750,7 +750,6 @@ class GeminiCli(LLMClientBase):
             "Preserve the original composition, characters, art style, color palette, and visual consistency as much as possible, "
             "only applying the specific changes requested. "
             "Output a full-bleed cinematic illustration. "
-            "Images must contain NO text, letters, or words whatsoever."
         )
         user_prompt = (
             f"Here is the existing illustration (attached). "

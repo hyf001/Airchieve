@@ -60,6 +60,7 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
   const [textLayers, setTextLayers] = useState<TextLayer[]>([]);
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
 
   // 切换页面确认状态
   const [pendingPageChange, setPendingPageChange] = useState<number | null>(null);
@@ -201,6 +202,9 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
                   onLayerMouseDown={(e, layer) => {
                     textEditToolRef.current?.handleLayerMouseDown(e, layer);
                   }}
+                  onResizeMouseDown={(e, layer, handle) => {
+                    textEditToolRef.current?.handleResizeMouseDown(e, layer, handle);
+                  }}
                   onTextChange={(id, text) => {
                     textEditToolRef.current?.handleTextChange(id, text);
                   }}
@@ -211,6 +215,7 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
                     textEditToolRef.current?.selectLayer(id);
                   }}
                   isDragging={isDragging}
+                  isResizing={isResizing}
                 />
               )}
             </div>
@@ -304,8 +309,8 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
             <div className="max-h-[200px] overflow-y-auto mb-3 pr-1">
               <div className="grid grid-cols-5 gap-2">
                 {[
-                  { id: 'text' as const, label: '文字', icon: '✏️' },
                   { id: 'ai-edit' as const, label: 'AI改图', icon: '🤖' },
+                  { id: 'text' as const, label: '文字', icon: '✏️' },
                   { id: 'adjust' as const, label: '编辑', icon: '⚙️' },
                   { id: 'color' as const, label: '调色', icon: '🌈' },
                   { id: 'filter' as const, label: '滤镜', icon: '🎨' },
@@ -352,6 +357,7 @@ const EditMode: React.FC<EditModeProps> = ({ storybook, onStorybookChange }) => 
                   onLayersChange={setTextLayers}
                   onSelectedLayerChange={setSelectedLayerId}
                   onIsDraggingChange={setIsDragging}
+                  onIsResizingChange={setIsResizing}
                   onApply={(imageUrl) => handleAIImageGenerated(imageUrl, '文字编辑')}
                 />
               )}
