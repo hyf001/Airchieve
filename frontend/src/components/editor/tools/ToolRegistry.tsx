@@ -7,8 +7,8 @@ import { ToolConfig, ToolId, ToolCategory } from '@/types/tool';
 
 // 导入已实现工具
 import AIEditTool from '../AIEditTool';
-import TextEditTool from '../TextEditTool';
-import DrawTool from '../DrawTool';
+import { TextEditTool } from './text-edit';
+import { DrawTool } from './draw';
 
 // 占位组件 - 用于未实现的工具
 const PlaceholderTool: React.FC<any> = ({ description }) => (
@@ -38,7 +38,9 @@ export const TOOL_REGISTRY: Record<ToolId, ToolConfig> = {
     label: '文字',
     icon: '✏️',
     category: 'basic',
-    component: TextEditTool,
+    component: TextEditTool.Panel as any,  // 使用 Panel 组件
+    Panel: TextEditTool.Panel,
+    Overlay: TextEditTool.Overlay,
     description: '在图片上添加文字图层',
   },
 
@@ -47,7 +49,9 @@ export const TOOL_REGISTRY: Record<ToolId, ToolConfig> = {
     label: '涂鸦笔',
     icon: '🖌️',
     category: 'basic',
-    component: DrawTool,
+    component: DrawTool.Panel as any,  // 使用 Panel 组件
+    Panel: DrawTool.Panel,
+    Overlay: DrawTool.Overlay,
     description: '在图片上自由绘制',
   },
 

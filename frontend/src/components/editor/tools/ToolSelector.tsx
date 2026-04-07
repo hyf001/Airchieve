@@ -4,12 +4,14 @@
 
 import React from 'react';
 import { getAllTools } from './ToolRegistry';
-import { useToolManager } from '@/hooks/useToolManager';
+import { ToolId } from '@/types/tool';
 
 interface ToolSelectorProps {
   columns?: number;
   showLabels?: boolean;
   size?: 'sm' | 'md' | 'lg';
+  activeTool: ToolId;
+  setActiveTool: (toolId: ToolId) => void;
 }
 
 /**
@@ -20,8 +22,9 @@ export const ToolSelector: React.FC<ToolSelectorProps> = ({
   columns = 4,
   showLabels = true,
   size = 'sm',
+  activeTool,
+  setActiveTool,
 }) => {
-  const { activeTool, setActiveTool } = useToolManager();
   const tools = getAllTools();
 
   // 根据列数获取对应的 Tailwind 类名

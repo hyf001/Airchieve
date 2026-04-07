@@ -2,10 +2,9 @@
  * 工具面板容器组件 - 管理工具面板的显示和切换
  */
 
-import React from 'react';
-import { useToolManager } from '@/hooks/useToolManager';
+import React, { useEffect } from 'react';
 import { getToolConfig } from './ToolRegistry';
-import { ToolComponentProps } from '@/types/tool';
+import { ToolComponentProps, ToolId } from '@/types/tool';
 import { ToolSelector } from './ToolSelector';
 
 interface ToolPanelProps {
@@ -13,6 +12,14 @@ interface ToolPanelProps {
   baseImageUrl: string;
   onPageEdited: (newImageUrl: string) => void;
   containerRef?: React.RefObject<HTMLDivElement>;
+  activeTool: ToolId;
+  // 文字工具相关 props
+  textEditToolRef?: React.RefObject<any>;
+  onLayersChange?: (layers: any[]) => void;
+  onSelectedLayerChange?: (layerId: string | null) => void;
+  onIsDraggingChange?: (isDragging: boolean) => void;
+  onIsResizingChange?: (isResizing: boolean) => void;
+  initialText?: string;
 }
 
 /**
@@ -24,18 +31,79 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
   baseImageUrl,
   onPageEdited,
   containerRef,
+  activeTool,
+  textEditToolRef,
+  onLayersChange,
+  onSelectedLayerChange,
+  onIsDraggingChange,
+  onIsResizingChange,
+  initialText,
 }) => {
-  const { activeTool } = useToolManager();
-  const toolConfig = getToolConfig(activeTool);
+
+  const toolConfig = getToolConfig(activeTool as any);
   const ActiveToolComponent = toolConfig.component;
 
-  // 传递给工具组件的 Props
-  const toolProps: ToolComponentProps = {
-    storybookId,
-    baseImageUrl,
-    onPageEdited,
-    containerRef,
+  // 当 activeTool 变化时，添加调试日志
+  useEffect(() => {
+    console.log('ToolPanel: activeTool changed to:', activeTool);
+  }, [activeTool]);
+
+  // 根据不同的工具类型，准备不同的 props
+  const getToolProps = (): any => {
+    const baseProps: ToolComponentProps = {
+      storybookId,
+      baseImageUrl,
+      onPageEdited,
+      containerRef,
+    };
+
+    // AIEditTool 特殊处理
+    if (activeTool === 'ai-edit') {
+      return {
+        ...baseProps,
+        onImageGenerated: (imageUrl: string) => {
+          onPageEdited(imageUrl);
+        },
+      };
+    }
+
+    // TextEditTool 特殊处理
+    if (activeTool === 'text') {
+      return {
+        ...baseProps,
+        onApply: onPageEdited,
+        initialText: initialText || '',
+        onLayersChange,
+        onSelectedLayerChange,
+        onIsDraggingChange,
+        onIsResizingChange,
+        ref: textEditToolRef,
+        containerRef,  // 添加 containerRef
+      };
+    }
+
+    // DrawTool 特殊处理
+    if (activeTool === 'draw') {
+      return {
+        ...baseProps,
+        onApply: onPageEdited,
+        containerRef,
+      };
+    }
+
+    return baseProps;
   };
+
+  const toolProps = getToolProps();
+
+  // 对于文字工具，需要特殊处理 ref
+  if (activeTool === 'text' && textEditToolRef) {
+    return (
+      <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
+        <ActiveToolComponent {...toolProps} ref={textEditToolRef} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
@@ -48,9 +116,22 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
  * 工具面板容器（带工具选择器）
  * 包含工具选择器和工具面板区域
  */
-interface ToolPanelWithSelectorProps extends ToolPanelProps {
+interface ToolPanelWithSelectorProps {
+  storybookId: string | number;
+  baseImageUrl: string;
+  onPageEdited: (newImageUrl: string) => void;
+  containerRef?: React.RefObject<HTMLDivElement>;
   showSelector?: boolean;
   selectorColumns?: number;
+  activeTool: ToolId;
+  setActiveTool: (toolId: ToolId) => void;
+  // 文字工具相关 props
+  textEditToolRef?: React.RefObject<any>;
+  onLayersChange?: (layers: any[]) => void;
+  onSelectedLayerChange?: (layerId: string | null) => void;
+  onIsDraggingChange?: (isDragging: boolean) => void;
+  onIsResizingChange?: (isResizing: boolean) => void;
+  initialText?: string;
 }
 
 export const ToolPanelWithSelector: React.FC<ToolPanelWithSelectorProps> = ({
@@ -60,6 +141,14 @@ export const ToolPanelWithSelector: React.FC<ToolPanelWithSelectorProps> = ({
   containerRef,
   showSelector = true,
   selectorColumns = 4,
+  activeTool,
+  setActiveTool,
+  textEditToolRef,
+  onLayersChange,
+  onSelectedLayerChange,
+  onIsDraggingChange,
+  onIsResizingChange,
+  initialText,
 }) => {
   return (
     <div className="w-80 shrink-0 border-l border-slate-200 bg-white flex flex-col overflow-hidden">
@@ -67,7 +156,11 @@ export const ToolPanelWithSelector: React.FC<ToolPanelWithSelectorProps> = ({
       {showSelector && (
         <div className="p-4 border-b border-slate-200">
           <h3 className="text-sm font-semibold text-slate-700 mb-3">图片工具</h3>
-          <ToolSelector columns={selectorColumns} />
+          <ToolSelector
+            columns={selectorColumns}
+            activeTool={activeTool}
+            setActiveTool={setActiveTool}
+          />
         </div>
       )}
 
@@ -77,6 +170,13 @@ export const ToolPanelWithSelector: React.FC<ToolPanelWithSelectorProps> = ({
         baseImageUrl={baseImageUrl}
         onPageEdited={onPageEdited}
         containerRef={containerRef}
+        activeTool={activeTool}
+        textEditToolRef={textEditToolRef}
+        onLayersChange={onLayersChange}
+        onSelectedLayerChange={onSelectedLayerChange}
+        onIsDraggingChange={onIsDraggingChange}
+        onIsResizingChange={onIsResizingChange}
+        initialText={initialText}
       />
     </div>
   );

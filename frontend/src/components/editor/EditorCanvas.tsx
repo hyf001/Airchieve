@@ -1,5 +1,5 @@
 /**
- * 编辑器画布组件 - 主要内容区域
+ * 编辑器画布组�� - 主要内容区域
  */
 
 import React, { useState } from 'react';
@@ -11,6 +11,9 @@ import ReadMode from '@/pages/editor/ReadMode';
 import { getAspectRatioClass } from '@/utils/editorUtils';
 import { STATUS_TEXT_MAP } from '@/constants/editor';
 import { Storybook } from '@/services/storybookService';
+import { TextEditOverlay } from './tools/text-edit/Overlay';
+import { TextEditToolRef, TextLayer } from './tools/text-edit/types';
+import { ToolId } from '@/types/tool';
 
 interface EditorCanvasProps {
   currentStorybook: Storybook | null;
@@ -26,6 +29,15 @@ interface EditorCanvasProps {
   onTerminateClick: () => void;
   isTerminating: boolean;
   onBack: () => void;
+  // 文字工具相关 props
+  activeTool?: ToolId;
+  textEditToolRef?: React.RefObject<TextEditToolRef>;
+  textLayers?: TextLayer[];
+  selectedLayerId?: string | null;
+  isDragging?: boolean;
+  isResizing?: boolean;
+  canvasRef?: React.RefObject<HTMLDivElement>;
+  onTextApply?: () => void;  // 新增：文字自动应用回调
 }
 
 export const EditorCanvas: React.FC<EditorCanvasProps> = ({
@@ -42,8 +54,19 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
   onTerminateClick,
   isTerminating,
   onBack,
+  activeTool,
+  textEditToolRef,
+  textLayers = [],
+  selectedLayerId = null,
+  isDragging = false,
+  isResizing = false,
+  canvasRef: externalCanvasRef,
+  onTextApply,
 }) => {
   const [playbackSpeed, setPlaybackSpeed] = useState('1.0x');
+
+  // 使用外部传入的 ref，而不是创建新的 ref
+  const canvasRef = externalCanvasRef || React.useRef<HTMLDivElement>(null);
 
   if (!currentStorybook) {
     return (
@@ -93,6 +116,14 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
           onBack,
           playbackSpeed,
           setPlaybackSpeed,
+          activeTool,
+          textEditToolRef,
+          textLayers,
+          selectedLayerId,
+          isDragging,
+          isResizing,
+          canvasRef,
+          onTextApply,
         })}
       </div>
     </div>
@@ -114,6 +145,14 @@ interface RenderContentProps {
   onBack: () => void;
   playbackSpeed: string;
   setPlaybackSpeed: (speed: string) => void;
+  activeTool?: ToolId;
+  textEditToolRef?: React.RefObject<TextEditToolRef>;
+  textLayers?: TextLayer[];
+  selectedLayerId?: string | null;
+  isDragging?: boolean;
+  isResizing?: boolean;
+  canvasRef?: React.RefObject<HTMLDivElement>;
+  onTextApply?: () => void;
 }
 
 function renderContent({
@@ -131,6 +170,14 @@ function renderContent({
   onBack,
   playbackSpeed,
   setPlaybackSpeed,
+  activeTool,
+  textEditToolRef,
+  textLayers = [],
+  selectedLayerId = null,
+  isDragging = false,
+  isResizing = false,
+  canvasRef,
+  onTextApply,
 }: RenderContentProps): React.ReactNode {
   if (loading) {
     return <LoadingSpinner size={48} text="加载中..." className="py-8" />;
@@ -212,12 +259,40 @@ function renderContent({
       <div className="w-full h-full flex flex-col gap-4">
         {/* 上半部分：页面图片区域 */}
         <div className="flex-1 min-h-0 bg-white rounded-2xl shadow-xl overflow-hidden flex items-center justify-center p-6">
-          <div className={`${getAspectRatioClass(aspectRatio as any)} bg-slate-100 max-h-full`}>
+          <div
+            ref={canvasRef}
+            className={`relative ${getAspectRatioClass(aspectRatio as any)} bg-slate-100 max-h-full`}
+          >
             <img
               src={currentPage.image_url}
               alt={`第 ${currentPageIndex + 1} 页`}
               className="w-full h-full object-contain"
             />
+            {/* 文字图层叠加层 */}
+            {activeTool === 'text' && textLayers.length > 0 && textEditToolRef?.current && (
+              <TextEditOverlay
+                layers={textLayers}
+                selectedLayerId={selectedLayerId}
+                onLayerMouseDown={(e, layer) => {
+                  textEditToolRef.current?.handleLayerMouseDown(e, layer);
+                }}
+                onResizeMouseDown={(e, layer, handle) => {
+                  textEditToolRef.current?.handleResizeMouseDown(e, layer, handle);
+                }}
+                onTextChange={(id, text) => {
+                  textEditToolRef.current?.handleTextChange(id, text);
+                }}
+                onDeleteLayer={(id) => {
+                  textEditToolRef.current?.deleteLayer(id);
+                }}
+                onLayerClick={(id) => {
+                  textEditToolRef.current?.selectLayer(id);
+                }}
+                isDragging={isDragging}
+                isResizing={isResizing}
+                onApply={onTextApply}
+              />
+            )}
           </div>
         </div>
 

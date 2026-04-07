@@ -31,7 +31,9 @@ export interface ToolConfig {
   label: string;
   icon: string;
   category: ToolCategory;
-  component: React.ComponentType<ToolComponentProps>;
+  component: React.ComponentType<ToolComponentProps>;  // 兼容旧的单组件格式
+  Panel?: React.ComponentType<any>;  // 新格式：设置面板组件
+  Overlay?: React.ComponentType<any>;  // 新格式：叠加层组件
   shortcut?: string;
   description?: string;
   disabled?: boolean;
@@ -40,12 +42,31 @@ export interface ToolConfig {
 
 /**
  * 工具组件 Props 统一接口
+ * 扩展以支持不同工具的特定需求
  */
 export interface ToolComponentProps {
   storybookId: string | number;
   baseImageUrl: string;
   onPageEdited: (newImageUrl: string) => void;
   containerRef?: React.RefObject<HTMLDivElement>;
+  // 通��回调（用于 TextEditTool、DrawTool 等）
+  onApply?: (imageUrl: string) => void;
+  // AIEditTool 特定字段
+  onImageGenerated?: (imageUrl: string, instruction: string) => void;
+  // TextEditTool 特定字段
+  initialText?: string;
+  onLayersChange?: (layers: any[]) => void;
+  onSelectedLayerChange?: (layerId: string | null) => void;
+  onIsDraggingChange?: (isDragging: boolean) => void;
+  onIsResizingChange?: (isResizing: boolean) => void;
+  // DrawTool 特定字段
+  onStrokesChange?: (strokes: any[]) => void;
+  onCurrentStrokeChange?: (stroke: any[] | null) => void;
+  onIsDrawingChange?: (isDrawing: boolean) => void;
+  onBrushColorChange?: (color: string) => void;
+  onBrushSizeChange?: (size: number) => void;
+  // 其他工具的回调（如果需要）
+  [key: string]: any;
 }
 
 /**

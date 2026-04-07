@@ -3,7 +3,7 @@
  * 经过模块化重构的版本
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   deleteStorybook,
   updateStorybookPublicStatus,
@@ -11,6 +11,7 @@ import {
   terminateStorybook,
   insertPages,
   generateCover,
+  savePage,
   InsufficientPointsError,
 } from '../services/storybookService';
 import { useToast } from '@/hooks/use-toast';
@@ -23,6 +24,7 @@ import {
   EditorCanvas,
 } from '../components/editor';
 import { ToolPanelWithSelector } from '../components/editor/tools/ToolPanel';
+import { TextEditToolRef, TextLayer } from '../components/editor/tools/text-edit/types';
 
 // 导入对话框组件
 import {
@@ -36,6 +38,7 @@ import {
 // 导入 Hooks
 import { useEditorState } from '@/hooks/useEditorState';
 import { useStorybookLoader } from '@/hooks/useStorybookLoader';
+import { useToolManager } from '@/hooks/useToolManager';
 
 interface EditorViewProps {
   storybookId?: number;
@@ -51,6 +54,27 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
 
   // ========== 状态管理 ==========
   const editorState = useEditorState();
+
+  // ========== 工具栏状态 ==========
+  const toolManager = useToolManager();
+
+  // ========== 文字图层状态 ==========
+  const textEditToolRef = useRef<TextEditToolRef>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [textLayers, setTextLayers] = useState<TextLayer[]>([]);
+  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+
+  // ========== 历史记录状态（撤销/重做） ==========
+  const [historyState, setHistoryState] = useState<{
+    history: Array<{ image_url: string; text: string }>;
+    index: number;
+  }>({
+    history: [],
+    index: -1,
+  });
+  const [isSavingPage, setIsSavingPage] = useState(false);
 
   // ========== 数据加载 ==========
   const { loadStorybook, loadStorybookList, startPolling, stopPolling } = useStorybookLoader({
@@ -168,6 +192,113 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
     }
   };
 
+  // ========== 历史记录管理 ==========
+  // 当页面切换时，初始化历史记录
+  const prevPageIndexRef = useRef<number>(-1);
+  useEffect(() => {
+    // 只在页面索引变化时重新初始化历史记录
+    if (editorState.pages.length > 0 && editorState.currentPageIndex >= 0 && editorState.currentPageIndex !== prevPageIndexRef.current) {
+      const currentPage = editorState.pages[editorState.currentPageIndex];
+      setHistoryState({
+        history: [{ image_url: currentPage.image_url, text: currentPage.text || '' }],
+        index: 0,
+      });
+      prevPageIndexRef.current = editorState.currentPageIndex;
+    }
+  }, [editorState.currentPageIndex, editorState.pages]);
+
+  // 记录新的历史状态
+  const pushHistory = (imageUrl: string, text: string) => {
+    setHistoryState(prev => {
+      // 如果当前不在历史记录末尾，删除后面的记录
+      const newHistory = prev.history.slice(0, prev.index + 1);
+      newHistory.push({ image_url: imageUrl, text });
+      // 限制历史记录长度（最多20条）
+      const trimmedHistory = newHistory.length > 20 ? newHistory.slice(-20) : newHistory;
+      return {
+        history: trimmedHistory,
+        index: trimmedHistory.length - 1,
+      };
+    });
+  };
+
+  // 撤销
+  const handleUndo = () => {
+    if (historyState.index > 0) {
+      const newIndex = historyState.index - 1;
+      const entry = historyState.history[newIndex];
+      setHistoryState(prev => ({ ...prev, index: newIndex }));
+      const updatedPages = [...editorState.pages];
+      updatedPages[editorState.currentPageIndex] = {
+        ...updatedPages[editorState.currentPageIndex],
+        image_url: entry.image_url,
+        text: entry.text,
+      };
+      editorState.setCurrentStorybook({
+        ...editorState.currentStorybook!,
+        pages: updatedPages,
+      });
+    }
+  };
+
+  // 重做
+  const handleRedo = () => {
+    if (historyState.index < historyState.history.length - 1) {
+      const newIndex = historyState.index + 1;
+      const entry = historyState.history[newIndex];
+      setHistoryState(prev => ({ ...prev, index: newIndex }));
+      const updatedPages = [...editorState.pages];
+      updatedPages[editorState.currentPageIndex] = {
+        ...updatedPages[editorState.currentPageIndex],
+        image_url: entry.image_url,
+        text: entry.text,
+      };
+      editorState.setCurrentStorybook({
+        ...editorState.currentStorybook!,
+        pages: updatedPages,
+      });
+    }
+  };
+
+  // 保存页面
+  const handleSavePage = async () => {
+    if (!editorState.currentStorybook || isSavingPage) return;
+
+    const currentPage = editorState.pages[editorState.currentPageIndex];
+    if (!currentPage) return;
+
+    setIsSavingPage(true);
+    try {
+      const updatedPage = await savePage(
+        editorState.currentStorybook.id,
+        editorState.currentPageIndex,
+        currentPage.text || '',
+        currentPage.image_url
+      );
+
+      // 更新本地状态
+      const updatedPages = [...editorState.pages];
+      updatedPages[editorState.currentPageIndex] = updatedPage;
+      editorState.setCurrentStorybook({
+        ...editorState.currentStorybook,
+        pages: updatedPages,
+      });
+
+      toast({
+        title: '保存成功',
+        description: '页面已保存到服务器',
+      });
+    } catch (err) {
+      toast({
+        variant: 'destructive',
+        title: '保存失败',
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setIsSavingPage(false);
+    }
+  };
+
   // ========== 初始化加载 ==========
   useEffect(() => {
     const initialize = async () => {
@@ -219,6 +350,12 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
           onGenerateCover={() => editorState.setDialogState('cover', true)}
           onGenerateBackCover={() => editorState.setDialogState('backCover', true)}
           onDownload={() => editorState.setDialogState('download', true)}
+          canUndo={historyState.index > 0}
+          canRedo={historyState.index < historyState.history.length - 1}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          onSavePage={handleSavePage}
+          isSavingPage={isSavingPage}
         />
 
         {/* 主工作区 */}
@@ -261,6 +398,141 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                 onTerminateClick={() => editorState.setDialogState('terminate', true)}
                 isTerminating={editorState.isTerminating}
                 onBack={onBack}
+                activeTool={toolManager.activeTool}
+                textEditToolRef={textEditToolRef}
+                textLayers={textLayers}
+                selectedLayerId={selectedLayerId}
+                isDragging={isDragging}
+                isResizing={isResizing}
+                canvasRef={canvasRef}
+                onTextApply={async () => {
+                  // 自动应用文字（本地预览，不保存到后端）
+                  if (textEditToolRef.current && textLayers.length > 0) {
+                    // 使�� OSS 代理 URL
+                    const originalUrl = editorState.pages[editorState.currentPageIndex]?.image_url || '';
+                    const imageUrl = originalUrl.replace('https://airchieve.oss-cn-beijing.aliyuncs.com', '/api/v1/oss');
+
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) return;
+
+                    const img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    img.src = imageUrl;
+
+                    await new Promise<void>((resolve) => {
+                      img.onload = () => resolve();
+                      img.onerror = () => {
+                        console.error('Failed to load image for text apply');
+                        resolve();
+                      };
+                    });
+
+                    if (img.naturalWidth === 0 || img.naturalHeight === 0) {
+                      console.error('Image dimensions invalid');
+                      return;
+                    }
+
+                    const container = canvasRef.current;
+                    if (!container) {
+                      console.error('Container not found');
+                      return;
+                    }
+                    const containerRect = container.getBoundingClientRect();
+                    const containerWidth = containerRect.width;
+
+                    canvas.width = img.naturalWidth;
+                    canvas.height = img.naturalHeight;
+                    const scale = img.naturalWidth / containerWidth;
+
+                    ctx.drawImage(img, 0, 0);
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+
+                    textLayers.forEach(layer => {
+                      const scaledX = layer.x * scale;
+                      const scaledY = layer.y * scale;
+                      const scaledFontSize = layer.fontSize * scale;
+                      const scaledWidth = layer.width * scale;
+                      const scaledHeight = layer.height * scale;
+
+                      ctx.font = `${layer.bold ? 'bold' : ''} ${scaledFontSize}px ${layer.fontFamily}`;
+                      ctx.fillStyle = layer.color;
+                      ctx.textAlign = 'center';
+                      ctx.textBaseline = 'middle';
+
+                      ctx.shadowColor = 'rgba(0,0,0,0.85)';
+                      ctx.shadowBlur = 4 * scale;
+                      ctx.shadowOffsetX = 0;
+                      ctx.shadowOffsetY = 1 * scale;
+
+                      const text = layer.text || '';
+                      const wrapText = (text: string, maxWidth: number): string[] => {
+                        const paragraphs = text.split('\n');
+                        const lines: string[] = [];
+                        paragraphs.forEach(paragraph => {
+                          const words = paragraph.split('');
+                          let currentLine = '';
+                          for (let i = 0; i < words.length; i++) {
+                            const testLine = currentLine + words[i];
+                            const metrics = ctx.measureText(testLine);
+                            const testWidth = metrics.width;
+                            if (testWidth > maxWidth && currentLine.length > 0) {
+                              lines.push(currentLine);
+                              currentLine = words[i];
+                            } else {
+                              currentLine = testLine;
+                            }
+                          }
+                          if (currentLine) {
+                            lines.push(currentLine);
+                          }
+                        });
+                        return lines;
+                      };
+
+                      const padding = scaledFontSize * 0.5;
+                      const maxWidth = scaledWidth - padding * 2;
+                      const lines = wrapText(text, maxWidth);
+                      const lineHeight = scaledFontSize * 1.2;
+                      const totalHeight = lines.length * lineHeight;
+                      const startY = scaledY + (scaledHeight - totalHeight) / 2 + lineHeight / 2;
+
+                      lines.forEach((line, index) => {
+                        const x = scaledX + scaledWidth / 2;
+                        const y = startY + index * lineHeight;
+                        ctx.fillText(line, x, y);
+                      });
+                    });
+
+                    const resultImageUrl = canvas.toDataURL('image/png');
+                    console.log('文字自动应用完成:', resultImageUrl);
+
+                    // 更新本地页面图片（不保存到后端）
+                    const updatedPages = [...editorState.pages];
+                    updatedPages[editorState.currentPageIndex] = {
+                      ...updatedPages[editorState.currentPageIndex],
+                      image_url: resultImageUrl,
+                    };
+
+                    // 更新当前绘本的 pages
+                    editorState.setCurrentStorybook({
+                      ...editorState.currentStorybook!,
+                      pages: updatedPages,
+                    });
+
+                    // 记录到历史
+                    pushHistory(resultImageUrl, editorState.pages[editorState.currentPageIndex]?.text || '');
+
+                    toast({
+                      title: '文字已应用（本地预览）',
+                      description: '点击保存按钮将更改保存到服务器',
+                    });
+
+                    // 清空文字图层，防止重复应用
+                    setTextLayers([]);
+                  }
+                }}
               />
 
               {/* 右侧：工具栏 */}
@@ -271,6 +543,15 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                   // 处理图片编辑完成
                   console.log('图片编辑完成:', imageUrl);
                 }}
+                activeTool={toolManager.activeTool}
+                setActiveTool={toolManager.setActiveTool}
+                containerRef={canvasRef}
+                textEditToolRef={textEditToolRef}
+                onLayersChange={setTextLayers}
+                onSelectedLayerChange={setSelectedLayerId}
+                onIsDraggingChange={setIsDragging}
+                onIsResizingChange={setIsResizing}
+                initialText={editorState.pages[editorState.currentPageIndex]?.text || ''}
               />
             </>
           )}

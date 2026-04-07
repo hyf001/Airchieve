@@ -10,8 +10,6 @@ export { default as EditorCanvas } from './EditorCanvas';
 // 工具栏相关
 export { default as ToolPanel } from './tools/ToolPanel';
 export { default as ToolSelector } from './tools/ToolSelector';
-export { CategorizedToolSelector } from './tools/ToolSelector';
-export { ToolDescription } from './tools/ToolPanel';
 export { TOOL_REGISTRY, getToolsByCategory, getAllTools, getToolById, getToolConfig } from './tools/ToolRegistry';
 
 // 对话框
