@@ -307,7 +307,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
         <div className="w-full flex flex-col items-center gap-3">
           <div className="w-full max-w-4xl flex items-center justify-center gap-2 py-1.5 bg-[#00CDD4]/10 text-[#009fa5] text-xs font-medium rounded-lg">
             <LoadingSpinner size={20} />
-            正在生成中… 已完成 {pages.length} 页
+            正在生成中…
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -352,71 +352,91 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
     }
 
     if (canReadPages) {
-      const currentPage = pages[currentPageIndex];
+      const showErrorBanner = currentStorybook.status === 'error' && pages.length > 0;
+      let content: React.ReactNode = null;
 
-      // 根据比例获取 Tailwind 类名
-      const getAspectRatioClass = (ratio: string): string => {
-        switch (ratio) {
-          case '1:1':
-            return 'aspect-square';
-          case '4:3':
-            return 'aspect-[4/3]';
-          case '16:9':
-          default:
-            return 'aspect-[16/9]';
-        }
-      };
+      if (mode === 'read') {
+        content = (
+          <ReadMode
+            pages={pages}
+            currentIndex={currentPageIndex}
+            onIndexChange={setCurrentPageIndex}
+            aspectRatio={currentStorybook.aspect_ratio}
+          />
+        );
+      }
+      if (canEditModes && mode === 'edit') {
+        content = (
+          <EditMode
+            storybook={currentStorybook}
+            onStorybookChange={setCurrentStorybook}
+          />
+        );
+      }
+      if (canEditModes && mode === 'reorder') {
+        content = (
+          <ReorderMode
+            storybook={currentStorybook}
+            onStorybookChange={(updated) => {
+              setCurrentStorybook(updated);
+              setCurrentPageIndex(0);
+            }}
+            onExit={() => setMode('read')}
+          />
+        );
+      }
+      if (canEditModes && mode === 'regen') {
+        content = (
+          <RegenMode
+            storybook={currentStorybook}
+            onStorybookChange={(updated) => {
+              setCurrentStorybook(updated);
+              setStorybookList(prev =>
+                prev.map(item => item.id === updated.id ? { ...item, status: updated.status } : item)
+              );
+            }}
+            onStartPolling={startPolling}
+            onExit={() => setMode('read')}
+          />
+        );
+      }
+      if (canEditModes && mode === 'cover') {
+        content = (
+          <CoverMode
+            storybook={currentStorybook}
+            onStorybookChange={setCurrentStorybook}
+            onStartPolling={startPolling}
+            onCoverGenerating={() => setMode('read')}
+          />
+        );
+      }
+      if (canEditModes && mode === 'backcover') {
+        content = (
+          <BackCoverMode
+            storybook={currentStorybook}
+            onBack={() => setMode('read')}
+            onBackCoverCreated={async () => {
+              // 重新加载绘本数据
+              await loadStorybook(currentStorybook.id);
+              setMode('read');
+            }}
+          />
+        );
+      }
 
-      const aspectRatio = currentStorybook?.aspect_ratio || '16:9';
+      if (!content) return null;
+
+      if (!showErrorBanner) return content;
 
       return (
-        <div className="w-full h-full flex flex-col gap-4">
-          {/* 上半部分：页面图片区域 */}
-          <div className="flex-1 min-h-0 bg-white rounded-2xl shadow-xl overflow-hidden flex items-center justify-center p-6">
-            <div className={`${getAspectRatioClass(aspectRatio)} bg-slate-100 max-h-full`}>
-              <img
-                src={currentPage?.image_url}
-                alt={`第 ${currentPageIndex + 1} 页`}
-                className="w-full h-full object-contain"
-              />
-            </div>
+        <div className="w-full flex flex-col gap-3">
+          <div className="w-full max-w-4xl flex items-center gap-2 py-2 px-3 bg-red-50 text-red-700 text-xs font-medium rounded-lg border border-red-100">
+            <AlertCircle size={16} className="shrink-0" />
+            <span>
+              {currentStorybook.error_message || '内容生成过程中遇到问题，以下为已生成的页面。'}
+            </span>
           </div>
-
-          {/* 下半部分：文字区域 + 播放设置栏 */}
-          <div className="shrink-0 bg-white rounded-2xl shadow-xl overflow-hidden">
-            {/* 播放设置栏 */}
-            <div className="px-4 py-2 border-b border-slate-200 bg-slate-50/50 flex items-center gap-4">
-              <span className="text-xs font-medium text-slate-600">播放设置</span>
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-slate-500">
-                  <input type="checkbox" className="mr-1" defaultChecked />
-                  自动播放
-                </label>
-                <label className="text-xs text-slate-500">
-                  <input type="checkbox" className="mr-1" />
-                  显示字幕
-                </label>
-              </div>
-              <div className="flex items-center gap-2 ml-auto">
-                <span className="text-xs text-slate-500">语速</span>
-                <select className="text-xs border border-slate-200 rounded px-2 py-1 bg-white">
-                  <option>0.5x</option>
-                  <option>0.75x</option>
-                  <option selected>1.0x</option>
-                  <option>1.25x</option>
-                  <option>1.5x</option>
-                  <option>2.0x</option>
-                </select>
-              </div>
-            </div>
-
-            {/* 文字区域 */}
-            <div className="p-4">
-              <div className="min-h-[80px] text-sm text-slate-700 leading-relaxed bg-slate-50/50 rounded-lg p-3 border border-slate-200">
-                {currentPage?.text || '暂无文字内容'}
-              </div>
-            </div>
-          </div>
+          {content}
         </div>
       );
     }
@@ -483,7 +503,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
         {/* Main Workspace */}
         <div className="flex-1 flex overflow-hidden">
           {/* Left: Storybook List */}
-          <aside className={`${currentStorybook ? 'hidden lg:flex lg:w-[320px]' : 'flex w-full'} border-r border-slate-200 bg-white flex-col shrink-0 relative z-20 shadow-lg`}>
+          <aside className={`${currentStorybook ? 'hidden lg:flex lg:w-[280px]' : 'flex w-full'} border-r border-slate-200 bg-white flex-col shrink-0 relative z-20 shadow-lg`}>
             <div className="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between bg-white">
               <div className="flex items-center gap-2 text-slate-600">
                 <BookOpen size={16} className="text-slate-400" />
@@ -556,81 +576,27 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
             </div>
           </aside>
 
-          {/* === 第二栏 + 第三栏 + 第四栏容器 === */}
+          {/* Right: Workspace Container */}
           {currentStorybook && (
             <main className="flex-1 flex overflow-hidden">
-
-              {/* === 第二栏：页面导航列 === */}
-              <aside className="w-44 shrink-0 border-r border-slate-200 bg-white flex flex-col">
-                {/* 页面计数器 */}
-                <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50">
-                  <div className="text-center text-xs text-slate-600 font-medium">
-                    <div className="text-[10px] text-slate-400 mb-0.5">当前页面</div>
-                    <div className="text-sm font-bold text-slate-800">
-                      第 {currentPageIndex + 1} <span className="text-slate-400 font-normal">/</span> {pages.length}
-                    </div>
-                  </div>
+              {/* Download progress bar */}
+              {isDownloading && (
+                <div className="absolute top-0 left-0 right-0 z-50 px-4 pt-2 pb-1 bg-slate-50/90 backdrop-blur-sm">
+                  <ProgressCaterpillar progress={downloadProgress} showLabel />
                 </div>
-
-                {/* 缩略图列表 */}
-                <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar bg-slate-50/30">
-                  {pages.map((p, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setCurrentPageIndex(idx)}
-                      className={`relative w-full aspect-video rounded-lg overflow-hidden ring-4 transition-all shadow-sm ${
-                        currentPageIndex === idx
-                          ? 'ring-[#00CDD4] shadow-[#00CDD4]/30 scale-[1.03]'
-                          : 'ring-transparent hover:ring-slate-300 hover:scale-[1.02]'
-                      }`}
-                    >
-                      <img src={p.image_url} alt={`第 ${idx + 1} 页`} className="w-full h-full object-cover" />
-                      <span className="absolute bottom-0 left-0 right-0 text-center text-[9px] text-white bg-black/60 leading-4 backdrop-blur-sm">
-                        第 {idx + 1} 页
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </aside>
-
-              {/* === 第三栏：中间工作区域 === */}
-              <div className="flex-1 relative overflow-hidden bg-[#FAF3ED] p-4">
-                {/* Download progress bar */}
-                {isDownloading && (
-                  <div className="absolute top-4 left-4 right-4 z-50 px-4 pt-2 pb-1 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg">
-                    <ProgressCaterpillar progress={downloadProgress} showLabel />
-                  </div>
-                )}
-
-                {/* Error message */}
-                {error && (
-                  <div className="absolute top-8 left-1/2 -translate-x-1/2 z-50 bg-white text-slate-900 px-6 py-4 rounded-2xl border-l-4 border-amber-500 font-medium text-sm shadow-2xl flex items-center gap-4">
-                    <AlertCircle className="text-amber-500 shrink-0" size={24} />
-                    <div className="flex flex-col">
-                      <span className="font-bold text-slate-800">创作遇阻</span>
-                      <span className="text-slate-500 text-xs">{error}</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Content Area */}
-                {renderContent()}
-              </div>
-
-              {/* === 第四栏：编辑工具栏 (EditMode only) === */}
-              {mode === 'edit' && (
-                <aside className="w-80 shrink-0 border-l border-slate-200 bg-white flex flex-col overflow-hidden">
-                  <div className="p-4 border-b border-slate-200">
-                    <h3 className="text-sm font-semibold text-slate-700">图片工具</h3>
-                  </div>
-                  <div className="flex-1 flex items-center justify-center p-4 bg-slate-50">
-                    <div className="text-center text-slate-400">
-                      <p className="text-sm">工具面板区域</p>
-                      <p className="text-xs mt-1">（待实现）</p>
-                    </div>
-                  </div>
-                </aside>
               )}
+
+              {error && (
+                <div className="absolute top-8 left-1/2 -translate-x-1/2 z-50 bg-white text-slate-900 px-6 py-4 rounded-2xl border-l-4 border-amber-500 font-medium text-sm shadow-2xl flex items-center gap-4 animate-in slide-in-from-top-4 duration-500">
+                  <AlertCircle className="text-amber-500 shrink-0" size={24} />
+                  <div className="flex flex-col">
+                    <span className="font-bold text-slate-800">创作遇阻</span>
+                    <span className="text-slate-500 text-xs">{error}</span>
+                  </div>
+                </div>
+              )}
+
+              {renderContent()}
             </main>
           )}
         </div>
