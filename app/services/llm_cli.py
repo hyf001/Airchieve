@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple, AsyncGenerator
 from app.models.storybook import StorybookPage, Storyboard
 from app.models.template import Template
-from app.models.enums import CliType
+from app.models.enums import CliType, StoryType, Language, AgeGroup
 
 
 # ============ 通用 LLM 异常基类 ============
@@ -50,27 +50,6 @@ class LLMClientBase(ABC):
         else:
             raise ValueError(f"不支持的CLI类型: {cli_type}")
 
-    @abstractmethod
-    async def create_story_and_storyboard(
-        self,
-        instruction: str,
-        page_count: int = 10,
-        template: Optional[Template] = None,
-        images: Optional[List[str]] = None,
-    ) -> Tuple[str, List[str], List[Optional[Storyboard]]]:
-        """
-        创建故事文本和分镜（纯文本生成）
-
-        Args:
-            instruction: 用户指令/故事描述
-            page_count: 需要生成的页面数量
-            template: 模板对象（可选）
-            images: base64编码的参考图片列表（可选）
-
-        Returns:
-            Tuple[str, List[str], List[Optional[Storyboard]]]: (故事标题, 故事文本列表, 分镜列表)
-        """
-        pass
 
     @abstractmethod
     async def generate_page(
@@ -125,6 +104,48 @@ class LLMClientBase(ABC):
 
         Returns:
             str: 编辑后的图片URL（base64 data URL）
+        """
+        pass
+
+    @abstractmethod
+    async def create_story(
+        self,
+        instruction: str,
+        word_count: int = 500,
+        story_type: StoryType = StoryType.FAIRY_TALE,
+        language: Language = Language.ZH,
+        age_group: AgeGroup = AgeGroup.AGE_3_6,
+    ) -> Tuple[str, str]:
+        """
+        创建纯文本故事（不含分镜）
+
+        Args:
+            instruction: 用户指令/故事描述
+            word_count: 目标字数
+            story_type: 故事类型
+            language: 语言
+            age_group: 年龄组
+
+        Returns:
+            Tuple[str, str]: (故事标题, 故事内容)
+        """
+        pass
+
+    @abstractmethod
+    async def create_storyboard_from_story(
+        self,
+        story_content: str,
+        page_count: int = 10,
+    ) -> Tuple[List[str], List[Optional[Storyboard]]]:
+        """
+        基于故事内容创建分镜描述
+
+        Args:
+            story_content: 故事内容（纯文本）
+            page_count: 需要拆分的页数
+
+        Returns:
+            Tuple[List[str], List[Optional[Storyboard]]]: (每页故事文本列表, 分镜列表)
         """
         pass
 

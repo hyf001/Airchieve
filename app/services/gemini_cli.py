@@ -15,7 +15,7 @@ from app.core.utils.logger import get_logger
 from app.services.llm_cli import LLMClientBase, LLMError
 from app.models.storybook import Storyboard, StorybookPage
 from app.models.template import Template
-from app.models.enums import PageType
+from app.models.enums import PageType, StoryType, Language, AgeGroup
 
 logger = get_logger(__name__)
 
@@ -308,135 +308,279 @@ def _parse_images_response(response: types.GenerateContentResponse) -> List[str]
 class GeminiCli(LLMClientBase):
     """Gemini 大模型客户端 - 原子化接口"""
 
-    async def create_story_and_storyboard(
+
+    async def create_story(
         self,
         instruction: str,
-        page_count: int = 10,
-        template: Optional[Template] = None,
-        images: Optional[List[str]] = None,
-    ) -> Tuple[str, List[str], List[Optional[Storyboard]]]:
+        word_count: int = 500,
+        story_type: StoryType = StoryType.FAIRY_TALE,
+        language: Language = Language.ZH,
+        age_group: AgeGroup = AgeGroup.AGE_3_6,
+    ) -> Tuple[str, str]:
         """
-        创建故事文本和分镜（纯文本生成）
+        创建纯文本故事（不含分镜）
 
         Args:
             instruction: 用户指令/故事描述
-            page_count: 需要生成的页面数量
-            template: 模板对象（可选），包含风格名称、描述和系统提示词
-            images: base64编码的参考图片列表（可选）
+            word_count: 目标字数
+            story_type: 故事类型
+            language: 语言
+            age_group: 年龄组
 
         Returns:
-            Tuple[str, List[str], List[Optional[Storyboard]]]: (故事标题, 故事文本列表, 分镜列表)
+            Tuple[str, str]: (故事标题, 故事内容)
         """
         client = _get_client()
-        logger.info("开始生成故事文本和分镜 | page_count=%d", page_count)
+        logger.info("开始生成故事 | word_count=%d story_type=%s language=%s age_group=%s",
+                   word_count, story_type, language, age_group)
 
-        # System Prompt：定义系统角色和基本规则
-        if template and template.systemprompt:
-            system_instruction = template.systemprompt
-        else:
-            system_instruction = (
-                "## Role\n"
-                "You are a professional children's storybook writer and visual director. "
-                "Your goal is to create engaging stories with detailed visual storyboards.\n\n"
-                "## Task\n"
-                "Write story panels for a children's storybook. "
-                "For each panel, provide both the story text and a storyboard describing the illustration.\n\n"
-                "## Output Format\n"
-                "Return a JSON object with the following structure:\n"
-                "```\n"
-                "{\n"
-                "  \"title\": \"A concise, evocative story title (match the language of the user's input)\",\n"
-                "  \"pages\": [\n"
-                "    {\n"
-                "      \"text\": \"Story narrative text (1-2 sentences)\",\n"
-                "      \"storyboard\": {\n"
-                "        \"scene\": \"Scene environment, e.g. sunlit forest clearing with tall oak trees\",\n"
-                "        \"characters\": \"Character actions, posture and expression for this panel, e.g. kneeling down with arms outstretched, mouth open in surprise — describe what they are DOING and FEELING, not what they look like\",\n"
-                "        \"shot\": \"Shot type and composition, e.g. medium shot, subject centered\",\n"
-                "        \"color\": \"Color tone and mood, e.g. warm golden tones, soft afternoon light\",\n"
-                "        \"lighting\": \"Lighting direction and quality, e.g. dappled sunlight from upper left\"\n"
-                "      }\n"
-                "    }\n"
-                "  ]\n"
-                "}\n"
-                "```\n\n"
-                "## Constraints\n"
-                "- Language: Match user's input language for 'title' and 'text' fields; storyboard fields must be in English\n"
-                "- Length: Exactly {page_count} panel(s) in the 'pages' array\n"
-                "- Each text: 1-2 sentences, simple and engaging\n"
-                "- Story flow: Each panel should naturally lead to the next\n"
-                "- Storyboard: Be specific and visual, avoid abstract descriptions\n"
-                "- 'characters' field: describe actions, posture, and expressions ONLY — do not describe physical appearance or clothing\n"
-                "- IMPORTANT: Every panel MUST include both 'text' and 'storyboard' fields; omitting storyboard is not allowed"
-            )
-            system_instruction = system_instruction.replace("{page_count}", str(page_count))
+        # 年龄组映射到描述
+        age_descriptions = {
+            AgeGroup.AGE_0_3: "0-3岁幼儿，需要极简单的词汇、重复的句式、温馨的内容",
+            AgeGroup.AGE_3_6: "3-6岁儿童，可以使用简单的形容词、短句，内容富想象力",
+            AgeGroup.AGE_6_8: "6-8岁儿童，可以使用丰富的词汇，情节可以有趣味性",
+            AgeGroup.AGE_8_12: "8-12岁儿童，可以使用复杂的词汇和情节，富有教育意义",
+            AgeGroup.AGE_12_PLUS: "12岁以上，可以使用成熟的叙事，内容深刻有意义",
+        }
 
-        # User Prompt：用户的具体创意要求
+        # 故事类型映射到描述
+        type_descriptions = {
+            StoryType.FAIRY_TALE: "童话故事，包含魔法、奇幻生物",
+            StoryType.ADVENTURE: "冒险故事，包含探索、发现、勇气",
+            StoryType.EDUCATION: "教育故事，寓教于乐，传递知识或价值观",
+            StoryType.SCIFI: "科幻故事，包含未来科技、太空探索",
+            StoryType.FANTASY: "奇幻故事，包含虚构世界、超自然元素",
+            StoryType.ANIMAL: "动物故事，以动物为主角",
+            StoryType.DAILY_LIFE: "日常生活故事，贴近孩子的生活经验",
+            StoryType.BEDTIME_STORY: "睡前故事，温馨、舒缓、有助于入睡",
+        }
+
+        # 语言映射
+        language_names = {
+            Language.ZH: "中文",
+            Language.EN: "英文",
+            Language.JA: "日文",
+            Language.KO: "韩文",
+        }
+
+        # System Prompt
+        system_instruction = (
+            "## Role\n"
+            "You are a professional children's storybook writer. "
+            "Your goal is to create engaging, age-appropriate stories.\n\n"
+            "## Task\n"
+            "Write a complete children's story based on the user's requirements.\n\n"
+            "## Output Format\n"
+            "Return a JSON object with the following structure:\n"
+            "```\n"
+            "{{\n"
+            "  \"title\": \"A concise, evocative story title\",\n"
+            "  \"content\": \"The complete story content, divided into natural paragraphs\"\n"
+            "}}\n"
+            "```\n\n"
+            "## Constraints\n"
+            "- Target audience: {age_description}\n"
+            "- Story type: {type_description}\n"
+            "- Language: {language_name}\n"
+            "- Length: Approximately {word_count} words\n"
+            "- Story structure: Clear beginning, middle, and end\n"
+            "- Content: Age-appropriate, engaging, and positive"
+        )
+        system_instruction = system_instruction.format(
+            age_description=age_descriptions.get(age_group, age_descriptions[AgeGroup.AGE_3_6]),
+            type_description=type_descriptions.get(story_type, type_descriptions[StoryType.FAIRY_TALE]),
+            language_name=language_names.get(language, language_names[Language.ZH]),
+            word_count=word_count,
+        )
+
+        # User Prompt
         user_prompt = (
-            f"Create a {page_count}-panel children's story based on: \"{instruction}\". "
-            f"Return a JSON object with a 'title' field (story title) and a 'pages' array of {page_count} objects, "
-            f"each containing a 'text' field (story narrative) "
-            f"and a 'storyboard' object with fields: scene, characters, shot, color, lighting."
+            f"Create a {language_names.get(language, 'Chinese')} children's story "
+            f"({type_descriptions.get(story_type, 'fairy tale')}) "
+            f"for age group {age_group.value} "
+            f"based on: \"{instruction}\"\n\n"
+            f"Target length: approximately {word_count} words.\n\n"
+            f"Return a JSON object with 'title' and 'content' fields. "
+            f"The 'content' should be the complete story, naturally divided into paragraphs."
+        )
+
+        # 调用 Gemini API
+        parts = [types.Part(text=user_prompt)]
+        response = await client.aio.models.generate_content(
+            model=settings.GEMINI_TEXT_MODEL,
+            contents=types.Content(parts=parts),
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                response_modalities=["TEXT"],
+                response_mime_type="application/json",
+            ),
+        )
+
+        # 解析响应
+        title = ""
+        content = ""
+
+        if response.candidates and response.candidates[0].content:
+            for part in response.candidates[0].content.parts or []:
+                if part.text:
+                    raw_text = part.text.strip()
+                    logger.info("Gemini 返回原始文本 (前200字符): %s", raw_text[:200])
+
+                    try:
+                        # 尝试直接解析 JSON
+                        data = json.loads(raw_text)
+                        if isinstance(data, dict) and "title" in data and "content" in data:
+                            title = str(data.get("title", "")).strip()
+                            content = str(data.get("content", "")).strip()
+                            logger.info("JSON 解析成功 | title=%s content_length=%d", title, len(content))
+                        else:
+                            logger.warning("JSON 格式不符合预期，缺少 title 或 content 字段")
+                            raise ValueError("Invalid JSON structure")
+                    except (json.JSONDecodeError, ValueError) as e:
+                        logger.warning("JSON 解析失败: %s, 原始文本: %s", e, raw_text[:500])
+
+                        # 尝试从文本中提取 JSON（可能被包裹在 markdown 代码块中）
+                        json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw_text, re.DOTALL)
+                        if json_match:
+                            try:
+                                data = json.loads(json_match.group(1))
+                                if isinstance(data, dict) and "title" in data and "content" in data:
+                                    title = str(data.get("title", "")).strip()
+                                    content = str(data.get("content", "")).strip()
+                                    logger.info("从代码块中提取 JSON 成功 | title=%s", title)
+                                else:
+                                    raise ValueError("Invalid JSON structure in code block")
+                            except (json.JSONDecodeError, ValueError) as extract_err:
+                                logger.warning("从代码块提取 JSON 失败: %s", extract_err)
+
+                        # 如果仍然失败，回退到使用原始文本
+                        if not title or not content:
+                            logger.warning("使用回退策略：title=instruction[:50], content=raw_text")
+                            title = instruction[:50]
+                            content = raw_text
+                    break
+
+        if not content:
+            logger.warning("模型未返回故事内容")
+            raise GeminiTechnicalError(
+                "Failed to generate story content",
+                "故事生成失败，请重试",
+                "NO_STORY_CONTENT",
+            )
+
+        logger.info("故事生成完成 | title=%s words=%d", title, len(content.split()))
+        return title, content
+
+    async def create_storyboard_from_story(
+        self,
+        story_content: str,
+        page_count: int = 10,
+    ) -> Tuple[List[str], List[Optional[Storyboard]]]:
+        """
+        基于故事内容创建分镜描述
+
+        Args:
+            story_content: 故事内容（纯文本）
+            page_count: 需要拆分的页数
+
+        Returns:
+            Tuple[List[str], List[Optional[Storyboard]]]: (每页故事文本列表, 分镜列表)
+        """
+        client = _get_client()
+        logger.info("开始生成分镜 | page_count=%d story_length=%d", page_count, len(story_content))
+
+        # System Prompt
+        system_instruction = (
+            "## Role\n"
+            "You are a professional visual director for children's picture books. "
+            "Your goal is to break down story content into page-by-page visual storyboards.\n\n"
+            "## Task\n"
+            "Divide the provided story into {page_count} pages and create a visual storyboard for each page.\n\n"
+            "## Output Format\n"
+            "Return a JSON array with the following structure:\n"
+            "```\n"
+            "[\n"
+            "  {\n"
+            "    \"text\": \"Story text for this page\",\n"
+            "    \"storyboard\": {\n"
+            "      \"scene\": \"Scene environment description\",\n"
+            "      \"characters\": \"Character actions, posture and expressions — describe what they are DOING and FEELING\",\n"
+            "      \"shot\": \"Shot type and composition (e.g. medium shot, close-up, wide shot)\",\n"
+            "      \"color\": \"Color tone and mood\",\n"
+            "      \"lighting\": \"Lighting direction and quality\"\n"
+            "    }\n"
+            "  }\n"
+            "]\n"
+            "```\n\n"
+            "## Constraints\n"
+            "- Page count: Exactly {page_count} pages\n"
+            "- Text per page: Use appropriate text from the original story\n"
+            "- Storyboard fields: Must be in English\n"
+            "- Story flow: Each page should naturally lead to the next\n"
+            "- Visual consistency: Maintain character and style consistency across pages\n"
+            "- 'characters' field: Describe actions, posture, and expressions ONLY — do not describe physical appearance"
+        )
+        system_instruction = system_instruction.replace("{page_count}", str(page_count))
+
+        # User Prompt
+        user_prompt = (
+            f"STORY CONTENT:\n{story_content}\n\n"
+            f"TASK: Break this story into {page_count} pages and create a visual storyboard for each page.\n\n"
+            f"Return a JSON array with {page_count} objects, each containing:\n"
+            f"- 'text': The story text for this page\n"
+            f"- 'storyboard': Visual description with fields: scene, characters, shot, color, lighting\n\n"
+            f"Ensure smooth narrative flow across all pages."
         )
 
         # 构建请求内容
         parts = [types.Part(text=user_prompt)]
 
-        # 如果有参考图片，添加到请求中
-        if images:
-            parts.extend(_build_image_parts(images))
-
-        # 调用 Gemini API 生成故事文本（JSON 格式）
+        # 调用 Gemini API
         response = await client.aio.models.generate_content(
-            model=settings.GEMINI_TEXT_MODEL,  # 使用文本模型
+            model=settings.GEMINI_TEXT_MODEL,
             contents=types.Content(parts=parts),
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
                 response_modalities=["TEXT"],
-                response_mime_type="application/json",  # 指定返回 JSON 格式
+                response_mime_type="application/json",
             ),
         )
 
-        # 解析 JSON：{ title, pages: [{text, storyboard}] }
-        title = ""
+        # 解析响应
         story_texts: List[str] = []
-        story_storyboards: List[Optional[Storyboard]] = []
+        storyboards: List[Optional[Storyboard]] = []
 
         if response.candidates and response.candidates[0].content:
             for part in response.candidates[0].content.parts or []:
                 if part.text:
                     try:
                         data = json.loads(part.text)
-                        if isinstance(data, dict):
-                            title = data.get("title", "")
-                            pages_data = data.get("pages", [])
-                        elif isinstance(data, list):
-                            # 兼容旧格式：直接返回数组
-                            pages_data = data
-                        else:
-                            pages_data = []
-
-                        for item in pages_data:
-                            if isinstance(item, dict):
-                                story_texts.append(item.get("text", ""))
-                                sb = item.get("storyboard")
-                                story_storyboards.append(sb if isinstance(sb, dict) else None)  # type: ignore[arg-type]
-                            else:
-                                story_texts.append(str(item))
-                                story_storyboards.append(None)
-
-                        logger.info("故事解析完成 | title=%s pages=%d", title, len(story_texts))
+                        if isinstance(data, list):
+                            for item in data:
+                                if isinstance(item, dict):
+                                    story_texts.append(item.get("text", ""))
+                                    sb = item.get("storyboard")
+                                    storyboards.append(sb if isinstance(sb, dict) else None)  # type: ignore[arg-type]
+                        logger.info("分镜解析完成 | pages=%d", len(storyboards))
                     except (json.JSONDecodeError, KeyError) as e:
-                        logger.warning("JSON 解析失败: %s，回退到文本提取", e)
-                        story_texts = _extract_story_texts(part.text)
-                        story_storyboards = [None] * len(story_texts)
+                        logger.warning("JSON 解析失败: %s", e)
+                        raise GeminiTechnicalError(
+                            f"Failed to parse storyboard: {e}",
+                            "分镜解析失败，请重试",
+                            "PARSE_ERROR",
+                        )
                     break
 
-        if not story_texts:
-            logger.warning("模型未返回任何故事文本")
+        if not storyboards:
+            logger.warning("模型未返回分镜")
+            raise GeminiTechnicalError(
+                "Failed to generate storyboard",
+                "分镜生成失败，请重试",
+                "NO_STORYBOARD",
+            )
 
-        logger.info("故事文本生成完成 | title=%s count=%d", title, len(story_texts))
-        return title, story_texts, story_storyboards
+        logger.info("分镜生成完成 | count=%d", len(storyboards))
+        return story_texts, storyboards
 
     async def create_insertion_story_and_storyboard(
         self,
@@ -514,7 +658,7 @@ class GeminiCli(LLMClientBase):
                 "```\n"
                 "[\n"
                 "  {\n"
-                "    \"text\": \"Story narrative text (1-2 sentences)\",\n"
+                "    \"text\": \"Story narrative text\",\n"
                 "    \"storyboard\": {\n"
                 "      \"scene\": \"Scene environment, e.g. sunlit forest clearing with tall oak trees\",\n"
                 "      \"characters\": \"Character actions, posture and expression for this panel, e.g. kneeling down with arms outstretched, mouth open in surprise — describe what they are DOING and FEELING, not what they look like\",\n"
@@ -528,7 +672,7 @@ class GeminiCli(LLMClientBase):
                 "## Constraints\n"
                 "- Language: Match the language of the context pages for 'text' field; storyboard fields must be in English\n"
                 "- Length: Exactly {count} panel(s)\n"
-                "- Each text: 1-2 sentences, simple and engaging\n"
+                "- Each text: Simple and engaging\n"
                 "- Story flow: The new panels should naturally connect the before and after pages\n"
                 "- Storyboard: Be specific and visual, avoid abstract descriptions\n"
                 "- 'characters' field: describe actions, posture, and expressions ONLY — do not describe physical appearance or clothing\n"

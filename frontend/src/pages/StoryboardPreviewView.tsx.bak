@@ -1,0 +1,305 @@
+/**
+ * 分镜预览/编辑页面
+ * 显示分镜列表，支持编辑、选择模板、上传参考图片
+ */
+import React, { useState } from 'react';
+import { ChevronLeft, ChevronRight, Image as ImageIcon, Settings, Wand2 } from 'lucide-react';
+import { TemplateListItem } from '../services/templateService';
+import { StoryboardItem, CreationParams } from '../types/creation';
+import StoryboardCard from '../components/StoryboardCard';
+import { AspectRatio, CliType, ImageSize } from '../services/storybookService';
+
+interface StoryboardPreviewViewProps {
+  storyTitle: string;
+  storyContent: string;
+  initialStoryboards: StoryboardItem[];
+  templates: TemplateListItem[];
+  onCreateStorybook: (
+    storyTitle: string,
+    storyContent: string,
+    storyboards: StoryboardItem[],
+    templateId: number | null,
+    images: string[],
+    params: CreationParams
+  ) => void;
+  onBack: () => void;
+}
+
+const defaultParams: CreationParams = {
+  page_count: 10,
+  aspect_ratio: '16:9' as AspectRatio,
+  image_size: '1k' as ImageSize,
+  cli_type: 'gemini' as CliType,
+};
+
+const StoryboardPreviewView: React.FC<StoryboardPreviewViewProps> = ({
+  storyTitle,
+  storyContent,
+  initialStoryboards,
+  templates,
+  onCreateStorybook,
+  onBack,
+}) => {
+  const [storyboards, setStoryboards] = useState<StoryboardItem[]>(initialStoryboards);
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateListItem | null>(null);
+  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+  const [params, setParams] = useState<CreationParams>(defaultParams);
+  const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+
+  const handleEditPage = (index: number, updates: Partial<StoryboardItem>) => {
+    setStoryboards((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, ...updates } : item))
+    );
+  };
+
+  const handleRegeneratePage = async (index: number) => {
+    // TODO: 实现重新生成分镜的逻辑
+    setRegeneratingIndex(index);
+    // 这里需要调用 API 重新生成单页分镜
+    // 暂时先显示加载状态
+    setTimeout(() => {
+      setRegeneratingIndex(null);
+    }, 2000);
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        setUploadedImages((prev) => [...prev, base64]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setUploadedImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleCreateStorybook = () => {
+    onCreateStorybook(storyTitle, storyContent, storyboards, selectedTemplate?.id || null, uploadedImages, params);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50">
+      {/* 顶部导航栏 */}
+      <header className="bg-white shadow-sm border-b sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition"
+          >
+            <ChevronLeft className="w-5 h-5" />
+            <span>返回</span>
+          </button>
+
+          <div className="flex items-center gap-2">
+            <Wand2 className="w-6 h-6 text-purple-600" />
+            <h1 className="text-xl font-semibold text-gray-900">分镜预览</h1>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className="p-2 text-gray-700 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition"
+              title="设置"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+            <button
+              onClick={handleCreateStorybook}
+              disabled={storyboards.length === 0}
+              className="px-6 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              <span>开始生成绘本</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 py-8">
+        {/* 故事信息摘要 */}
+        <div className="bg-white rounded-xl shadow-md p-6 mb-6">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">{storyTitle}</h2>
+          <p className="text-gray-600 line-clamp-2">{storyContent}</p>
+          <div className="mt-4 flex items-center gap-4 text-sm text-gray-500">
+            <span>共 {storyboards.length} 页</span>
+            {selectedTemplate && (
+              <>
+                <span>·</span>
+                <span>模板: {selectedTemplate.name}</span>
+              </>
+            )}
+            {uploadedImages.length > 0 && (
+              <>
+                <span>·</span>
+                <span>{uploadedImages.length} 张参考图片</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* 设置面板 */}
+        {showSettings && (
+          <div className="bg-white rounded-xl shadow-md p-6 mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">生成参数</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">页数</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={params.page_count}
+                  onChange={(e) => setParams({ ...params, page_count: parseInt(e.target.value) || 10 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">图片比例</label>
+                <select
+                  value={params.aspect_ratio}
+                  onChange={(e) => setParams({ ...params, aspect_ratio: e.target.value as AspectRatio })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                >
+                  <option value="16:9">16:9 (横版)</option>
+                  <option value="4:3">4:3 (横版)</option>
+                  <option value="1:1">1:1 (正方形)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">图片尺寸</label>
+                <select
+                  value={params.image_size}
+                  onChange={(e) => setParams({ ...params, image_size: e.target.value as ImageSize })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                >
+                  <option value="1k">1K</option>
+                  <option value="2k">2K</option>
+                  <option value="4k">4K</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">AI 模型</label>
+                <select
+                  value={params.cli_type}
+                  onChange={(e) => setParams({ ...params, cli_type: e.target.value as CliType })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                >
+                  <option value="gemini">Gemini</option>
+                  <option value="claude">Claude</option>
+                  <option value="openai">OpenAI</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* 左侧：分镜列表 */}
+          <div className="lg:col-span-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {storyboards.map((item, index) => (
+                <StoryboardCard
+                  key={index}
+                  index={index}
+                  item={item}
+                  onEdit={handleEditPage}
+                  onRegenerate={handleRegeneratePage}
+                  isRegenerating={regeneratingIndex === index}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* 右侧：模板和图片 */}
+          <div className="space-y-6">
+            {/* 模板选择 */}
+            <div className="bg-white rounded-xl shadow-md p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <Wand2 className="w-5 h-5 text-purple-600" />
+                选择模板（可选）
+              </h3>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                <button
+                  onClick={() => setSelectedTemplate(null)}
+                  className={`w-full text-left px-4 py-3 rounded-lg border transition ${
+                    !selectedTemplate
+                      ? 'border-purple-500 bg-purple-50 text-purple-700'
+                      : 'border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  <div className="font-medium">不使用模板</div>
+                </button>
+                {templates.map((template) => (
+                  <button
+                    key={template.id}
+                    onClick={() => setSelectedTemplate(template)}
+                    className={`w-full text-left px-4 py-3 rounded-lg border transition ${
+                      selectedTemplate?.id === template.id
+                        ? 'border-purple-500 bg-purple-50 text-purple-700'
+                        : 'border-gray-300 hover:border-gray-400'
+                    }`}
+                  >
+                    <div className="font-medium">{template.name}</div>
+                    {template.description && (
+                      <div className="text-sm text-gray-600 mt-1">{template.description}</div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 参考图片上传 */}
+            <div className="bg-white rounded-xl shadow-md p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <ImageIcon className="w-5 h-5 text-purple-600" />
+                参考图片（可选）
+              </h3>
+              <div className="space-y-3">
+                <label className="flex items-center justify-center gap-2 px-4 py-8 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-purple-500 hover:bg-purple-50 transition">
+                  <ImageIcon className="w-8 h-8 text-gray-400" />
+                  <span className="text-gray-600">点击上传图片</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+                </label>
+                {uploadedImages.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2">
+                    {uploadedImages.map((image, index) => (
+                      <div key={index} className="relative group">
+                        <img
+                          src={image}
+                          alt={`参考图片 ${index + 1}`}
+                          className="w-full h-20 object-cover rounded-lg"
+                        />
+                        <button
+                          onClick={() => handleRemoveImage(index)}
+                          className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition text-xs"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default StoryboardPreviewView;

@@ -13,9 +13,9 @@ from PIL import Image as PILImage, ImageDraw, ImageFont
 
 from app.core.utils.logger import get_logger
 from app.db.session import async_session_maker
-from app.models.storybook import Storybook, StorybookPage, StorybookStatus
+from app.models.storybook import Storybook, StorybookPage, StorybookStatus, Storyboard
 from app.models.template import Template
-from app.models.enums import CliType, AspectRatio, ImageSize, PageType
+from app.models.enums import CliType, AspectRatio, ImageSize, PageType, StoryType, Language, AgeGroup
 from app.services.llm_cli import LLMClientBase, LLMError
 from app.services.points_service import (
     check_creation_points,
@@ -107,244 +107,6 @@ async def _mark_terminated(storybook_id: int) -> None:
             storybook.status = "terminated"
             await session.commit()
 
-
-async def _generate_storybook_content(
-    storybook_id: int,
-    instruction: str,
-    template: Optional["Template"] = None,
-    images: Optional[List[str]] = None,
-    page_count: int = 10,
-    aspect_ratio: str = "16:9",
-    image_size: str = "1k",
-    cli_type: CliType = CliType.GEMINI,
-) -> None:
-    """通用的绘本内容生成流程"""
-    start_time = time.time()
-    logger.info("开始生成绘本内容 | storybook_id=%s page_count=%d cli_type=%s", storybook_id, page_count, cli_type)
-
-    # 更新状态为 creating
-    async with async_session_maker() as session:
-        result = await session.execute(
-            select(Storybook).where(Storybook.id == storybook_id)
-        )
-        storybook = result.scalar_one_or_none()
-        if storybook:
-            storybook.status = "creating"
-            await session.commit()
-
-    try:
-        llm_client = LLMClientBase.get_client(cli_type)
-
-        # 第一步：生成故事和分镜（含标题）
-        logger.info("第一步：生成故事文本和分镜 | storybook_id=%s", storybook_id)
-        generated_title, story_texts, storyboards = await llm_client.create_story_and_storyboard(
-            instruction=instruction,
-            page_count=page_count,
-            template=template,
-            images=images,
-        )
-
-        if not story_texts:
-            raise ValueError("未能生成故事文本")
-
-        logger.info("故事文本和分镜生成完成 | storybook_id=%s count=%d title=%s", storybook_id, len(story_texts), generated_title)
-
-        # 更新数据库中的故事标题（如果 AI 返回了标题）
-        if generated_title:
-            async with async_session_maker() as session:
-                result = await session.execute(
-                    select(Storybook).where(Storybook.id == storybook_id)
-                )
-                storybook = result.scalar_one_or_none()
-                if storybook:
-                    storybook.title = generated_title
-                    await session.commit()
-                    logger.info("故事标题已更新 | storybook_id=%s title=%s", storybook_id, generated_title)
-
-        # 第二步：逐页生成图片
-        pages = []
-        image_urls = []
-
-        for i, (story_text, storyboard) in enumerate(zip(story_texts, storyboards)):
-            # 检查是否中止
-            if await _is_terminated(storybook_id):
-                await _mark_terminated(storybook_id)
-                logger.info("绘本生成已中止 | storybook_id=%s", storybook_id)
-                return
-
-            logger.info("生成第 %d 页图片 | storybook_id=%s", i + 1, storybook_id)
-
-            # 生成单页
-            image_url = await llm_client.generate_page(
-                story_text=story_text,
-                storyboard=storyboard,
-                story_context=story_texts,
-                page_index=i,
-                reference_images=images,
-                previous_page_image=image_urls[-1] if image_urls else None,
-                template=template,
-                aspect_ratio=aspect_ratio,
-                image_size=image_size,
-            )
-
-            image_urls.append(image_url)
-
-            # 上传OSS
-            page = StorybookPage(text=story_text, image_url=image_url, storyboard=storyboard)
-            oss_start = time.time()
-            page = await _upload_page_image_to_oss(storybook_id, page)
-            logger.info("第 %d 页图片上传OSS完成 | storybook_id=%s elapsed=%.2fs",
-                       i + 1, storybook_id, time.time() - oss_start)
-
-            # 添加到页面列表
-            pages.append(page)
-
-            # 立即更新数据库（增量更新）
-            async with async_session_maker() as session:
-                result = await session.execute(
-                    select(Storybook).where(Storybook.id == storybook_id)
-                )
-                storybook = result.scalar_one_or_none()
-                if storybook:
-                    storybook.pages = pages
-                    await session.commit()
-                    logger.info("更新数据库进度 | storybook_id=%s pages=%d", storybook_id, len(pages))
-
-        # 所有页面生成完成，更新状态为 finished
-        async with async_session_maker() as session:
-            result = await session.execute(
-                select(Storybook).where(Storybook.id == storybook_id)
-            )
-            storybook = result.scalar_one_or_none()
-            if storybook:
-                storybook.status = "finished"
-                storybook.error_message = None
-                await session.commit()
-
-        elapsed = time.time() - start_time
-        logger.info("绘本生成完成 | storybook_id=%s pages_count=%s elapsed=%.2fs", storybook_id, len(pages) if pages else 0, elapsed)
-
-    except LLMError as e:
-        logger.warning("绘本生成被拒绝 | storybook_id=%s error_type=%s user_message=%s",
-                       storybook_id, e.error_type, e.user_message)
-        async with async_session_maker() as session:
-            result = await session.execute(
-                select(Storybook).where(Storybook.id == storybook_id)
-            )
-            storybook = result.scalar_one_or_none()
-            if storybook:
-                storybook.status = "error"
-                storybook.error_message = e.user_message
-                await session.commit()
-    except Exception as e:
-        logger.exception("绘本生成失败 | storybook_id=%s error=%s", storybook_id, e)
-        async with async_session_maker() as session:
-            result = await session.execute(
-                select(Storybook).where(Storybook.id == storybook_id)
-            )
-            storybook = result.scalar_one_or_none()
-            if storybook:
-                storybook.status = "error"
-                storybook.error_message = str(e)[:500]
-                await session.commit()
-
-
-# ============ 异步创建（轮询模式） ============
-
-async def create_storybook_async(
-    instruction: str,
-    user_id: int,
-    template_id: Optional[int] = None,
-    cli_type: CliType = CliType.GEMINI,
-    page_count: int = 10,
-    aspect_ratio: AspectRatio = AspectRatio.RATIO_16_9,
-    image_size: ImageSize = ImageSize.SIZE_1K,
-) -> tuple[int, str, Optional[Template]]:
-    """
-    同步阶段：检查积分、解析模版、创建绘本记录。
-    返回 (storybook_id, title, template, style_prefix) 供后台任务使用。
-    积分不足时抛出 InsufficientPointsError。
-    """
-    await check_creation_points(user_id)
-
-    template: Optional[Template] = None
-    style_prefix = ""
-
-    if template_id:
-        async with async_session_maker() as session:
-            result = await session.execute(
-                select(Template).where(Template.id == template_id)
-            )
-            template = result.scalar_one_or_none()
-            if template and template.is_active:
-                style_prefix = template.instruction if template.instruction else ""
-
-    async with async_session_maker() as session:
-        new_storybook = Storybook(
-            title=instruction[:100] if len(instruction) > 100 else instruction,
-            description=f"风格: {style_prefix}\n指令: {instruction}",
-            creator=str(user_id),
-            instruction=instruction,
-            template_id=template_id,
-            cli_type=cli_type,
-            aspect_ratio=aspect_ratio,
-            image_size=image_size,
-            status="init"
-        )
-        session.add(new_storybook)
-        await session.commit()
-        await session.refresh(new_storybook)
-        storybook_id = new_storybook.id
-        title = new_storybook.title
-
-    logger.info("绘本记���已创建（异步模式）| storybook_id=%s", storybook_id)
-    return storybook_id, title, template
-
-
-async def run_create_storybook_background(
-    storybook_id: int,
-    instruction: str,
-    user_id: int,
-    template: Optional[Template],
-    images: Optional[List[str]],
-    page_count: int = 10,
-    aspect_ratio: str = "16:9",
-    image_size: str = "1k",
-    cli_type: CliType = CliType.GEMINI,
-) -> None:
-    """后台任务：执行绘本内容生成，生成完成后按页数扣除积分。"""
-    logger.info("创建绘本后台任务开始 | storybook_id=%s cli_type=%s", storybook_id, cli_type)
-    try:
-        await asyncio.wait_for(
-            _generate_storybook_content(
-                storybook_id=storybook_id,
-                instruction=instruction,
-                template=template,
-                images=images,
-                page_count=page_count,
-                aspect_ratio=aspect_ratio,
-                image_size=image_size,
-                cli_type=cli_type,
-            ),
-            timeout=900,
-        )
-        # 获取实际生成的页数作为积分消耗
-        async with async_session_maker() as session:
-            result = await session.execute(select(Storybook).where(Storybook.id == storybook_id))
-            storybook = result.scalar_one_or_none()
-            page_count = len(storybook.pages) if storybook and storybook.pages else 1
-        await consume_for_creation(user_id, page_count)
-    except asyncio.TimeoutError:
-        logger.error("创建绘本超时 | storybook_id=%s", storybook_id)
-        async with async_session_maker() as session:
-            result = await session.execute(select(Storybook).where(Storybook.id == storybook_id))
-            storybook = result.scalar_one_or_none()
-            if storybook:
-                storybook.status = "error"
-                storybook.error_message = "生成超时，请重试"
-                await session.commit()
-    except Exception as e:
-        logger.exception("创建绘本后台任务异常 | storybook_id=%s error=%s", storybook_id, e)
 
 # ============ 图片编辑（仅生成，不写库） ============
 
@@ -1166,3 +928,307 @@ async def generate_back_cover_async(
                     await session.commit()
             logger.error("封底生成失败 | storybook_id=%s error=%s", storybook_id, e)
             raise
+
+
+# ============ 创建故事（仅文本） ============
+
+async def create_story_only(
+    instruction: str,
+    word_count: int = 500,
+    story_type: StoryType = StoryType.FAIRY_TALE,
+    language: Language = Language.ZH,
+    age_group: AgeGroup = AgeGroup.AGE_3_6,
+    cli_type: CliType = CliType.GEMINI,
+) -> Tuple[str, str]:
+    """
+    创建纯文本故事（不含分镜和图片）
+
+    Args:
+        instruction: 用户指令/故事描述
+        word_count: 目标字数
+        story_type: 故事类型
+        language: 语言
+        age_group: 年龄组
+        cli_type: CLI类型
+
+    Returns:
+        Tuple[str, str]: (故事标题, 故事内容)
+    """
+    logger.info("开始创建故事 | instruction=%s word_count=%d story_type=%s",
+               instruction[:50], word_count, story_type)
+
+    llm_client = LLMClientBase.get_client(cli_type)
+    title, content = await llm_client.create_story(
+        instruction=instruction,
+        word_count=word_count,
+        story_type=story_type,
+        language=language,
+        age_group=age_group,
+    )
+
+    logger.info("故事创建完成 | title=%s content_length=%d", title, len(content))
+    return title, content
+
+
+# ============ 生成分镜（仅分镜，不保存） ============
+
+async def create_storyboard_only(
+    story_content: str,
+    page_count: int = 10,
+    cli_type: CliType = CliType.GEMINI,
+) -> Tuple[List[str], List[Optional[Storyboard]]]:
+    """
+    仅生成分镜，不保存数据库
+
+    Args:
+        story_content: 故事内容
+        page_count: 页数
+        cli_type: CLI类型
+
+    Returns:
+        Tuple[List[str], List[Optional[Storyboard]]]: (每页文字列表, 分镜列表)
+    """
+    logger.info("开始生成分镜 | page_count=%d content_length=%d", page_count, len(story_content))
+
+    llm_client = LLMClientBase.get_client(cli_type)
+    story_texts, storyboards = await llm_client.create_storyboard_from_story(
+        story_content=story_content,
+        page_count=page_count,
+    )
+
+    logger.info("分镜生成完成 | count=%d", len(story_texts))
+    return story_texts, storyboards
+
+
+# ============ 基于故事创建绘本（分镜+图片） ============
+
+async def create_storybook_from_story_async(
+    title: str,
+    description: str,
+    user_id: int,
+    pages: List[StorybookPage],
+    template_id: Optional[int] = None,
+    cli_type: CliType = CliType.GEMINI,
+    aspect_ratio: AspectRatio = AspectRatio.RATIO_16_9,
+    image_size: ImageSize = ImageSize.SIZE_1K,
+) -> tuple[int, str, Optional[Template]]:
+    """
+    基于已有的故��和分镜创建绘本（同步阶段）
+
+    在创建时就把 pages（包含 text 和 storyboard）保存到数据库，
+    此时 image_url 为空。后台任务只负责生成图片。
+
+    Args:
+        title: 绘本标题
+        description: 绘本描述/用户原始输入
+        user_id: 用户ID
+        pages: 页面列表（包含文本和分镜）
+        template_id: 模板ID（可选）
+        cli_type: CLI类型
+        aspect_ratio: 图片比例
+        image_size: 图片尺寸
+
+    Returns:
+        tuple[int, str, Optional[Template]]: (绘本ID, 标题, 模板)
+    """
+    await check_creation_points(user_id)
+
+    template: Optional[Template] = None
+    if template_id:
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(Template).where(Template.id == template_id)
+            )
+            template = result.scalar_one_or_none()
+
+    # 创建 pages，此时只有 text 和 storyboard，image_url 为空
+    pages_to_save = [
+        StorybookPage(
+            text=page.text,
+            image_url="",  # 图片由后台任务生成
+            storyboard=page.storyboard,
+            page_type=PageType.CONTENT
+        )
+        for page in pages
+    ]
+
+    async with async_session_maker() as session:
+        new_storybook = Storybook(
+            title=title,
+            description=description,
+            creator=str(user_id),
+            instruction=description,
+            template_id=template_id,
+            cli_type=cli_type,
+            aspect_ratio=aspect_ratio,
+            image_size=image_size,
+            pages=pages_to_save,
+            status="init"
+        )
+        session.add(new_storybook)
+        await session.commit()
+        await session.refresh(new_storybook)
+        storybook_id = new_storybook.id
+
+    logger.info("绘本记录和分镜已保存 | storybook_id=%s pages=%d", storybook_id, len(pages_to_save))
+    return storybook_id, title, template
+
+
+async def run_create_storybook_from_story_background(
+    storybook_id: int,
+    user_id: int,
+    template: Optional[Template],
+    aspect_ratio: str = "16:9",
+    image_size: str = "1k",
+    cli_type: CliType = CliType.GEMINI,
+    images: Optional[List[str]] = None,
+) -> None:
+    """
+    后台任务：为已有分镜的绘本生成图片
+
+    从数据库读取已有的 pages（包含 text 和 storyboard），
+    逐页生成图片并更新 image_url。
+
+    Args:
+        storybook_id: 绘本ID
+        user_id: 用户ID
+        template: 模板对象（可选）
+        aspect_ratio: 图片比例
+        image_size: 图片尺寸
+        cli_type: CLI类型
+        images: 参考图片（可选）
+    """
+    logger.info("基于故事创建绘本后台任务开始 | storybook_id=%s", storybook_id)
+    start_time = time.time()
+
+    # 从数据库读取绘本和已有的分镜
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Storybook).where(Storybook.id == storybook_id)
+        )
+        storybook = result.scalar_one_or_none()
+        if not storybook:
+            logger.error("绘本不存在 | storybook_id=%s", storybook_id)
+            return
+
+        # 更新状态为 creating
+        storybook.status = "creating"
+        await session.commit()
+        await session.refresh(storybook)
+
+        # 获取已有的 pages（包含 text 和 storyboard）
+        pages = storybook.pages or []
+
+    if not pages:
+        logger.error("绘本没有页面数据 | storybook_id=%s", storybook_id)
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(Storybook).where(Storybook.id == storybook_id)
+            )
+            storybook = result.scalar_one_or_none()
+            if storybook:
+                storybook.status = "error"
+                storybook.error_message = "没有页面数据"
+                await session.commit()
+        return
+
+    try:
+        llm_client = LLMClientBase.get_client(cli_type)
+
+        # 从 pages 中提取故事文本列表（用于上下文）
+        logger.info("提取故事文本和分镜信息 | storybook_id=%s pages=%d", storybook_id, len(pages))
+        story_texts = [page.text for page in pages]
+        logger.info("开始生成绘本图片 | storybook_id=%s", storybook_id)
+
+        # 逐页生成图片并更新
+        image_urls = []
+
+        for i, page in enumerate(pages):
+            # 检查是否中止
+            if await _is_terminated(storybook_id):
+                await _mark_terminated(storybook_id)
+                logger.info("绘本生成已中止 | storybook_id=%s", storybook_id)
+                return
+
+            logger.info("生成第 %d 页图片 | storybook_id=%s", i + 1, storybook_id)
+
+            # 生成单页图片
+            image_url = await llm_client.generate_page(
+                story_text=page.text,
+                storyboard=page.storyboard,
+                story_context=story_texts,
+                page_index=i,
+                reference_images=images,
+                previous_page_image=image_urls[-1] if image_urls else None,
+                template=template,
+                aspect_ratio=aspect_ratio,
+                image_size=image_size,
+            )
+
+            image_urls.append(image_url)
+
+            # 上传OSS
+            oss_start = time.time()
+            oss_url = await _upload_page_image_to_oss(storybook_id, StorybookPage(text=page.text, image_url=image_url))
+            logger.info("第 %d 页图片上传OSS完成 | storybook_id=%s elapsed=%.2fs",
+                       i + 1, storybook_id, time.time() - oss_start)
+
+            # 更新当前页的 image_url
+            page.image_url = oss_url.image_url
+
+            # 立即更新数据库（增量更新）
+            async with async_session_maker() as session:
+                result = await session.execute(
+                    select(Storybook).where(Storybook.id == storybook_id)
+                )
+                storybook = result.scalar_one_or_none()
+                if storybook:
+                    storybook.pages = pages
+                    await session.commit()
+                    logger.info("更新数据库进度 | storybook_id=%s pages=%d", storybook_id, i + 1)
+
+        # 所有页面生成完成，更新状态为 finished
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(Storybook).where(Storybook.id == storybook_id)
+            )
+            storybook = result.scalar_one_or_none()
+            if storybook:
+                storybook.status = "finished"
+                storybook.error_message = None
+                await session.commit()
+
+        elapsed = time.time() - start_time
+        logger.info("绘本生成完成 | storybook_id=%s pages_count=%s elapsed=%.2fs",
+                   storybook_id, len(pages), elapsed)
+
+        # 扣除积分
+        try:
+            await consume_for_creation(user_id, len(pages))
+        except Exception as e:
+            logger.warning("积分扣费失败 | user_id=%s error=%s", user_id, e)
+
+    except LLMError as e:
+        logger.warning("绘本生成被拒绝 | storybook_id=%s error_type=%s user_message=%s",
+                       storybook_id, e.error_type, e.user_message)
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(Storybook).where(Storybook.id == storybook_id)
+            )
+            storybook = result.scalar_one_or_none()
+            if storybook:
+                storybook.status = "error"
+                storybook.error_message = e.user_message
+                await session.commit()
+    except Exception as e:
+        logger.exception("绘本生成失败 | storybook_id=%s error=%s", storybook_id, e)
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(Storybook).where(Storybook.id == storybook_id)
+            )
+            storybook = result.scalar_one_or_none()
+            if storybook:
+                storybook.status = "error"
+                storybook.error_message = str(e)[:500]
+                await session.commit()
+

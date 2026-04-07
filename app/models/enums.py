@@ -44,6 +44,35 @@ class PageType(str, Enum):
     CONTENT = "content"   # 内页（默认）
 
 
+class StoryType(str, Enum):
+    """故事类型"""
+    FAIRY_TALE = "fairy_tale"       # 童话
+    ADVENTURE = "adventure"         # 冒险
+    EDUCATION = "education"         # 教育
+    SCIFI = "scifi"                 # 科幻
+    FANTASY = "fantasy"             # 奇幻
+    ANIMAL = "animal"               # 动物
+    DAILY_LIFE = "daily_life"       # 日常生活
+    BEDTIME_STORY = "bedtime_story" # 睡前故事
+
+
+class Language(str, Enum):
+    """语言"""
+    ZH = "zh"     # 中文
+    EN = "en"     # 英文
+    JA = "ja"     # 日语
+    KO = "ko"     # 韩语
+
+
+class AgeGroup(str, Enum):
+    """年龄组"""
+    AGE_0_3 = "0_3"       # 0-3岁
+    AGE_3_6 = "3_6"       # 3-6岁
+    AGE_6_8 = "6_8"       # 6-8岁
+    AGE_8_12 = "8_12"     # 8-12岁
+    AGE_12_PLUS = "12_plus"  # 12岁以上
+
+
 # ---------------------------------------------------------------------------
 # 用户相关
 # ---------------------------------------------------------------------------

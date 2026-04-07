@@ -98,7 +98,82 @@ export interface InsertPageAsyncResponse {
   status: StorybookStatus;
 }
 
+export interface CreateStoryRequest {
+  instruction: string;
+  word_count?: number;
+  story_type?: 'fairy_tale' | 'adventure' | 'education' | 'scifi' | 'fantasy' | 'animal' | 'daily_life' | 'bedtime_story';
+  language?: 'zh' | 'en' | 'ja' | 'ko';
+  age_group?: '0_3' | '3_6' | '6_8' | '8_12' | '12_plus';
+  cli_type?: CliType;
+}
+
+export interface CreateStoryResponse {
+  title: string;
+  content: string;
+}
+
+export interface CreateStorybookFromStoryRequest {
+  title: string;
+  description: string;
+  template_id?: number;
+  cli_type?: CliType;
+  aspect_ratio?: AspectRatio;
+  image_size?: ImageSize;
+  images?: string[];
+  pages: StorybookPage[];
+}
+
 // ============ API Functions ============
+
+/**
+ * 创建纯文本故事（不含分镜和图片）
+ */
+export const createStory = async (
+  req: CreateStoryRequest
+): Promise<CreateStoryResponse> => {
+  const res = await fetch(`${API_BASE}/story`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify({
+      instruction: req.instruction,
+      word_count: req.word_count || 500,
+      story_type: req.story_type || 'fairy_tale',
+      language: req.language || 'zh',
+      age_group: req.age_group || '3_6',
+      cli_type: req.cli_type || 'gemini',
+    }),
+  });
+  if (!res.ok) {
+    await handleWriteError(res, '创建故事失败');
+  }
+  return res.json() as Promise<CreateStoryResponse>;
+};
+
+/**
+ * 基于故事内容创建绘本（异步，返回绘本 ID，后台生成）
+ */
+export const createStorybookFromStory = async (
+  req: CreateStorybookFromStoryRequest
+): Promise<StorybookCreateResponse> => {
+  const res = await fetch(`${API_BASE}/from-story`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify({
+      title: req.title,
+      description: req.description,
+      template_id: req.template_id,
+      images: req.images || [],
+      cli_type: req.cli_type || 'gemini',
+      aspect_ratio: req.aspect_ratio || '16:9',
+      image_size: req.image_size || '1k',
+      pages: req.pages,
+    }),
+  });
+  if (!res.ok) {
+    await handleWriteError(res, '创建绘本失败');
+  }
+  return res.json() as Promise<StorybookCreateResponse>;
+};
 
 /**
  * 创建绘本（异步，返回绘本 ID，后台生成）

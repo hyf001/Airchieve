@@ -9,12 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
-from app.models.storybook import Storybook
+from app.models.storybook import Storybook, StorybookPage, Storyboard
 from app.models.user import User
-from app.models.enums import CliType, AspectRatio, ImageSize, PageType
+from app.models.enums import CliType, AspectRatio, ImageSize, PageType, StoryType, Language, AgeGroup
 from app.services.storybook_service import (
-    create_storybook_async,
-    run_create_storybook_background,
     get_storybook,
     update_storybook_pages,
     list_storybooks as list_storybooks_service,
@@ -28,6 +26,10 @@ from app.services.storybook_service import (
     generate_cover_async,
     run_generate_cover_background,
     generate_back_cover_async,
+    create_story_only,
+    create_storybook_from_story_async,
+    run_create_storybook_from_story_background,
+    create_storyboard_only,
 )
 from app.services.points_service import InsufficientPointsError, check_creation_points
 
@@ -37,17 +39,6 @@ INSUFFICIENT_POINTS_CODE = "INSUFFICIENT_POINTS"
 
 
 # ============ Schemas ============
-class CreateStorybookRequest(BaseModel):
-    """创建绘本请求"""
-    instruction: str = Field(..., min_length=1, max_length=1000, description="用户指令/绘本描述")
-    template_id: Optional[int] = Field(None, description="模版ID")
-    images: Optional[List[str]] = Field(None, description="base64编码的参考图片列表")
-    cli_type: CliType = Field(CliType.GEMINI, description="CLI类型")
-    page_count: int = Field(10, ge=1, le=20, description="页数")
-    aspect_ratio: AspectRatio = Field(AspectRatio.RATIO_16_9, description="图片比例")
-    image_size: ImageSize = Field(ImageSize.SIZE_1K, description="图片尺寸")
-
-
 class StorybookPageResponse(BaseModel):
     """绘本页面响应"""
     text: Optional[str] = Field(None, description="页面文本")
@@ -168,6 +159,52 @@ class GenerateBackCoverResponse(BaseModel):
     status: str
 
 
+class CreateStoryRequest(BaseModel):
+    """创建故事请求"""
+    instruction: str = Field(..., min_length=1, max_length=1000, description="用户指令/故事描述")
+    word_count: int = Field(500, ge=100, le=2000, description="目标字数")
+    story_type: StoryType = Field(StoryType.FAIRY_TALE, description="故事类型")
+    language: Language = Field(Language.ZH, description="语言")
+    age_group: AgeGroup = Field(AgeGroup.AGE_3_6, description="年龄组")
+    cli_type: CliType = Field(CliType.GEMINI, description="CLI类型")
+
+
+class CreateStoryResponse(BaseModel):
+    """创建故事响应"""
+    title: str = Field(..., description="故事标题")
+    content: str = Field(..., description="故事内容")
+
+
+class CreateStorybookFromStoryRequest(BaseModel):
+    """基于故事创建绘本请求"""
+    title: str = Field(..., min_length=1, max_length=200, description="绘本标题")
+    description: str = Field(..., min_length=1, max_length=1000, description="绘本描述/用户原始输入")
+    template_id: Optional[int] = Field(None, description="模版ID")
+    images: Optional[List[str]] = Field(None, description="参考图片列表（base64）")
+    cli_type: CliType = Field(CliType.GEMINI, description="CLI类型")
+    aspect_ratio: AspectRatio = Field(AspectRatio.RATIO_16_9, description="图片比例")
+    image_size: ImageSize = Field(ImageSize.SIZE_1K, description="图片尺寸")
+    pages: List[StorybookPage] = Field(..., description="页面列表（包含每页文本和分镜信息）")
+
+
+class GenerateStoryboardRequest(BaseModel):
+    """生成分镜请求"""
+    story_content: str = Field(..., min_length=1, description="故事内容（纯文本）")
+    page_count: int = Field(10, ge=1, le=20, description="页数")
+    cli_type: CliType = Field(CliType.GEMINI, description="CLI类型")
+
+
+class StoryboardItemResponse(BaseModel):
+    """分镜项响应"""
+    text: str = Field(..., description="页面文本")
+    storyboard: Optional[dict] = Field(None, description="分镜信息")
+
+
+class GenerateStoryboardResponse(BaseModel):
+    """生成分镜响应"""
+    storyboards: List[StoryboardItemResponse] = Field(..., description="分镜列表")
+
+
 # ============ Endpoints ============
 
 @router.post("/image/edit")
@@ -198,25 +235,90 @@ async def edit_image_endpoint(
     return {"image": image_base64}
 
 
-@router.post("", status_code=status.HTTP_202_ACCEPTED, response_model=StorybookCreateResponse)
-async def create_storybook_endpoint(
-    req: CreateStorybookRequest,
+@router.post("/story", response_model=CreateStoryResponse)
+async def create_story_endpoint(
+    req: CreateStoryRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    创建纯文本故事（不含分镜和图片）
+
+    返回故事标题和内容，可用于后续创建绘本。
+    """
+    try:
+        title, content = await create_story_only(
+            instruction=req.instruction,
+            word_count=req.word_count,
+            story_type=req.story_type,
+            language=req.language,
+            age_group=req.age_group,
+            cli_type=req.cli_type,
+        )
+        return CreateStoryResponse(title=title, content=content)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.post("/storyboard", response_model=GenerateStoryboardResponse)
+async def generate_storyboard_endpoint(
+    req: GenerateStoryboardRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    生成分镜（不扣费，不保存）
+
+    基于故事内容生成分镜描述，返回每页的文本和分镜信息。
+    前端可预览和编辑后，再调用创建绘本接口生成图片。
+    """
+    try:
+        story_texts, storyboards = await create_storyboard_only(
+            story_content=req.story_content,
+            page_count=req.page_count,
+            cli_type=req.cli_type,
+        )
+
+        return GenerateStoryboardResponse(
+            storyboards=[
+                StoryboardItemResponse(
+                    text=text,
+                    storyboard=dict(sb) if sb else None
+                )
+                for text, sb in zip(story_texts, storyboards)
+            ]
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.post("/from-story", status_code=status.HTTP_202_ACCEPTED, response_model=StorybookCreateResponse)
+async def create_storybook_from_story_endpoint(
+    req: CreateStorybookFromStoryRequest,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
 ):
     """
-    创建绘本（异步，轮询模式）
+    基于已有的故事和分镜创建绘本（异步，轮询模式）
+
+    从请求的 pages 字段中提取故事文本和分镜信息并保存到数据库，
+    后台任务只负责生成图片。
 
     立即返回绘本 ID，后台执行生成。客户端轮询 GET /{id} 的 status 字段：
     init → creating → finished / error
     """
     try:
-        storybook_id, title, template = await create_storybook_async(
-            instruction=req.instruction,
-            template_id=req.template_id,
+        storybook_id, title, template = await create_storybook_from_story_async(
+            title=req.title,
+            description=req.description,
             user_id=current_user.id,
+            pages=req.pages,
+            template_id=req.template_id,
             cli_type=req.cli_type,
-            page_count=req.page_count,
             aspect_ratio=req.aspect_ratio,
             image_size=req.image_size,
         )
@@ -227,16 +329,14 @@ async def create_storybook_endpoint(
         )
 
     background_tasks.add_task(
-        run_create_storybook_background,
+        run_create_storybook_from_story_background,
         storybook_id,
-        req.instruction,
         current_user.id,
         template,
-        req.images,
-        req.page_count,
         req.aspect_ratio.value,
         req.image_size.value,
         req.cli_type,
+        req.images,
     )
 
     return StorybookCreateResponse(id=storybook_id, title=title, status="init")

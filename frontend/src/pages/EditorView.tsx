@@ -307,7 +307,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
         <div className="w-full flex flex-col items-center gap-3">
           <div className="w-full max-w-4xl flex items-center justify-center gap-2 py-1.5 bg-[#00CDD4]/10 text-[#009fa5] text-xs font-medium rounded-lg">
             <LoadingSpinner size={20} />
-            正在生成中… 已完成 {pages.length} 页
+            正在生成中…
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
