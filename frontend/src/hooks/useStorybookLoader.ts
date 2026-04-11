@@ -41,15 +41,33 @@ export function useStorybookLoader({
   const { user } = useAuth();
   const { toast } = useToast();
   const prevPagesLengthRef = useRef<number>(0);
+  const prevCompletedSetRef = useRef<Set<number>>(new Set());
 
   // ========== 轮询配置 ==========
   const handlePollResult = useCallback((book: Storybook) => {
-    const newCount = book.pages?.length ?? 0;
+    const pages = book.pages ?? [];
+    const newCount = pages.length;
     if (newCount > prevPagesLengthRef.current) {
       toast({ title: `第 ${newCount} 页已生成 ✓` });
       setCurrentPageIndex(newCount - 1);
+    } else {
+      // 检测已有页面是否新完成（获得了图片）
+      let newCompletedIndex = -1;
+      for (let i = pages.length - 1; i >= 0; i--) {
+        if (pages[i].image_url && !prevCompletedSetRef.current.has(i)) {
+          newCompletedIndex = i;
+          break;
+        }
+      }
+      if (newCompletedIndex >= 0) {
+        setCurrentPageIndex(newCompletedIndex);
+      }
     }
     prevPagesLengthRef.current = newCount;
+    // 记录当前已完成（有图片）的页面
+    prevCompletedSetRef.current = new Set(
+      pages.map((p, i) => (p.image_url ? i : -1)).filter(i => i >= 0)
+    );
     setCurrentStorybook(book);
     updateStorybookInList(book.id, { status: book.status });
 
@@ -85,6 +103,9 @@ export function useStorybookLoader({
     try {
       const book = await getStorybook(id);
       prevPagesLengthRef.current = book.pages?.length ?? 0;
+      prevCompletedSetRef.current = new Set(
+        (book.pages ?? []).map((p, i) => (p.image_url ? i : -1)).filter(i => i >= 0)
+      );
       setCurrentStorybook(book);
       updateStorybookInList(id, { status: book.status });
 

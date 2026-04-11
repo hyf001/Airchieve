@@ -93,8 +93,9 @@ const PageThumbnail: React.FC<PageThumbnailProps> = ({ page, index, isActive, on
           className="w-full h-full object-cover"
         />
       ) : (
-        <div className="w-full h-full bg-slate-200 flex items-center justify-center text-slate-400 text-xs">
-          {pageTypeLabel}
+        <div className="w-full h-full bg-slate-100 flex flex-col items-center justify-center gap-2">
+          <div className="w-5 h-5 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" />
+          <span className="text-slate-400 text-[10px]">生成中...</span>
         </div>
       )}
       <span className="absolute bottom-0 left-0 right-0 text-center text-[9px] text-white bg-black/60 leading-4 backdrop-blur-sm">

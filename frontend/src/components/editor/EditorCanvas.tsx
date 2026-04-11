@@ -228,29 +228,11 @@ function renderContent({
   if ((canReadPages || isCreating) && currentPage) {
     return (
       <div className="w-full h-full flex flex-col gap-4">
-        {/* 生成进度条 */}
-        {isCreating && (
-          <div className="shrink-0 flex items-center justify-center gap-2 py-1.5 bg-[#00CDD4]/10 text-[#009fa5] text-xs font-medium rounded-lg">
-            <Loader2 size={16} className="animate-spin" />
-            正在生成中… 已完成 {pages.length} 页
-            <Button
-              onClick={onTerminateClick}
-              disabled={isTerminating}
-              variant="outline"
-              size="sm"
-              className="ml-2 h-7 px-2 border-red-200 text-red-600 hover:text-red-700 hover:bg-red-50"
-              title="停止生成"
-            >
-              <Square size={12} fill="currentColor" />
-            </Button>
-          </div>
-        )}
-
         {/* 上半部分：页面图片区域 */}
         <div className="flex-1 min-h-0 bg-white rounded-2xl shadow-xl overflow-hidden flex items-center justify-center p-6">
           <div
             ref={canvasRef}
-            className={`relative ${getAspectRatioClass(aspectRatio as any)} bg-slate-100 max-h-full`}
+            className={`relative ${currentPage.image_url ? getAspectRatioClass(aspectRatio as any) : 'w-full h-full'} bg-slate-100 max-h-full`}
           >
             {currentPage.image_url ? (
               <img
@@ -261,7 +243,23 @@ function renderContent({
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center gap-3">
                 <Loader2 size={36} className="text-[#00CDD4] animate-spin" />
-                <span className="text-sm text-slate-400">图片生成中…</span>
+                {isCreating ? (
+                  <>
+                    <span className="text-sm text-[#009fa5] font-medium">正在生成中…</span>
+                    <Button
+                      onClick={onTerminateClick}
+                      disabled={isTerminating}
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-3 border-red-200 text-red-600 hover:text-red-700 hover:bg-red-50 text-xs"
+                    >
+                      <Square size={10} fill="currentColor" className="mr-1" />
+                      停止生成
+                    </Button>
+                  </>
+                ) : (
+                  <span className="text-sm text-slate-400">图片生成中…</span>
+                )}
               </div>
             )}
             {/* 文字图层叠加层 */}
