@@ -86,11 +86,17 @@ const PageThumbnail: React.FC<PageThumbnailProps> = ({ page, index, isActive, on
           : 'ring-transparent hover:ring-slate-300 hover:scale-[1.02]'
       }`}
     >
-      <img
-        src={page.image_url}
-        alt={pageTypeLabel}
-        className="w-full h-full object-cover"
-      />
+      {page.image_url ? (
+        <img
+          src={page.image_url}
+          alt={pageTypeLabel}
+          className="w-full h-full object-cover"
+        />
+      ) : (
+        <div className="w-full h-full bg-slate-200 flex items-center justify-center text-slate-400 text-xs">
+          {pageTypeLabel}
+        </div>
+      )}
       <span className="absolute bottom-0 left-0 right-0 text-center text-[9px] text-white bg-black/60 leading-4 backdrop-blur-sm">
         {pageTypeLabel}
       </span>

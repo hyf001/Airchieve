@@ -55,9 +55,12 @@ const StorybookPreview: React.FC<StorybookPreviewProps> = ({
   return (
     <div className={`relative ${className}`}>
       {/* 封面卡片 */}
-      <button
+      <div
         onClick={handleClick}
-        className="group relative aspect-square bg-slate-800 rounded-2xl overflow-hidden hover:opacity-80 transition-all duration-300 hover:scale-105 w-full"
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleClick(); }}
+        className="group relative aspect-square bg-slate-800 rounded-2xl overflow-hidden hover:opacity-80 transition-all duration-300 hover:scale-105 w-full cursor-pointer"
       >
         {coverImage ? (
           <img src={coverImage} alt={storybook.title} className="w-full h-full object-cover" />
@@ -74,7 +77,7 @@ const StorybookPreview: React.FC<StorybookPreviewProps> = ({
             )}
           </div>
         </div>
-      </button>
+      </div>
 
       {/* shadcn Dialog，无遮罩背景 */}
       <Dialog open={open} onOpenChange={setOpen}>

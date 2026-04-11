@@ -5,7 +5,6 @@ Doubao CLI Implementation
 import asyncio
 import json
 import re
-import httpx
 from typing import List, Optional, Tuple
 
 from volcenginesdkarkruntime import Ark
@@ -92,10 +91,12 @@ def _build_image_prompt(
     prompt = (
         f"{style_prefix}"
         f"{full_story_context}\n"
-        f"当前任务：仅为第{page_index + 1}页生成插图。\n\n"
+        f"当前任务：为第{page_index + 1}页生成插图。\n\n"
         f"{storyboard_desc}\n\n"
         f"要求：\n"
         f"- 生成一张儿童绘本的全出血电影感插画\n"
+        f"- 如果该页文本包含多个场景或情节变化（如对话交替、场景切换、动作序列），请在一张图片中用多个子图/分格画的形式展现这些场景，采用漫画分格或多联画的构图方式，将多个场景自然地组织在同一张画面中\n"
+        f"- 如果该页文本只有一个场景，则生成单幅完整插画\n"
         f"- 图片中不要出现任何文字、字母或单词\n"
         f"- 干净的背景，无边框\n"
         f"- 这是共{len(story_context)}页中的第{page_index + 1}页"
@@ -104,7 +105,11 @@ def _build_image_prompt(
 
 
 async def _async_image_generate(**kwargs) -> str:
-    """异步调用 images.generate，返回图片 URL"""
+    """异步调用 images.generate，返回 base64 data URL"""
+    use_b64 = kwargs.pop("_use_b64", False)
+    if use_b64:
+        kwargs["response_format"] = "b64_json"
+
     client = _get_client()
     loop = asyncio.get_event_loop()
     response = await loop.run_in_executor(
@@ -117,7 +122,11 @@ async def _async_image_generate(**kwargs) -> str:
             "图片生成失败，请稍后重试",
             "NO_IMAGE_DATA",
         )
-    return response.data[0].url
+
+    item = response.data[0]
+    if use_b64 and item.b64_json:
+        return f"data:image/png;base64,{item.b64_json}"
+    return item.url
 
 
 async def _async_chat_create(**kwargs) -> str:
@@ -135,17 +144,6 @@ async def _async_chat_create(**kwargs) -> str:
             "NO_CHOICES",
         )
     return response.choices[0].message.content or ""
-
-
-async def _download_image_as_data_url(url: str) -> str:
-    """将 URL 图片下载并转为 base64 data URL"""
-    async with httpx.AsyncClient(timeout=60) as http_client:
-        resp = await http_client.get(url)
-        resp.raise_for_status()
-        content_type = resp.headers.get("content-type", "image/png")
-        import base64
-        b64 = base64.b64encode(resp.content).decode("ascii")
-        return f"data:{content_type};base64,{b64}"
 
 
 def _parse_json_response(text: str) -> dict | list:
@@ -267,6 +265,7 @@ def _build_storyboard_system_prompt(page_count: int) -> str:
         "## 约束条件\n"
         f"- 页数：恰好{page_count}页\n"
         "- 故事一致性：分镜的情节、角色、场景必须严格对应原故事内容，不得偏离或自行发挥\n"
+        "- 内容完整性：严禁缩短、精简或删减原故事内容。每页的 text 字段必须完整保留原文中该段落的所有文字，包括对话、描写和细节，只做分页不断章\n"
         "- 叙事弧线：分镜顺序必须体现「开端 → 发展 → 高潮 → 结局」的完整叙事弧线\n"
         "- 情感连贯：各页之间的情绪变化必须与原故事的情感走向一致\n"
         "- 分镜 JSON key 保持英文，但内容（描述文本）必须使用中文\n"
@@ -510,22 +509,53 @@ class DoubaoCli(LLMClientBase):
         image_size: str = "1k",
     ) -> str:
         """生成单页图片，返回 base64 data URL"""
-        logger.info("生成第 %d 页图片 | text=%s", page_index + 1, story_text[:50])
+        logger.info("生成第 %d 页图片 | text=%s ref=%s prev=%s",
+                    page_index + 1, story_text[:50],
+                    len(reference_images) if reference_images else 0,
+                    bool(previous_page_image))
 
         prompt = _build_image_prompt(story_text, storyboard, story_context, page_index, template)
         size = _resolve_image_size(aspect_ratio, image_size)
 
-        image_url = await _async_image_generate(
-            model=settings.DOUBAO_IMAGE_MODEL,
-            prompt=prompt,
-            sequential_image_generation="disabled",
-            response_format="url",
-            size=size,
-            watermark=False,
-        )
+        # 收集参考图片并按顺序说明用途
+        input_images: List[str] = []
+        ref_desc_parts: List[str] = []
+        if previous_page_image:
+            input_images.append(previous_page_image)
+            ref_desc_parts.append(
+                "第1张图片是上一页的插画，请保持角色形象、艺术风格、色调和环境的连贯性，确保前后页视觉风格一致。"
+            )
+            logger.info("第 %d 页添加上一页图片作为连续性参考", page_index + 1)
 
-        # 下载图片并转为 base64 data URL（与 Gemini 返回格式一致）
-        data_url = await _download_image_as_data_url(image_url)
+        if reference_images:
+            input_images.extend(reference_images)
+            start = len(input_images) - len(reference_images) + 1
+            end = len(input_images)
+            ref_desc_parts.append(
+                f"第{start}到第{end}张图片是角色参考照片，"
+                "请提取人物的身份特征（面部轮廓、发型、distinguishing marks），"
+                "在绘本插画的风格中还原这些角色，保持人物可辨识性。"
+            )
+            logger.info("第 %d 页添加用户角色参考图 | count=%d", page_index + 1, len(reference_images))
+
+        if ref_desc_parts:
+            prompt += "\n\n【参考图片说明】" + " ".join(ref_desc_parts)
+
+        # 构建请求参数
+        generate_kwargs: dict = {
+            "model": settings.DOUBAO_IMAGE_MODEL,
+            "prompt": prompt,
+            "sequential_image_generation": "disabled",
+            "size": size,
+            "watermark": False,
+            "_use_b64": True,
+        }
+
+        # 豆包 API 的 image 参数支持传入参考图片
+        if input_images:
+            generate_kwargs["image"] = input_images
+
+        data_url = await _async_image_generate(**generate_kwargs)
         logger.info("第 %d 页图片生成成功", page_index + 1)
         return data_url
 
@@ -541,7 +571,8 @@ class DoubaoCli(LLMClientBase):
         编辑图片（通过 prompt 描述原图 + 编辑指令重新生成）
         注：豆包图片生成 API 不支持直接图片编辑，通过描述实现近似效果
         """
-        logger.info("edit_image | instruction=%s", instruction)
+        logger.info("edit_image | instruction=%s has_image=%s has_ref=%s",
+                    instruction, bool(current_image_url), bool(referenced_image))
 
         prompt = (
             f"根据以下编辑指令，生成修改后的插画：{instruction}\n\n"
@@ -550,18 +581,34 @@ class DoubaoCli(LLMClientBase):
         )
         size = _resolve_image_size(aspect_ratio, image_size)
 
-        image_url = await _async_image_generate(
-            model=settings.DOUBAO_IMAGE_MODEL,
-            prompt=prompt,
-            sequential_image_generation="disabled",
-            response_format="url",
-            size=size,
-            watermark=False,
-        )
+        # 收集参考图片并按顺序说明用途
+        input_images: List[str] = []
+        ref_desc_parts: List[str] = []
+        if current_image_url:
+            input_images.append(current_image_url)
+            ref_desc_parts.append("第1张图片是原始插画，请在此基础上进行编辑修改。")
+        if referenced_image:
+            input_images.append(referenced_image)
+            ref_desc_parts.append(f"第{len(input_images)}张图片是风格参考，用于风格或角色参考。")
 
-        data_url = await _download_image_as_data_url(image_url)
+        if ref_desc_parts:
+            prompt += "\n\n【参考图片说明】" + " ".join(ref_desc_parts)
+
+        generate_kwargs: dict = {
+            "model": settings.DOUBAO_IMAGE_MODEL,
+            "prompt": prompt,
+            "sequential_image_generation": "disabled",
+            "size": size,
+            "watermark": False,
+            "_use_b64": True,
+        }
+        if input_images:
+            generate_kwargs["image"] = input_images
+
+        image_url = await _async_image_generate(**generate_kwargs)
+
         logger.info("edit_image success")
-        return data_url
+        return image_url
 
     async def generate_cover(
         self,
@@ -571,7 +618,7 @@ class DoubaoCli(LLMClientBase):
         aspect_ratio: str = "16:9",
         image_size: str = "1k",
     ) -> str:
-        """生成绘本封面图片"""
+        """生成绘本封面图片，使用内页图作为风格参考"""
         logger.info("生成封面 | title=%s ref_count=%d", title, len(reference_images))
 
         prompt = (
@@ -586,15 +633,25 @@ class DoubaoCli(LLMClientBase):
         )
         size = _resolve_image_size(aspect_ratio, image_size)
 
-        image_url = await _async_image_generate(
-            model=settings.DOUBAO_IMAGE_MODEL,
-            prompt=prompt,
-            sequential_image_generation="disabled",
-            response_format="url",
-            size=size,
-            watermark=False,
-        )
+        # 构建请求参数
+        generate_kwargs: dict = {
+            "model": settings.DOUBAO_IMAGE_MODEL,
+            "prompt": prompt,
+            "sequential_image_generation": "disabled",
+            "size": size,
+            "watermark": False,
+            "_use_b64": True,
+        }
 
-        data_url = await _download_image_as_data_url(image_url)
+        # 使用内页图作为风格参考
+        if reference_images:
+            prompt += (
+                f"\n\n【风格参考】已提供{len(reference_images)}张绘本内页插画作为参考图，"
+                "请提取并保持相同的艺术风格、色调和角色外观，确保封面与内页风格一致。"
+            )
+            generate_kwargs["image"] = reference_images
+            logger.info("封面添加内页参考图 | count=%d", len(reference_images))
+
+        data_url = await _async_image_generate(**generate_kwargs)
         logger.info("封面生成成功")
         return data_url
