@@ -40,6 +40,9 @@ class LLMClientBase(ABC):
         if cli_type == CliType.GEMINI:
             from app.services.gemini_cli import GeminiCli
             return GeminiCli()
+        elif cli_type == CliType.DOUBAO:
+            from app.services.doubao_cli import DoubaoCli
+            return DoubaoCli()
         # 未来可以在这里添加其他客户端
         # elif cli_type == CliType.CLAUDE:
         #     from app.services.claude_cli import ClaudeCli

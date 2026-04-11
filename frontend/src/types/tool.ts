@@ -21,6 +21,11 @@ export type ToolId =
   | 'creative'      // 创意玩法
   | 'repair';       // 画质修复
 
+/**
+ * 可选的工具ID（包含null表示未选中任何工具）
+ */
+export type OptionalToolId = ToolId | null;
+
 export type ToolCategory = 'basic' | 'advanced' | 'creative';
 
 /**

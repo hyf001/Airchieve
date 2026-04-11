@@ -408,7 +408,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                 onTextApply={async () => {
                   // 自动应用文字（本地预览，不保存到后端）
                   if (textEditToolRef.current && textLayers.length > 0) {
-                    // 使�� OSS 代理 URL
+                    // 使用 OSS 代理 URL
                     const originalUrl = editorState.pages[editorState.currentPageIndex]?.image_url || '';
                     const imageUrl = originalUrl.replace('https://airchieve.oss-cn-beijing.aliyuncs.com', '/api/v1/oss');
 
@@ -531,6 +531,9 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
 
                     // 清空文字图层，防止重复应用
                     setTextLayers([]);
+
+                    // 取消选中工具
+                    toolManager.setActiveTool(null);
                   }
                 }}
               />
@@ -542,6 +545,8 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                 onPageEdited={(imageUrl: string) => {
                   // 处理图片编辑完成
                   console.log('图片编辑完成:', imageUrl);
+                  // 取消选中工具
+                  toolManager.setActiveTool(null);
                 }}
                 activeTool={toolManager.activeTool}
                 setActiveTool={toolManager.setActiveTool}

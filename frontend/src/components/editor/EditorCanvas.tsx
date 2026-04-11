@@ -7,7 +7,6 @@ import { AlertCircle, Square, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import ProgressCaterpillar from '@/components/ProgressCaterpillar';
-import ReadMode from '@/pages/editor/ReadMode';
 import { getAspectRatioClass } from '@/utils/editorUtils';
 import { STATUS_TEXT_MAP } from '@/constants/editor';
 import { Storybook } from '@/services/storybookService';
@@ -213,34 +212,6 @@ function renderContent({
     );
   }
 
-  if (isCreating && pages.length > 0) {
-    return (
-      <div className="w-full flex flex-col items-center gap-3">
-        <div className="w-full max-w-4xl flex items-center justify-center gap-2 py-1.5 bg-[#00CDD4]/10 text-[#009fa5] text-xs font-medium rounded-lg">
-          <Loader2 size={20} className="animate-spin" />
-          正在生成中… 已完成 {pages.length} 页
-          <Button
-            onClick={onTerminateClick}
-            disabled={isTerminating}
-            variant="outline"
-            size="sm"
-            className="ml-2 h-7 px-2 border-red-200 text-red-600 hover:text-red-700 hover:bg-red-50"
-            title="停止生成"
-          >
-            <Square size={12} fill="currentColor" />
-          </Button>
-        </div>
-        <ReadMode
-          pages={pages}
-          currentIndex={currentPageIndex}
-          onIndexChange={onPageIndexChange}
-          isGenerating
-          aspectRatio={aspectRatio as any}
-        />
-      </div>
-    );
-  }
-
   if (currentStorybook.status === 'finished' && pages.length === 0) {
     return (
       <div className="w-full h-full flex items-center justify-center">
@@ -254,20 +225,45 @@ function renderContent({
     );
   }
 
-  if (canReadPages && currentPage) {
+  if ((canReadPages || isCreating) && currentPage) {
     return (
       <div className="w-full h-full flex flex-col gap-4">
+        {/* 生成进度条 */}
+        {isCreating && (
+          <div className="shrink-0 flex items-center justify-center gap-2 py-1.5 bg-[#00CDD4]/10 text-[#009fa5] text-xs font-medium rounded-lg">
+            <Loader2 size={16} className="animate-spin" />
+            正在生成中… 已完成 {pages.length} 页
+            <Button
+              onClick={onTerminateClick}
+              disabled={isTerminating}
+              variant="outline"
+              size="sm"
+              className="ml-2 h-7 px-2 border-red-200 text-red-600 hover:text-red-700 hover:bg-red-50"
+              title="停止生成"
+            >
+              <Square size={12} fill="currentColor" />
+            </Button>
+          </div>
+        )}
+
         {/* 上半部分：页面图片区域 */}
         <div className="flex-1 min-h-0 bg-white rounded-2xl shadow-xl overflow-hidden flex items-center justify-center p-6">
           <div
             ref={canvasRef}
             className={`relative ${getAspectRatioClass(aspectRatio as any)} bg-slate-100 max-h-full`}
           >
-            <img
-              src={currentPage.image_url}
-              alt={`第 ${currentPageIndex + 1} 页`}
-              className="w-full h-full object-contain"
-            />
+            {currentPage.image_url ? (
+              <img
+                src={currentPage.image_url}
+                alt={`第 ${currentPageIndex + 1} 页`}
+                className="w-full h-full object-contain"
+              />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center gap-3">
+                <Loader2 size={36} className="text-[#00CDD4] animate-spin" />
+                <span className="text-sm text-slate-400">图片生成中…</span>
+              </div>
+            )}
             {/* 文字图层叠加层 */}
             {activeTool === 'text' && textLayers.length > 0 && textEditToolRef?.current && (
               <TextEditOverlay

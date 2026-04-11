@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     ANTHROPIC_AUTH_TOKEN: str = ""
     ANTHROPIC_BASE_URL: str = ""
 
+    # Doubao API (Volcengine Ark)
+    DOUBAO_API_KEY: str = ""
+    DOUBAO_BASE_URL: str = "https://ark.cn-beijing.volces.com/api/v3"
+    DOUBAO_IMAGE_MODEL: str = "doubao-seedream-5-0-260128"  # 图片生成模型
+    DOUBAO_TEXT_MODEL: str = "doubao-seed-2-0-lite-260215"  # 文本生成模型
+
     # Aliyun OSS
     OSS_ACCESS_KEY_ID: str = ""
     OSS_ACCESS_KEY_SECRET: str = ""

@@ -117,7 +117,10 @@ const StorybookCard: React.FC<StorybookCardProps> = ({
           </p>
           <div className="flex items-center gap-1.5 mt-2">
             <span
-              className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${statusColorClass}`}
+              className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${statusColorClass} ${
+                book.status === 'error' && book.error_message ? 'cursor-help' : ''
+              }`}
+              title={book.status === 'error' ? (book.error_message || '生成失败') : undefined}
             >
               {statusText}
             </span>

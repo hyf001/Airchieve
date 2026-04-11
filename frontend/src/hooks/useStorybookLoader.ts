@@ -52,6 +52,11 @@ export function useStorybookLoader({
     prevPagesLengthRef.current = newCount;
     setCurrentStorybook(book);
     updateStorybookInList(book.id, { status: book.status });
+
+    if (book.status === 'error' && book.error_message) {
+      toast({ title: '生成失败', description: book.error_message, variant: 'destructive' });
+    }
+
     return { stop: TERMINAL_STATUSES.has(book.status) };
   }, [setCurrentStorybook, updateStorybookInList, setCurrentPageIndex, toast]);
 

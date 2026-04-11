@@ -41,7 +41,7 @@ const defaultCreationParams: CreationParams = {
   page_count: 10,
   aspect_ratio: '16:9',
   image_size: '1k',
-  cli_type: 'gemini',
+  cli_type: 'doubao',
 };
 
 const HomeView: React.FC<HomeViewProps> = ({
@@ -59,6 +59,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   const [storyParams, setStoryParams] = useState<StoryParams>(defaultStoryParams);
   const [storyTitle, setStoryTitle] = useState('');
   const [storyContent, setStoryContent] = useState('');
+  const [originalInstruction, setOriginalInstruction] = useState('');
   const [storyboards, setStoryboards] = useState<StoryboardItem[]>([]);
   const [creationParams, setCreationParams] = useState<CreationParams>(defaultCreationParams);
 
@@ -124,11 +125,12 @@ const HomeView: React.FC<HomeViewProps> = ({
         story_type: storyParams.story_type,
         language: storyParams.language,
         age_group: storyParams.age_group,
-        cli_type: 'gemini',
+        cli_type: creationParams.cli_type,
       });
 
       setStoryTitle(title);
       setStoryContent(content);
+      setOriginalInstruction(prompt);
       setStep('story');
       setStepMountKey(prev => prev + 1);
     } catch (err) {
@@ -204,7 +206,7 @@ const HomeView: React.FC<HomeViewProps> = ({
 
       const res = await createStorybookFromStory({
         title: storyTitle,
-        description: storyContent,
+        description: originalInstruction.slice(0, 200),
         template_id: templateId || undefined,
         images: images.length > 0 ? images : undefined,
         cli_type: params.cli_type,
@@ -213,7 +215,7 @@ const HomeView: React.FC<HomeViewProps> = ({
         pages: pages,
       });
 
-      toast({ title: '绘本创建成功' });
+      toast({ title: '开始制作' });
       onStart?.(res.id);
     } catch (err) {
       if (err instanceof InsufficientPointsError) {
@@ -228,7 +230,7 @@ const HomeView: React.FC<HomeViewProps> = ({
     } finally {
       setIsCreating(false);
     }
-  }, [storyTitle, storyContent, storyboards, user, openLoginModal, toast, onStart]);
+  }, [storyTitle, originalInstruction, storyboards, user, openLoginModal, toast, onStart]);
 
   // 导航处理
   const handleBack = useCallback(() => {
@@ -334,6 +336,8 @@ const HomeView: React.FC<HomeViewProps> = ({
               <InstructionInputStep
                 storyParams={storyParams}
                 onStoryParamsChange={setStoryParams}
+                cli_type={creationParams.cli_type}
+                onCliTypeChange={(v) => setCreationParams(prev => ({ ...prev, cli_type: v }))}
                 onSubmit={handleStart}
               />
             </div>
@@ -367,6 +371,7 @@ const HomeView: React.FC<HomeViewProps> = ({
               storyContent={storyContent}
               storyboards={storyboards}
               templates={templates}
+              cli_type={creationParams.cli_type}
               onCreate={handleCreateStorybook}
               onBack={handleBack}
             />

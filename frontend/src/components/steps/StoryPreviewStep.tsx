@@ -129,6 +129,7 @@ const StoryPreviewStep: React.FC<StoryPreviewStepProps> = ({
                   <SelectItem value="20">20页</SelectItem>
                 </SelectContent>
               </Select>
+
             </div>
 
             {/* 生成分镜按钮 */}

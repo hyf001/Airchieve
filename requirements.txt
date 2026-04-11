@@ -37,4 +37,4 @@ reportlab>=4.2.0  # PDF generation
 
 # Google Gemini SDK
 google-genai>=1.0.0
-
+volcengine-python-sdk[ark]

@@ -6,6 +6,14 @@ import { CliType, AspectRatio, ImageSize } from '../services/storybookService';
 import { TemplateListItem } from '../services/templateService';
 
 /**
+ * AI 模型标签映射
+ */
+export const CLI_TYPE_LABELS: Record<CliType, string> = {
+  doubao: '豆包',
+  gemini: 'Gemini'
+};
+
+/**
  * 创建流程步骤
  */
 export type CreationStep = 'input' | 'story' | 'storyboard' | 'creating';

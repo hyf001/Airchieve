@@ -11,8 +11,9 @@ from enum import Enum
 class CliType(str, Enum):
     """CLI类型"""
     GEMINI = "gemini"
-    CLAUDE = "claude"
-    OPENAI = "openai"
+    # CLAUDE = "claude"
+    # OPENAI = "openai"
+    DOUBAO = "doubao"
 
 
 # ---------------------------------------------------------------------------

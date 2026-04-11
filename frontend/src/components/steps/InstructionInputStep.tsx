@@ -13,17 +13,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { StoryParams, STORY_TYPE_LABELS, LANGUAGE_LABELS, AGE_GROUP_LABELS } from '@/types/creation';
+import { StoryParams, STORY_TYPE_LABELS, LANGUAGE_LABELS, AGE_GROUP_LABELS, CLI_TYPE_LABELS } from '@/types/creation';
+import { CliType } from '@/services/storybookService';
 
 interface InstructionInputStepProps {
   storyParams: StoryParams;
   onStoryParamsChange: (params: StoryParams) => void;
+  cli_type: CliType;
+  onCliTypeChange: (cli_type: CliType) => void;
   onSubmit: (prompt: string) => void;
 }
 
 const InstructionInputStep: React.FC<InstructionInputStepProps> = ({
   storyParams,
   onStoryParamsChange,
+  cli_type,
+  onCliTypeChange,
   onSubmit,
 }) => {
   const [prompt, setPrompt] = useState('');
@@ -149,6 +154,26 @@ const InstructionInputStep: React.FC<InstructionInputStepProps> = ({
                 </SelectTrigger>
                 <SelectContent className="bg-white/95 border-white/70">
                   {Object.entries(AGE_GROUP_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* AI 模型 */}
+              <Select
+                value={cli_type}
+                onValueChange={(v) => onCliTypeChange(v as CliType)}
+              >
+                <SelectTrigger className="h-8 w-[90px] text-xs bg-white/60 border-white/70 text-slate-700 shadow-sm focus:ring-[#00CDD4]/30">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-slate-500">模型</span>
+                    <SelectValue />
+                  </div>
+                </SelectTrigger>
+                <SelectContent className="bg-white/95 border-white/70">
+                  {Object.entries(CLI_TYPE_LABELS).map(([value, label]) => (
                     <SelectItem key={value} value={value}>
                       {label}
                     </SelectItem>

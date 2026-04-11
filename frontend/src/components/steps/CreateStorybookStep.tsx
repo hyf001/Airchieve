@@ -22,6 +22,7 @@ interface CreateStorybookStepProps {
   storyContent: string;
   storyboards: StoryboardItem[];
   templates: TemplateListItem[];
+  cli_type: CliType;
   onCreate: (
     templateId: number | null,
     images: string[],
@@ -41,12 +42,13 @@ const CreateStorybookStep: React.FC<CreateStorybookStepProps> = ({
   storyContent,
   storyboards,
   templates,
+  cli_type,
   onCreate,
   onBack,
 }) => {
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateListItem | null>(null);
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
-  const [params, setParams] = useState<CreationParams>(defaultParams);
+  const [params, setParams] = useState<CreationParams>({ ...defaultParams, cli_type });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -326,21 +328,6 @@ const CreateStorybookStep: React.FC<CreateStorybookStepProps> = ({
                 </SelectContent>
               </Select>
 
-              {/* AI 模型 */}
-              <Select
-                value={params.cli_type}
-                onValueChange={(v) => setParams({ ...params, cli_type: v as CliType })}
-                disabled={isSubmitting}
-              >
-                <SelectTrigger className="h-8 w-[100px] text-xs bg-white/60 border-slate-300/50 text-slate-700 shadow-sm focus:ring-amber-500/30">
-                  <SelectValue placeholder="模型" />
-                </SelectTrigger>
-                <SelectContent className="bg-white/95 border-slate-300/50">
-                  <SelectItem value="gemini">Gemini</SelectItem>
-                  <SelectItem value="claude">Claude</SelectItem>
-                  <SelectItem value="openai">OpenAI</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
 
             {/* 开始创作按钮 */}

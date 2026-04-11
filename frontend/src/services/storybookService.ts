@@ -25,7 +25,7 @@ const handleWriteError = async (res: Response, fallback: string): Promise<never>
 // ============ Types ============
 export type StorybookStatus = "init" | "creating" | "updating" | "finished" | "error" | "terminated";
 
-export type CliType = "gemini" | "claude" | "openai";
+export type CliType = "gemini" | "doubao";
 export type AspectRatio = "1:1" | "16:9" | "4:3";
 export type ImageSize = "1k" | "2k" | "4k";
 export type PageType = "cover" | "content" | "back_cover";
@@ -67,6 +67,7 @@ export interface StorybookListItem {
   is_public: boolean;
   created_at: string;
   pages: StorybookPage[] | null;
+  error_message?: string | null;
   cli_type?: CliType;
   aspect_ratio?: AspectRatio;
   image_size?: ImageSize;

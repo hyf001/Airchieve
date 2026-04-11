@@ -3,9 +3,9 @@
  */
 
 import { useState, useCallback, useRef } from 'react';
-import { ToolId, ToolState, ToolActions } from '@/types/tool';
+import { ToolId, OptionalToolId } from '@/types/tool';
 
-const DEFAULT_ACTIVE_TOOL: ToolId = 'ai-edit';
+const DEFAULT_ACTIVE_TOOL: OptionalToolId = null;
 const MAX_HISTORY_SIZE = 20;
 
 /**
@@ -14,13 +14,13 @@ const MAX_HISTORY_SIZE = 20;
  */
 export function useToolManager(initialTool?: ToolId) {
   // 当前激活的工具
-  const [activeTool, setActiveTool] = useState<ToolId>(initialTool || DEFAULT_ACTIVE_TOOL);
+  const [activeTool, setActiveTool] = useState<OptionalToolId>(initialTool || DEFAULT_ACTIVE_TOOL);
 
   // 工具使用历史（用于前进/后退）
-  const [toolHistory, setToolHistory] = useState<ToolId[]>([initialTool || DEFAULT_ACTIVE_TOOL]);
+  const [toolHistory, setToolHistory] = useState<OptionalToolId[]>([initialTool || DEFAULT_ACTIVE_TOOL]);
 
   // 各工具的独立状态存储
-  const [toolStates, setToolStates] = useState<Record<ToolId, any>>({});
+  const [toolStates, setToolStates] = useState<Partial<Record<ToolId, any>>>({});
 
   // 历史记录索引（用于前进/后退）
   const historyIndexRef = useRef(0);
@@ -77,7 +77,7 @@ export function useToolManager(initialTool?: ToolId) {
     setToolStates(prev => ({
       ...prev,
       [toolId]: {
-        ...prev[toolId],
+        ...(prev[toolId] || {}),
         ...updates,
       },
     }));
@@ -90,7 +90,7 @@ export function useToolManager(initialTool?: ToolId) {
     setToolStates(prev => {
       const newStates = { ...prev };
       delete newStates[toolId];
-      return newStates;
+      return newStates as Partial<Record<ToolId, any>>;
     });
   }, []);
 
@@ -124,7 +124,7 @@ export function useToolManager(initialTool?: ToolId) {
    * 清空所有工具状态
    */
   const clearAllToolStates = useCallback(() => {
-    setToolStates({});
+    setToolStates({} as Partial<Record<ToolId, any>>);
   }, []);
 
   /**
