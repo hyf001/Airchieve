@@ -269,6 +269,7 @@ function renderContent({
               <TextEditOverlay
                 layers={textLayers}
                 selectedLayerId={selectedLayerId}
+                canvasRef={canvasRef}
                 onLayerMouseDown={(e, layer) => {
                   textEditToolRef.current?.handleLayerMouseDown(e, layer);
                 }}

@@ -11,12 +11,13 @@ interface TextEditOverlayProps {
   selectedLayerId: string | null;
   isDragging: boolean;
   isResizing: boolean;
+  canvasRef?: React.RefObject<HTMLDivElement>;  // 画布容器，用于限制自动应用范围
   onLayerMouseDown: (e: React.MouseEvent, layer: TextLayer) => void;
   onResizeMouseDown: (e: React.MouseEvent, layer: TextLayer, handle: string) => void;
   onTextChange: (id: string, text: string) => void;
   onDeleteLayer: (id: string) => void;
   onLayerClick: (id: string) => void;
-  onApply?: () => void;  // 新增：自动应用回调
+  onApply?: () => void;
 }
 
 /**
@@ -27,6 +28,7 @@ export const TextEditOverlay: React.FC<TextEditOverlayProps> = ({
   selectedLayerId,
   isDragging,
   isResizing,
+  canvasRef,
   onLayerMouseDown,
   onResizeMouseDown,
   onTextChange,
@@ -37,21 +39,23 @@ export const TextEditOverlay: React.FC<TextEditOverlayProps> = ({
   // 防止重复触发的标记
   const isApplyingRef = useRef(false);
 
-  // 点击外部区域自动应用
+  // 点击画布空白区域自动应用（仅在画布容器内）
   useEffect(() => {
+    if (!canvasRef?.current) return;
+
     const handleClickOutside = (e: MouseEvent) => {
-      // 如果正在应用、拖拽或调整大小，不处理
       if (isDragging || isResizing || isApplyingRef.current) return;
 
-      // 检查点击是否在文字图层外
       const target = e.target as HTMLElement;
+
+      // 只处理画布容器内的点击
+      if (!canvasRef.current!.contains(target)) return;
+
       const isClickOnLayer = target.closest('[data-text-layer]');
 
       if (!isClickOnLayer && selectedLayerId && onApply) {
-        console.log('点击外部，自动应用');
         isApplyingRef.current = true;
         onApply();
-        // 延迟重置标记，防止快速重复触发
         setTimeout(() => {
           isApplyingRef.current = false;
         }, 500);
@@ -62,7 +66,7 @@ export const TextEditOverlay: React.FC<TextEditOverlayProps> = ({
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isDragging, isResizing, selectedLayerId, onApply]);
+  }, [isDragging, isResizing, selectedLayerId, onApply, canvasRef]);
   const resizeHandles = ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'];
 
   const getHandleCursor = (handle: string): string => {
