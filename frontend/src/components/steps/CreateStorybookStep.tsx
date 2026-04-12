@@ -159,125 +159,115 @@ const CreateStorybookStep: React.FC<CreateStorybookStepProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              {/* 左侧：模板选择 */}
-              <div className="lg:col-span-2">
-                <div className="rounded-xl p-4 bg-white/60 border border-slate-300/50">
-                  <h3 className="text-base font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                    <Wand2 className="w-4 h-4 text-purple-600" />
-                    选择艺术风格（可选）
-                  </h3>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {/* 不使用模板 */}
+            {/* 上方：参考图片上传 */}
+            <div className="rounded-xl p-4 bg-white/60 border border-slate-300/50">
+              <h3 className="text-base font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                <ImageIcon className="w-4 h-4 text-purple-600" />
+                参考图片（可选）
+              </h3>
+              <div className="flex items-start gap-3">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept="image/*"
+                  multiple
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  variant="outline"
+                  className="shrink-0 h-auto flex-col w-24 py-4 border-2 border-dashed"
+                >
+                  <Upload className="w-6 h-6 text-slate-400 mb-2" />
+                  <span className="text-slate-500 text-sm">上传图片</span>
+                </Button>
+                {uploadedImages.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {uploadedImages.map((image, index) => (
+                      <div key={index} className="relative group">
+                        <img
+                          src={image}
+                          alt={`参考图片 ${index + 1}`}
+                          className="w-20 h-20 object-cover rounded-lg"
+                        />
+                        <Button
+                          onClick={() => handleRemoveImage(index)}
+                          size="icon"
+                          variant="destructive"
+                          className="absolute top-1 right-1 h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition text-xs"
+                        >
+                          ×
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 下方：模板选择 */}
+            <div className="rounded-xl p-4 bg-white/60 border border-slate-300/50">
+              <h3 className="text-base font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                <Wand2 className="w-4 h-4 text-purple-600" />
+                选择艺术风格（可选）
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {/* 不使用模板 */}
+                <Button
+                  onClick={() => setSelectedTemplate(null)}
+                  variant="outline"
+                  className={`p-3 h-auto flex-col items-start ${
+                    !selectedTemplate
+                      ? 'border-2 border-amber-500 bg-amber-50 shadow-md'
+                      : 'border-slate-300/50 hover:border-slate-400'
+                  }`}
+                >
+                  <div className="font-medium text-slate-800 text-sm">不使用模板</div>
+                </Button>
+                {/* 模板列表 */}
+                {templates.map((template) => {
+                  const previewStorybook =
+                    template.storybook_id && template.cover_image
+                      ? {
+                          id: template.storybook_id,
+                          title: template.name,
+                          description: template.description,
+                          creator: template.creator,
+                          status: 'finished' as const,
+                          is_public: false,
+                          created_at: template.created_at,
+                          pages: [
+                            { image_url: template.cover_image, text: '', page_type: 'cover' as const },
+                          ],
+                        }
+                      : null;
+
+                  return (
                     <Button
-                      onClick={() => setSelectedTemplate(null)}
+                      key={template.id}
+                      onClick={() => setSelectedTemplate(template)}
                       variant="outline"
-                      className={`p-3 h-auto text-left ${
-                        !selectedTemplate
-                          ? 'border-amber-500 bg-amber-50 shadow-md'
+                      className={`p-2 h-auto flex-col items-start ${
+                        selectedTemplate?.id === template.id
+                          ? 'border-2 border-amber-500 bg-amber-50 shadow-md'
                           : 'border-slate-300/50 hover:border-slate-400'
                       }`}
                     >
-                      <div className="font-medium text-slate-800 text-sm">不使用模板</div>
-                      <div className="text-xs text-slate-500 mt-1">由 AI 自由创作</div>
+                      {previewStorybook ? (
+                        <div className="mb-1.5 rounded-lg overflow-hidden w-full [&>div]:!aspect-[3/2]">
+                          <StorybookPreview storybook={previewStorybook as any} />
+                        </div>
+                      ) : (
+                        <div className="h-12 bg-slate-200 rounded-lg flex items-center justify-center mb-1.5 w-full">
+                          <span className="text-2xl">📚</span>
+                        </div>
+                      )}
+                      <div className="font-medium text-slate-800 text-sm truncate w-full">{template.name}</div>
                     </Button>
-                    {/* 模板列表 */}
-                    {templates.map((template) => {
-                      const previewStorybook =
-                        template.storybook_id && template.cover_image
-                          ? {
-                              id: template.storybook_id,
-                              title: template.name,
-                              description: template.description,
-                              creator: template.creator,
-                              status: 'finished' as const,
-                              is_public: false,
-                              created_at: template.created_at,
-                              pages: [
-                                { image_url: template.cover_image, text: '', page_type: 'cover' as const },
-                              ],
-                            }
-                          : null;
-
-                      return (
-                        <Button
-                          key={template.id}
-                          onClick={() => setSelectedTemplate(template)}
-                          variant="outline"
-                          className={`p-3 h-auto text-left ${
-                            selectedTemplate?.id === template.id
-                              ? 'border-amber-500 bg-amber-50 shadow-md'
-                              : 'border-slate-300/50 hover:border-slate-400'
-                          }`}
-                        >
-                          {previewStorybook ? (
-                            <div className="mb-2 rounded-lg overflow-hidden">
-                              <StorybookPreview storybook={previewStorybook as any} />
-                            </div>
-                          ) : (
-                            <div className="h-16 bg-slate-200 rounded-lg flex items-center justify-center mb-2">
-                              <span className="text-2xl">📚</span>
-                            </div>
-                          )}
-                          <div className="font-medium text-slate-800 text-sm truncate">{template.name}</div>
-                          {template.description && (
-                            <div className="text-xs text-slate-500 mt-1 truncate">{template.description}</div>
-                          )}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              {/* 右侧：参考图片上传 */}
-              <div>
-                <div className="rounded-xl p-4 bg-white/60 border border-slate-300/50">
-                  <h3 className="text-base font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                    <ImageIcon className="w-4 h-4 text-purple-600" />
-                    参考图片（可选）
-                  </h3>
-                  <div className="space-y-3">
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      accept="image/*"
-                      multiple
-                      onChange={handleImageUpload}
-                      className="hidden"
-                    />
-                    <Button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      variant="outline"
-                      className="w-full h-auto flex-col py-6 border-2 border-dashed"
-                    >
-                      <Upload className="w-6 h-6 text-slate-400 mb-2" />
-                      <span className="text-slate-500 text-sm">点击上传图片</span>
-                    </Button>
-                    {uploadedImages.length > 0 && (
-                      <div className="grid grid-cols-3 gap-2">
-                        {uploadedImages.map((image, index) => (
-                          <div key={index} className="relative group">
-                            <img
-                              src={image}
-                              alt={`参考图片 ${index + 1}`}
-                              className="w-full h-16 object-cover rounded-lg"
-                            />
-                            <Button
-                              onClick={() => handleRemoveImage(index)}
-                              size="icon"
-                              variant="destructive"
-                              className="absolute top-1 right-1 h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition text-xs"
-                            >
-                              ×
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
+                  );
+                })}
               </div>
             </div>
           </div>

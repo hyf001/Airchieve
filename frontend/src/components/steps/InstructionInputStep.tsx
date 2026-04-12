@@ -3,7 +3,7 @@
  * 绘本创建流程的第一步：用户输入故事指令和参数
  */
 import React, { useState, useCallback } from 'react';
-import { Wand2 } from 'lucide-react';
+import { Wand2, BookOpen } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,12 +16,14 @@ import {
 import { StoryParams, STORY_TYPE_LABELS, LANGUAGE_LABELS, AGE_GROUP_LABELS, CLI_TYPE_LABELS } from '@/types/creation';
 import { CliType } from '@/services/storybookService';
 
+type InputMode = 'ai' | 'manual';
+
 interface InstructionInputStepProps {
   storyParams: StoryParams;
   onStoryParamsChange: (params: StoryParams) => void;
   cli_type: CliType;
   onCliTypeChange: (cli_type: CliType) => void;
-  onSubmit: (prompt: string) => void;
+  onSubmit: (prompt: string, mode: InputMode) => void;
 }
 
 const InstructionInputStep: React.FC<InstructionInputStepProps> = ({
@@ -32,18 +34,23 @@ const InstructionInputStep: React.FC<InstructionInputStepProps> = ({
   onSubmit,
 }) => {
   const [prompt, setPrompt] = useState('');
+  const [storyText, setStoryText] = useState('');
+  const [inputMode, setInputMode] = useState<InputMode>('ai');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const currentInput = inputMode === 'ai' ? prompt : storyText;
+
   const handleSubmit = useCallback(async () => {
-    if (!prompt.trim() || isSubmitting) return;
+    const text = inputMode === 'ai' ? prompt : storyText;
+    if (!text.trim() || isSubmitting) return;
 
     setIsSubmitting(true);
     try {
-      await onSubmit(prompt);
+      await onSubmit(text, inputMode);
     } finally {
       setIsSubmitting(false);
     }
-  }, [prompt, isSubmitting, onSubmit]);
+  }, [prompt, storyText, inputMode, isSubmitting, onSubmit]);
 
   const handleParamChange = useCallback(
     <K extends keyof StoryParams>(key: K, value: StoryParams[K]) => {
@@ -74,20 +81,72 @@ const InstructionInputStep: React.FC<InstructionInputStepProps> = ({
         {/* 玻璃卡片 */}
         <div className="relative rounded-2xl overflow-hidden bg-white/72 backdrop-blur-2xl border border-white/70 shadow-[0_8px_40px_rgba(0,0,0,0.10),0_2px_10px_rgba(0,0,0,0.06),inset_0_1px_0_rgba(255,255,255,0.8)]">
           <div className="px-5 pt-4 pb-3">
-            {/* 输入框 */}
-            <Textarea
-              rows={4}
-              className="resize-none bg-transparent border-0 shadow-none focus-visible:ring-0 text-[15px] leading-relaxed text-slate-800 placeholder:text-slate-500 placeholder:font-medium p-0"
-              placeholder="描述您的故事创意... 比如：一只名叫 Nutty 的小松鼠在一棵老橡树中发现了一扇神秘的门..."
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              disabled={isSubmitting}
-            />
+            {/* 模式切换 */}
+            <div className="flex items-center gap-2 mb-3">
+              <button
+                onClick={() => setInputMode('ai')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  inputMode === 'ai'
+                    ? 'bg-amber-500 text-white shadow-md'
+                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                }`}
+              >
+                <Wand2 size={12} />
+                AI 生成故事
+              </button>
+              <button
+                onClick={() => setInputMode('manual')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  inputMode === 'manual'
+                    ? 'bg-amber-500 text-white shadow-md'
+                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                }`}
+              >
+                <BookOpen size={12} />
+                输入现有故事
+              </button>
+            </div>
+
+            {/* AI 模式输入框 */}
+            {inputMode === 'ai' ? (
+              <>
+                <Textarea
+                  rows={4}
+                  className="resize-none bg-transparent border-0 shadow-none focus-visible:ring-0 text-[15px] leading-relaxed text-slate-800 placeholder:text-slate-500 placeholder:font-medium p-0"
+                  placeholder="描述您的故事创意... 比如：一只名叫 Nutty 的小松鼠在一棵老橡树中发现了一扇神秘的门..."
+                  value={prompt}
+                  onChange={(e) => {
+                    if (e.target.value.length <= 500) {
+                      setPrompt(e.target.value);
+                    }
+                  }}
+                  disabled={isSubmitting}
+                />
+                <div className="text-right text-xs text-slate-800 mt-1">{prompt.length}/500</div>
+              </>
+            ) : (
+              <>
+                <Textarea
+                  rows={10}
+                  className="resize-y bg-transparent border border-slate-200 rounded-lg focus-visible:ring-1 focus-visible:ring-amber-400 text-[15px] leading-relaxed text-slate-800 placeholder:text-slate-400 placeholder:font-medium p-3"
+                  placeholder="请输入您现有的故事内容..."
+                  value={storyText}
+                  onChange={(e) => {
+                    if (e.target.value.length <= 10000) {
+                      setStoryText(e.target.value);
+                    }
+                  }}
+                  disabled={isSubmitting}
+                />
+                <div className="text-right text-xs text-slate-800 mt-1">{storyText.length}/10000</div>
+              </>
+            )}
           </div>
 
           {/* 底部操作栏 */}
           <div className="flex items-center gap-2 px-4 py-3 flex-nowrap border-t border-white/50 bg-white/20">
-            {/* 故事参数选择器 */}
+            {/* 故事参数选择器（仅 AI 模式显示） */}
+            {inputMode === 'ai' && (
             <div className="flex items-center gap-2 shrink-0">
               {/* 字数 */}
               <Select
@@ -160,27 +219,28 @@ const InstructionInputStep: React.FC<InstructionInputStepProps> = ({
                   ))}
                 </SelectContent>
               </Select>
-
-              {/* AI 模型 */}
-              <Select
-                value={cli_type}
-                onValueChange={(v) => onCliTypeChange(v as CliType)}
-              >
-                <SelectTrigger className="h-8 w-[90px] text-xs bg-white/60 border-white/70 text-slate-700 shadow-sm focus:ring-[#00CDD4]/30">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-slate-500">模型</span>
-                    <SelectValue />
-                  </div>
-                </SelectTrigger>
-                <SelectContent className="bg-white/95 border-white/70">
-                  {Object.entries(CLI_TYPE_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
+            )}
+
+            {/* AI 模型（两种模式都显示） */}
+            <Select
+              value={cli_type}
+              onValueChange={(v) => onCliTypeChange(v as CliType)}
+            >
+              <SelectTrigger className="h-8 w-[90px] text-xs bg-white/60 border-white/70 text-slate-700 shadow-sm focus:ring-[#00CDD4]/30">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-slate-500">模型</span>
+                  <SelectValue />
+                </div>
+              </SelectTrigger>
+              <SelectContent className="bg-white/95 border-white/70">
+                {Object.entries(CLI_TYPE_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
             {/* 占位，将按钮推到右侧 */}
             <div className="flex-1" />
@@ -195,12 +255,12 @@ const InstructionInputStep: React.FC<InstructionInputStepProps> = ({
               {isSubmitting ? (
                 <>
                   <span className="animate-spin">⏳</span>
-                  <span>正在创建故事...</span>
+                  <span>{inputMode === 'ai' ? '正在创建故事...' : '正在生成分镜...'}</span>
                 </>
               ) : (
                 <>
                   <Wand2 size={16} strokeWidth={2} />
-                  <span>创建故事</span>
+                  <span>{inputMode === 'ai' ? '创建故事' : '下一步'}</span>
                 </>
               )}
             </Button>

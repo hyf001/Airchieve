@@ -108,7 +108,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   }, []);
 
   // 步骤1：输入指令并创建故事
-  const handleStart = useCallback(async (prompt: string) => {
+  const handleStart = useCallback(async (prompt: string, mode: 'ai' | 'manual') => {
     if (!prompt.trim() || isCreating) return;
 
     if (!user) {
@@ -119,20 +119,37 @@ const HomeView: React.FC<HomeViewProps> = ({
     setIsCreating(true);
 
     try {
-      const { title, content } = await createStory({
-        instruction: prompt,
-        word_count: storyParams.word_count,
-        story_type: storyParams.story_type,
-        language: storyParams.language,
-        age_group: storyParams.age_group,
-        cli_type: creationParams.cli_type,
-      });
+      if (mode === 'manual') {
+        // 直接输入模式：用故事内容生成分镜，跳过故事预览
+        setStoryTitle(prompt.slice(0, 20) + (prompt.length > 20 ? '...' : ''));
+        setStoryContent(prompt);
+        setOriginalInstruction(prompt);
 
-      setStoryTitle(title);
-      setStoryContent(content);
-      setOriginalInstruction(prompt);
-      setStep('story');
-      setStepMountKey(prev => prev + 1);
+        const { storyboards: newStoryboards } = await generateStoryboard({
+          story_content: prompt,
+          page_count: 10,
+          cli_type: creationParams.cli_type,
+        });
+
+        setStoryboards(newStoryboards);
+        setStep('storyboard');
+        setStepMountKey(prev => prev + 1);
+      } else {
+        const { title, content } = await createStory({
+          instruction: prompt,
+          word_count: storyParams.word_count,
+          story_type: storyParams.story_type,
+          language: storyParams.language,
+          age_group: storyParams.age_group,
+          cli_type: creationParams.cli_type,
+        });
+
+        setStoryTitle(title);
+        setStoryContent(content);
+        setOriginalInstruction(prompt);
+        setStep('story');
+        setStepMountKey(prev => prev + 1);
+      }
     } catch (err) {
       if (err instanceof InsufficientPointsError) {
         toast({ variant: 'destructive', title: '积分不足', description: err.message });
@@ -146,7 +163,7 @@ const HomeView: React.FC<HomeViewProps> = ({
     } finally {
       setIsCreating(false);
     }
-  }, [isCreating, user, storyParams, toast]);
+  }, [isCreating, user, storyParams, creationParams, toast]);
 
   // 步骤2：确认故事并生��分镜
   const handleStoryConfirm = useCallback(async (title: string, content: string, pageCount: number) => {
@@ -239,13 +256,18 @@ const HomeView: React.FC<HomeViewProps> = ({
         setStep('input');
         break;
       case 'storyboard':
-        setStep('story');
+        // 如果跳过了故事预览步骤（手动输入模式），则返回输入
+        if (!storyTitle && storyContent) {
+          setStep('input');
+        } else {
+          setStep('story');
+        }
         break;
       case 'creating':
         setStep('storyboard');
         break;
     }
-  }, [step]);
+  }, [step, storyTitle, storyContent]);
 
   // 步骤指示器
   const steps: Array<{ key: CreationState['step']; label: string }> = [
