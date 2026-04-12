@@ -242,9 +242,9 @@ function renderContent({
               />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center gap-3">
-                <Loader2 size={36} className="text-[#00CDD4] animate-spin" />
                 {isCreating ? (
                   <>
+                    <Loader2 size={36} className="text-[#00CDD4] animate-spin" />
                     <span className="text-sm text-[#009fa5] font-medium">正在生成中…</span>
                     <Button
                       onClick={onTerminateClick}
@@ -258,7 +258,7 @@ function renderContent({
                     </Button>
                   </>
                 ) : (
-                  <span className="text-sm text-slate-400">图片生成中…</span>
+                  <span className="text-sm text-slate-400">该页图片未生成</span>
                 )}
               </div>
             )}
