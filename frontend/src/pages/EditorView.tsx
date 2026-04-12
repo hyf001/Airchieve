@@ -25,6 +25,7 @@ import {
 } from '../components/editor';
 import { ToolPanelWithSelector } from '../components/editor/tools/ToolPanel';
 import { TextEditToolRef, TextLayer } from '../components/editor/tools/text-edit/types';
+import { AIEditRef } from '../components/editor/tools/ai-edit/types';
 
 // 导入对话框组件
 import {
@@ -34,6 +35,7 @@ import {
   GenerateCoverDialog,
   BackCoverDialog,
 } from '../components/editor/dialogs';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 // 导入 Hooks
 import { useEditorState } from '@/hooks/useEditorState';
@@ -65,6 +67,10 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+
+  // ========== AI改图工具状态 ==========
+  const aiEditToolRef = useRef<AIEditRef>(null);
+  const [isAIEditGenerating, setIsAIEditGenerating] = useState(false);
 
   // ========== 历史记录状态（撤销/重做） ==========
   const [historyState, setHistoryState] = useState<{
@@ -195,6 +201,37 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
   // ========== 历史记录管理 ==========
   // 当页面切换时，初始化历史记录
   const prevPageIndexRef = useRef<number>(-1);
+
+  // 页面切换：有未保存修改时提示
+  const handlePageChange = (newIndex: number) => {
+    if (newIndex === editorState.currentPageIndex) return;
+    const hasUnsaved = historyState.index > 0;
+    if (hasUnsaved) {
+      editorState.setDialogState('unsavedSwitch', true);
+      pendingPageIndexRef.current = newIndex;
+    } else {
+      editorState.setCurrentPageIndex(newIndex);
+    }
+  };
+
+  const pendingPageIndexRef = useRef<number>(-1);
+
+  // 确认切换：放弃修改，切换页面
+  const confirmPageSwitch = () => {
+    const idx = pendingPageIndexRef.current;
+    if (idx >= 0) {
+      editorState.setCurrentPageIndex(idx);
+      pendingPageIndexRef.current = -1;
+    }
+    editorState.setDialogState('unsavedSwitch', false);
+  };
+
+  // 取消切换：留在当前页
+  const cancelPageSwitch = () => {
+    pendingPageIndexRef.current = -1;
+    editorState.setDialogState('unsavedSwitch', false);
+  };
+
   useEffect(() => {
     // 只在页面索引变化时重新初始化历史记录
     if (editorState.pages.length > 0 && editorState.currentPageIndex >= 0 && editorState.currentPageIndex !== prevPageIndexRef.current) {
@@ -288,6 +325,12 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
         title: '保存成功',
         description: '页面已保存到服务器',
       });
+
+      // 保存成功后清空历史
+      setHistoryState({
+        history: [{ image_url: updatedPage.image_url, text: updatedPage.text || '' }],
+        index: 0,
+      });
     } catch (err) {
       toast({
         variant: 'destructive',
@@ -380,7 +423,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
               <PageNavigator
                 pages={editorState.pages}
                 currentIndex={editorState.currentPageIndex}
-                onIndexChange={editorState.setCurrentPageIndex}
+                onIndexChange={handlePageChange}
               />
 
               {/* 画布区域 */}
@@ -405,6 +448,8 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                 isDragging={isDragging}
                 isResizing={isResizing}
                 canvasRef={canvasRef}
+                aiEditToolRef={aiEditToolRef}
+                isAIEditGenerating={isAIEditGenerating}
                 onTextApply={async () => {
                   // 自动应用文字（本地预览，不保存到后端）
                   if (textEditToolRef.current && textLayers.length > 0) {
@@ -543,15 +588,35 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                 storybookId={editorState.currentStorybook.id}
                 baseImageUrl={editorState.pages[editorState.currentPageIndex]?.image_url || ''}
                 onPageEdited={(imageUrl: string) => {
-                  // 处理图片编辑完成
-                  console.log('图片编辑完成:', imageUrl);
-                  // 取消选中工具
+                  // 本地预览：更新页面图片，不保存到后端
+                  const currentPage = editorState.pages[editorState.currentPageIndex];
+                  if (!currentPage) return;
+
+                  const updatedPages = [...editorState.pages];
+                  updatedPages[editorState.currentPageIndex] = {
+                    ...updatedPages[editorState.currentPageIndex],
+                    image_url: imageUrl,
+                  };
+                  editorState.setCurrentStorybook({
+                    ...editorState.currentStorybook!,
+                    pages: updatedPages,
+                  });
+
+                  pushHistory(imageUrl, currentPage.text || '');
+
+                  toast({
+                    title: '图片已更新（本地预览）',
+                    description: '点击保存按钮将更改保存到服务器',
+                  });
+
                   toolManager.setActiveTool(null);
                 }}
                 activeTool={toolManager.activeTool}
                 setActiveTool={toolManager.setActiveTool}
                 containerRef={canvasRef}
                 textEditToolRef={textEditToolRef}
+                aiEditToolRef={aiEditToolRef}
+                onIsAIEditGeneratingChange={setIsAIEditGenerating}
                 onLayersChange={setTextLayers}
                 onSelectedLayerChange={setSelectedLayerId}
                 onIsDraggingChange={setIsDragging}
@@ -599,6 +664,17 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
             await loadStorybook(editorState.currentStorybook.id);
           }
         }}
+      />
+
+      {/* 未保存提示对话框 */}
+      <ConfirmDialog
+        open={editorState.dialogs.unsavedSwitch}
+        title="未保存的修改"
+        description="当前页面有未保存的修改，切换页面将丢失这些修改。是否继续？"
+        confirmText="放弃修改"
+        cancelText="留在当前页"
+        onConfirm={confirmPageSwitch}
+        onCancel={cancelPageSwitch}
       />
     </>
   );

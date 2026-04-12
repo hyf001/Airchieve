@@ -6,7 +6,7 @@ import React from 'react';
 import { ToolConfig, ToolId, ToolCategory } from '@/types/tool';
 
 // 导入已实现工具
-import AIEditTool from '../AIEditTool';
+import { AIEditTool } from './ai-edit';
 import { TextEditTool } from './text-edit';
 import { DrawTool } from './draw';
 
@@ -29,7 +29,9 @@ export const TOOL_REGISTRY: Record<ToolId, ToolConfig> = {
     label: 'AI改图',
     icon: '🤖',
     category: 'basic',
-    component: AIEditTool,
+    component: AIEditTool.Panel as any,
+    Panel: AIEditTool.Panel,
+    Overlay: AIEditTool.Overlay,
     description: '输入指令描述你想要的修改',
   },
 

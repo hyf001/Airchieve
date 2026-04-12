@@ -15,6 +15,9 @@ interface ToolPanelProps {
   activeTool: ToolId;
   // 文字工具相关 props
   textEditToolRef?: React.RefObject<any>;
+  // AI改图工具相关 props
+  aiEditToolRef?: React.RefObject<any>;
+  onIsAIEditGeneratingChange?: (isGenerating: boolean) => void;
   onLayersChange?: (layers: any[]) => void;
   onSelectedLayerChange?: (layerId: string | null) => void;
   onIsDraggingChange?: (isDragging: boolean) => void;
@@ -33,6 +36,8 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
   containerRef,
   activeTool,
   textEditToolRef,
+  aiEditToolRef,
+  onIsAIEditGeneratingChange,
   onLayersChange,
   onSelectedLayerChange,
   onIsDraggingChange,
@@ -61,9 +66,8 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
     if (activeTool === 'ai-edit') {
       return {
         ...baseProps,
-        onImageGenerated: (imageUrl: string) => {
-          onPageEdited(imageUrl);
-        },
+        onApply: onPageEdited,
+        onIsGeneratingChange: onIsAIEditGeneratingChange,
       };
     }
 
@@ -96,11 +100,19 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
 
   const toolProps = getToolProps();
 
-  // 对于文字工具，需要特殊处理 ref
+  // 对于需要 ref 的工具，特殊处理
   if (activeTool === 'text' && textEditToolRef) {
     return (
       <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
         <ActiveToolComponent {...toolProps} ref={textEditToolRef} />
+      </div>
+    );
+  }
+
+  if (activeTool === 'ai-edit' && aiEditToolRef) {
+    return (
+      <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
+        <ActiveToolComponent {...toolProps} ref={aiEditToolRef} />
       </div>
     );
   }
@@ -127,6 +139,9 @@ interface ToolPanelWithSelectorProps {
   setActiveTool: (toolId: ToolId) => void;
   // 文字工具相关 props
   textEditToolRef?: React.RefObject<any>;
+  // AI改图工具相关 props
+  aiEditToolRef?: React.RefObject<any>;
+  onIsAIEditGeneratingChange?: (isGenerating: boolean) => void;
   onLayersChange?: (layers: any[]) => void;
   onSelectedLayerChange?: (layerId: string | null) => void;
   onIsDraggingChange?: (isDragging: boolean) => void;
@@ -144,6 +159,8 @@ export const ToolPanelWithSelector: React.FC<ToolPanelWithSelectorProps> = ({
   activeTool,
   setActiveTool,
   textEditToolRef,
+  aiEditToolRef,
+  onIsAIEditGeneratingChange,
   onLayersChange,
   onSelectedLayerChange,
   onIsDraggingChange,
@@ -172,6 +189,8 @@ export const ToolPanelWithSelector: React.FC<ToolPanelWithSelectorProps> = ({
         containerRef={containerRef}
         activeTool={activeTool}
         textEditToolRef={textEditToolRef}
+        aiEditToolRef={aiEditToolRef}
+        onIsAIEditGeneratingChange={onIsAIEditGeneratingChange}
         onLayersChange={onLayersChange}
         onSelectedLayerChange={onSelectedLayerChange}
         onIsDraggingChange={onIsDraggingChange}

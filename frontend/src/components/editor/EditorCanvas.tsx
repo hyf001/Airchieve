@@ -12,6 +12,8 @@ import { STATUS_TEXT_MAP } from '@/constants/editor';
 import { Storybook } from '@/services/storybookService';
 import { TextEditOverlay } from './tools/text-edit/Overlay';
 import { TextEditToolRef, TextLayer } from './tools/text-edit/types';
+import { AIEditOverlay } from './tools/ai-edit/Overlay';
+import { AIEditRef } from './tools/ai-edit/types';
 import { ToolId } from '@/types/tool';
 
 interface EditorCanvasProps {
@@ -37,6 +39,9 @@ interface EditorCanvasProps {
   isResizing?: boolean;
   canvasRef?: React.RefObject<HTMLDivElement>;
   onTextApply?: () => void;  // 新增：文字自动应用回调
+  // AI改图工具相关 props
+  aiEditToolRef?: React.RefObject<AIEditRef>;
+  isAIEditGenerating?: boolean;
 }
 
 export const EditorCanvas: React.FC<EditorCanvasProps> = ({
@@ -61,6 +66,8 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
   isResizing = false,
   canvasRef: externalCanvasRef,
   onTextApply,
+  aiEditToolRef,
+  isAIEditGenerating = false,
 }) => {
   const [playbackSpeed, setPlaybackSpeed] = useState('1.0x');
 
@@ -123,6 +130,8 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
           isResizing,
           canvasRef,
           onTextApply,
+          aiEditToolRef,
+          isAIEditGenerating,
         })}
       </div>
     </div>
@@ -152,6 +161,8 @@ interface RenderContentProps {
   isResizing?: boolean;
   canvasRef?: React.RefObject<HTMLDivElement>;
   onTextApply?: () => void;
+  aiEditToolRef?: React.RefObject<AIEditRef>;
+  isAIEditGenerating?: boolean;
 }
 
 function renderContent({
@@ -177,6 +188,8 @@ function renderContent({
   isResizing = false,
   canvasRef,
   onTextApply,
+  aiEditToolRef,
+  isAIEditGenerating = false,
 }: RenderContentProps): React.ReactNode {
   if (loading) {
     return <LoadingSpinner size={48} text="加载中..." className="py-8" />;
@@ -287,6 +300,10 @@ function renderContent({
                 isResizing={isResizing}
                 onApply={onTextApply}
               />
+            )}
+            {/* AI改图叠加层 */}
+            {activeTool === 'ai-edit' && (
+              <AIEditOverlay isGenerating={isAIEditGenerating} />
             )}
           </div>
         </div>
