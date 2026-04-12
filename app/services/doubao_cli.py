@@ -447,11 +447,11 @@ class DoubaoCli(LLMClientBase):
                 {"role": "user", "content": user_prompt},
             ],
             max_tokens=20480,
-            extra_body={
-                "thinking": {
-                    "type": "disabled"
-                }
-            },
+            # extra_body={
+            #     "thinking": {
+            #         "type": "enabled"
+            #     }
+            # },
         )
 
         story_texts: List[str] = []
