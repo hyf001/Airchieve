@@ -5,7 +5,9 @@ Doubao CLI Implementation
 import asyncio
 import json
 import re
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, TypeVar
+
+from pydantic import BaseModel
 
 from volcenginesdkarkruntime import Ark
 
@@ -129,6 +131,65 @@ async def _async_image_generate(**kwargs) -> str:
     return item.url
 
 
+# ============ 结构化输出模型 ============
+
+
+class _StoryboardDetail(BaseModel):
+    """分镜描述结构，与 Storyboard TypedDict 对齐"""
+    scene: str
+    characters: str
+    shot: str
+    color: str
+    lighting: str
+
+
+class _StoryResponse(BaseModel):
+    """故事响应"""
+    title: str
+    content: str
+
+
+class _StoryboardItem(BaseModel):
+    """单页分镜"""
+    text: str
+    storyboard: Optional[_StoryboardDetail] = None
+
+
+class _StoryboardResponse(BaseModel):
+    """分镜响应"""
+    pages: list[_StoryboardItem]
+
+
+T = TypeVar("T", bound="BaseModel")
+
+
+async def _async_chat_parse(response_format: type[T], **kwargs) -> T:
+    """异步调用 beta.chat.completions.parse，返回结构化 Pydantic 模型"""
+    client = _get_client()
+    loop = asyncio.get_event_loop()
+    completion = await loop.run_in_executor(
+        None,
+        lambda: client.beta.chat.completions.parse(
+            response_format=response_format,
+            **kwargs,
+        ),
+    )
+    if not completion.choices:
+        raise DoubaoTechnicalError(
+            "Doubao structured completions 返回空 choices",
+            "文本生成失败，请稍后重试",
+            "NO_CHOICES",
+        )
+    parsed = completion.choices[0].message.parsed
+    if parsed is None:
+        raise DoubaoTechnicalError(
+            "Doubao structured completions 解析结果为空",
+            "分镜生成失败，请重试",
+            "PARSE_ERROR",
+        )
+    return parsed
+
+
 async def _async_chat_create(**kwargs) -> str:
     """异步调用 chat.completions.create，返回文本内容"""
     client = _get_client()
@@ -154,15 +215,15 @@ def _parse_json_response(text: str) -> dict | list:
     except json.JSONDecodeError:
         pass
 
-    # 尝试从 markdown 代码块中提取
-    json_match = re.search(r'```(?:json)?\s*(\[.*?\]|\{.*?\})\s*```', text, re.DOTALL)
+    # 尝试从 markdown 代码块中提取（贪婪匹配以支持嵌套 JSON 结构）
+    json_match = re.search(r'```(?:json)?\s*(\[.*\]|\{.*\})\s*```', text, re.DOTALL)
     if json_match:
         try:
             return json.loads(json_match.group(1))
         except json.JSONDecodeError:
             pass
 
-    # 尝试找到 JSON 数组/对象
+    # 尝试找到 JSON 数组/对象（贪婪匹配）
     for pattern in [r'\[\s*\{.*\}\s*\]', r'\{.*\}']:
         json_match = re.search(pattern, text, re.DOTALL)
         if json_match:
@@ -344,28 +405,19 @@ class DoubaoCli(LLMClientBase):
             f"返回包含'title'和'content'字段的 JSON 对象。"
         )
 
-        raw_text = await _async_chat_create(
+        resp = await _async_chat_parse(
+            response_format=_StoryResponse,
             model=settings.DOUBAO_TEXT_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
         )
-        logger.info("豆包返回原始文本 (前200字符): %s", raw_text[:200])
 
-        try:
-            data = _parse_json_response(raw_text)
-            if isinstance(data, dict) and "title" in data and "content" in data:
-                title = str(data["title"]).strip()
-                content = str(data["content"]).strip()
-                logger.info("JSON 解析成功 | title=%s content_length=%d", title, len(content))
-                return title, content
-        except (ValueError, json.JSONDecodeError) as e:
-            logger.warning("JSON 解析失败: %s", e)
-
-        # 回退
-        logger.warning("使用回退策略")
-        return instruction[:50], raw_text
+        title = resp.title.strip()
+        content = resp.content.strip()
+        logger.info("故事解析成功 | title=%s content_length=%d", title, len(content))
+        return title, content
 
     async def create_storyboard_from_story(
         self,
@@ -386,37 +438,34 @@ class DoubaoCli(LLMClientBase):
         user_prompt = (
             f"故事内容：\n{story_content}\n\n"
             f"任务：将这个故事拆分为{page_count}页，并为每一页创建视觉分镜描述。\n"
-            f"返回包含{page_count}个对象的 JSON 数组。"
+            f"返回包含{page_count}个页面对象的 JSON，外层用 pages 字段包裹。"
         )
 
-        raw_text = await _async_chat_create(
+        resp = await _async_chat_parse(
+            response_format=_StoryboardResponse,
             model=settings.DOUBAO_TEXT_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
+            max_tokens=20480,
+            extra_body={
+                "thinking": {
+                    "type": "disabled"
+                }
+            },
         )
 
-        try:
-            data = _parse_json_response(raw_text)
-            if isinstance(data, list):
-                story_texts = []
-                storyboards: List[Optional[Storyboard]] = []
-                for item in data:
-                    if isinstance(item, dict):
-                        story_texts.append(item.get("text", ""))
-                        sb = item.get("storyboard")
-                        storyboards.append(sb if isinstance(sb, dict) else None)  # type: ignore[arg-type]
-                logger.info("分镜解析完成 | pages=%d", len(storyboards))
-                return story_texts, storyboards
-        except (ValueError, json.JSONDecodeError) as e:
-            logger.warning("JSON 解析失败: %s", e)
-
-        raise DoubaoTechnicalError(
-            "分镜解析失败",
-            "分镜生成失败，请重试",
-            "PARSE_ERROR",
-        )
+        story_texts: List[str] = []
+        storyboards: List[Optional[Storyboard]] = []
+        for item in resp.pages:
+            story_texts.append(item.text)
+            if item.storyboard:
+                storyboards.append(item.storyboard.model_dump())  # type: ignore[arg-type]
+            else:
+                storyboards.append(None)
+        logger.info("分镜解析完成 | pages=%d", len(storyboards))
+        return story_texts, storyboards
 
     async def create_insertion_story_and_storyboard(
         self,

@@ -120,19 +120,11 @@ const HomeView: React.FC<HomeViewProps> = ({
 
     try {
       if (mode === 'manual') {
-        // 直接输入模式：用故事内容生成分镜，跳过故事预览
-        setStoryTitle(prompt.slice(0, 20) + (prompt.length > 20 ? '...' : ''));
+        // 直接输入模式：进入故事预览，让用户填写标题
+        setStoryTitle(prompt.slice(0, 10));
         setStoryContent(prompt);
         setOriginalInstruction(prompt);
-
-        const { storyboards: newStoryboards } = await generateStoryboard({
-          story_content: prompt,
-          page_count: 10,
-          cli_type: creationParams.cli_type,
-        });
-
-        setStoryboards(newStoryboards);
-        setStep('storyboard');
+        setStep('story');
         setStepMountKey(prev => prev + 1);
       } else {
         const { title, content } = await createStory({
@@ -256,12 +248,7 @@ const HomeView: React.FC<HomeViewProps> = ({
         setStep('input');
         break;
       case 'storyboard':
-        // 如果跳过了故事预览步骤（手动输入模式），则返回输入
-        if (!storyTitle && storyContent) {
-          setStep('input');
-        } else {
-          setStep('story');
-        }
+        setStep('story');
         break;
       case 'creating':
         setStep('storyboard');

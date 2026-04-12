@@ -54,7 +54,7 @@ const StoryPreviewStep: React.FC<StoryPreviewStepProps> = ({
         </div>
         <div>
           <h2 className="text-2xl font-bold text-slate-100">预览故事</h2>
-          <p className="text-sm text-slate-400">查看并编辑 AI 生成的故事内容</p>
+          <p className="text-sm text-slate-400">查看并编辑故事内容，填写故事标题</p>
         </div>
       </div>
 
