@@ -13,7 +13,7 @@ from google.genai import types
 from app.core.config import settings
 from app.core.utils.logger import get_logger
 from app.services.llm_cli import LLMClientBase, LLMError
-from app.models.storybook import Storyboard, StorybookPage
+from app.models.page import Storyboard, Page
 from app.models.template import Template
 from app.models.enums import PageType, StoryType, Language, AgeGroup
 
@@ -584,7 +584,7 @@ class GeminiCli(LLMClientBase):
 
     async def create_insertion_story_and_storyboard(
         self,
-        pages: List[StorybookPage],
+        pages: List[Page],
         insert_position: int,
         count: int,
         instruction: str,
@@ -607,8 +607,8 @@ class GeminiCli(LLMClientBase):
         logger.info("开始生成插入页面故事文本和分镜 | insert_position=%d count=%d", insert_position, count)
 
         # 根据插入位置提取前后页面
-        before_page: Optional[StorybookPage] = None
-        after_page: Optional[StorybookPage] = None
+        before_page: Optional[Page] = None
+        after_page: Optional[Page] = None
 
         if insert_position > 0 and insert_position <= len(pages):
             before_page = pages[insert_position - 1]

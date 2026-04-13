@@ -5,7 +5,7 @@ LLM Client Base Interface
 """
 from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple, AsyncGenerator
-from app.models.storybook import StorybookPage, Storyboard
+from app.models.page import Storyboard, Page
 from app.models.template import Template
 from app.models.enums import CliType, StoryType, Language, AgeGroup
 
@@ -155,7 +155,7 @@ class LLMClientBase(ABC):
     @abstractmethod
     async def create_insertion_story_and_storyboard(
         self,
-        pages: List[StorybookPage],
+        pages: List[Page],
         insert_position: int,
         count: int,
         instruction: str,

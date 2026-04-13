@@ -7,13 +7,15 @@ import asyncio
 import time
 import io
 from datetime import datetime
-from sqlalchemy import select
+from sqlalchemy import select, update
 import httpx
 from PIL import Image as PILImage, ImageDraw, ImageFont
 
 from app.core.utils.logger import get_logger
 from app.db.session import async_session_maker
-from app.models.storybook import Storybook, StorybookPage, StorybookStatus, Storyboard
+from app.models.storybook import Storybook, StorybookStatus
+from app.models.page import Storyboard, Page
+from app.schemas.page import StorybookPage
 from app.models.template import Template
 from app.models.enums import CliType, AspectRatio, ImageSize, PageType, StoryType, Language, AgeGroup
 from app.services.llm_cli import LLMClientBase, LLMError
@@ -28,16 +30,16 @@ logger = get_logger(__name__)
 
 async def _upload_page_image_to_oss(
     storybook_id: int,
-    page: StorybookPage
-) -> StorybookPage:
+    page: Page,
+) -> Page:
     """
-    将单个页面的 image_url 上传到 OSS，并替换为 OSS 公开访问 URL
+    将单个页面的 image_url 上传到 OSS，并原地替换为 OSS 公开访问 URL
 
     Args:
         storybook_id: 绘本ID
-        page: 页面数据，包含 text 和 image_url
+        page: Page ORM 对象（会原地修改 image_url）
     Returns:
-        StorybookPage: 更新了 image_url 的页面数据
+        Page: 同一个 Page 对象（image_url 已更新）
     """
     from app.services import oss_service
 
@@ -45,7 +47,6 @@ async def _upload_page_image_to_oss(
     if not url:
         return page
 
-    # 根据 data URL 头或默认值决定扩展名
     if url.startswith("data:image/png"):
         ext = ".png"
     else:
@@ -58,32 +59,29 @@ async def _upload_page_image_to_oss(
         logger.info("图片上传OSS成功 | storybook_id=%s object_key=%s",
                    storybook_id, object_key)
         page.image_url = oss_url
-        return page
     except Exception as e:
         logger.warning("图片上传OSS失败，保留原URL | storybook_id=%s error=%s",
                       storybook_id, e)
-        return page
+    return page
 
 
 async def _upload_pages_images_to_oss(
     storybook_id: int,
-    pages: List[StorybookPage]
-) -> List[StorybookPage]:
+    pages: List[Page],
+) -> List[Page]:
     """
-    批量将每页的 image_url 上传到 OSS，并替换为 OSS 公开访问 URL
+    批量将每页的 image_url 上传到 OSS，原地修改
 
     Args:
         storybook_id: 绘本ID
-        pages: 页面列表
+        pages: Page ORM 对象列表
 
     Returns:
-        List[StorybookPage]: 更新了 image_url 的页面列表
+        List[Page]: 同一个列表（每个 page 的 image_url 已更新）
     """
-    results: List[StorybookPage] = []
     for page in pages:
-        uploaded_page = await _upload_page_image_to_oss(storybook_id, page)
-        results.append(uploaded_page)
-    return results
+        await _upload_page_image_to_oss(storybook_id, page)
+    return pages
 
 
 async def _is_terminated(storybook_id: int) -> bool:
@@ -152,107 +150,6 @@ async def generate_edited_image(
     return result
 
 
-# ============ 直接保存页面内容 ============
-
-async def save_page_content(
-    storybook_id: int,
-    page_index: int,
-    text: str,
-    image_url: str,
-) -> StorybookPage:
-    """直接将指定页面内容写入数据库，不触发 AI 生成。
-    若 image_url 为 base64 data URL，先上传 OSS 再保存 OSS URL。
-    返回最终保存的页面数据。
-    """
-    # 如果是 base64 data URL，上传到 OSS
-    final_image_url = image_url
-    if image_url.startswith("data:"):
-        from app.services import oss_service
-        ext = ".png" if image_url.startswith("data:image/png") else ".jpg"
-        ts = int(time.time() * 1000)
-        object_key = f"storybooks/{storybook_id}/page_{page_index}_{ts}{ext}"
-        try:
-            final_image_url = await oss_service.upload_from_url(image_url, object_key)
-        except Exception as e:
-            logger.warning("图片上传OSS失败，保留base64 | page=%s error=%s", page_index, e)
-
-    async with async_session_maker() as session:
-        result = await session.execute(
-            select(Storybook).where(Storybook.id == storybook_id)
-        )
-        storybook = result.scalar_one_or_none()
-        if not storybook or not storybook.pages:
-            raise ValueError("绘本不存在或无页面")
-        if page_index < 0 or page_index >= len(storybook.pages):
-            raise ValueError("页码无效")
-
-        # 保留原有的 storyboard 和 page_type
-        existing_page = storybook.pages[page_index]
-        existing_storyboard = existing_page.storyboard if existing_page else None
-        existing_page_type = existing_page.page_type if existing_page else PageType.CONTENT
-
-        saved_page: StorybookPage = StorybookPage(
-            text=text,
-            image_url=final_image_url,
-            storyboard=existing_storyboard,
-            page_type=existing_page_type
-        )
-        pages = list(storybook.pages)
-        pages[page_index] = saved_page
-        storybook.pages = pages
-        await session.commit()
-
-    return saved_page
-
-
-# ============ 删除页 ============
-
-async def delete_page(
-    storybook_id: int,
-    page_index: int,
-) -> Storybook:
-    """删除指定页，至少保留 1 页。"""
-    async with async_session_maker() as session:
-        result = await session.execute(
-            select(Storybook).where(Storybook.id == storybook_id)
-        )
-        storybook = result.scalar_one_or_none()
-        if not storybook or not storybook.pages:
-            raise ValueError("绘本不存在或无页面")
-        if len(storybook.pages) <= 1:
-            raise ValueError("至少保留 1 页，无法删除")
-        if page_index < 0 or page_index >= len(storybook.pages):
-            raise ValueError("页码无效")
-        pages = list(storybook.pages)
-        pages.pop(page_index)
-        storybook.pages = pages
-        await session.commit()
-        await session.refresh(storybook)
-        return storybook
-
-
-# ============ 重新排序页 ============
-
-async def reorder_pages(
-    storybook_id: int,
-    order: List[int],
-) -> Storybook:
-    """按 order 数组重新排列页面。order 为原下标的新排列，例如 [2,0,1]。"""
-    async with async_session_maker() as session:
-        result = await session.execute(
-            select(Storybook).where(Storybook.id == storybook_id)
-        )
-        storybook = result.scalar_one_or_none()
-        if not storybook or not storybook.pages:
-            raise ValueError("绘本不存在或无页面")
-        pages = storybook.pages
-        if sorted(order) != list(range(len(pages))):
-            raise ValueError("order 参数无效，必须是页面下标的完整排列")
-        storybook.pages = [pages[i] for i in order]
-        await session.commit()
-        await session.refresh(storybook)
-        return storybook
-
 
 # ============ 插入页面（异步轮询模式） ============
 
@@ -318,7 +215,7 @@ async def run_insert_pages_background(
             if not storybook or not storybook.pages:
                 return
             # 获取所有页面作为参考（排除封面和封底）
-            reference_pages: List[StorybookPage] = [
+            reference_pages: List[Page] = [
                 p for p in storybook.pages
                 if p.page_type not in (PageType.COVER, PageType.BACK_COVER)
             ]
@@ -400,13 +297,19 @@ async def run_insert_pages_background(
 
             image_urls.append(image_url)
 
-            # 构建页面
-            page = StorybookPage(text=story_text, image_url=image_url, storyboard=storyboard)
-            new_pages.append(page)
+            # 构建页面 ORM 对象
+            new_page = Page(
+                storybook_id=storybook_id,
+                page_index=0,  # 稍后统一调整
+                text=story_text,
+                image_url=image_url,
+                storyboard=storyboard,
+            )
+            new_pages.append(new_page)
             logger.info("插入页面进度 | storybook_id=%s current=%d total=%d", storybook_id, len(new_pages), count)
 
         # 上传OSS
-        uploaded = await _upload_pages_images_to_oss(storybook_id, new_pages)
+        await _upload_pages_images_to_oss(storybook_id, new_pages)
 
         async with async_session_maker() as session:
             result = await session.execute(
@@ -414,11 +317,18 @@ async def run_insert_pages_background(
             )
             storybook = result.scalar_one_or_none()
             if storybook:
-                pages = list(storybook.pages or [])
-                # 在指定位置插入新页面
-                for i, uploaded_page in enumerate(uploaded):
-                    pages.insert(insert_position + i, uploaded_page)
-                storybook.pages = pages
+                # 将现有页面 page_index 后移，腾出位置
+                existing_pages = list(storybook.pages)
+                for ep in existing_pages:
+                    if ep.page_index >= insert_position:
+                        ep.page_index += count
+
+                # 插入新页面并设置正确的 page_index
+                for i, new_page in enumerate(new_pages):
+                    new_page.storybook_id = storybook_id
+                    new_page.page_index = insert_position + i
+                    session.add(new_page)
+
                 storybook.status = "finished"
                 storybook.error_message = None
                 await session.commit()
@@ -428,7 +338,7 @@ async def run_insert_pages_background(
         except Exception as e:
             logger.warning("插入页面积分扣费失败 | user_id=%s error=%s", user_id, e)
 
-        logger.info("插入页面后台任务完成 | storybook_id=%s new_pages=%s", storybook_id, len(uploaded))
+        logger.info("插入页面后台任务完成 | storybook_id=%s new_pages=%s", storybook_id, len(new_pages))
 
     except asyncio.TimeoutError:
         logger.error("插入页面生成超时 | storybook_id=%s", storybook_id)
@@ -470,6 +380,46 @@ async def get_storybook(storybook_id: int) -> Optional[Storybook]:
         return result.scalar_one_or_none()
 
 
+async def get_storybook_status(storybook_id: int) -> Optional[dict]:
+    """查询绘本状态，不关联查询 pages"""
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(
+                Storybook.id,
+                Storybook.status,
+                Storybook.error_message,
+                Storybook.updated_at,
+            ).where(Storybook.id == storybook_id)
+        )
+        row = result.one_or_none()
+        if row is None:
+            return None
+        return {
+            "id": row.id,
+            "status": row.status,
+            "error_message": row.error_message,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        }
+
+
+# ============ 状态更新 ============
+
+async def update_storybook_status(
+    storybook_id: int,
+    status: str,
+    error_message: Optional[str] = None,
+) -> None:
+    """更新绘本状态"""
+    async with async_session_maker() as session:
+        values: dict = {"status": status}
+        if error_message is not None:
+            values["error_message"] = error_message
+        await session.execute(
+            update(Storybook).where(Storybook.id == storybook_id).values(**values)
+        )
+        await session.commit()
+
+
 # ============ 中止功能 ============
 
 async def terminate_storybook(storybook_id: int) -> bool:
@@ -488,28 +438,6 @@ async def terminate_storybook(storybook_id: int) -> bool:
             logger.info("绘本已标记为中止 | storybook_id=%s", storybook_id)
             return True
         return False
-
-
-async def update_storybook_pages(
-    storybook_id: int,
-    pages: List[StorybookPage]
-) -> bool:
-    async with async_session_maker() as session:
-        result = await session.execute(
-            select(Storybook).where(Storybook.id == storybook_id)
-        )
-        storybook = result.scalar_one_or_none()
-
-        if not storybook:
-            logger.warning("更新页面失败，绘本不存在 | storybook_id=%s", storybook_id)
-            return False
-
-        storybook.pages = pages
-        storybook.status = "finished"
-        await session.commit()
-
-        logger.info("绘本页面更新成功 | storybook_id=%s pages_count=%s", storybook_id, len(pages))
-        return True
 
 
 async def list_storybooks(
@@ -708,7 +636,7 @@ async def generate_storybook_image(
 
 # ============ 封面生成 ============
 
-def _pick_reference_pages(pages: List[StorybookPage]) -> List[StorybookPage]:
+def _pick_reference_pages(pages: List[Page]) -> List[Page]:
     """
     从内页中选取参考页：
     - 超过3页：取第一页、中间页、最后一页
@@ -786,12 +714,14 @@ async def generate_cover_async(
             image_size=image_size,
         )
 
-        cover_page = StorybookPage(
+        cover_page = Page(
+            storybook_id=storybook_id,
+            page_index=0,
             text="",
             image_url=cover_image_url,
             page_type=PageType.COVER,
         )
-        cover_page = await _upload_page_image_to_oss(storybook_id, cover_page)
+        await _upload_page_image_to_oss(storybook_id, cover_page)
 
         async with async_session_maker() as session:
             result = await session.execute(
@@ -800,13 +730,20 @@ async def generate_cover_async(
             storybook = result.scalar_one_or_none()
             if not storybook:
                 return
-            pages = list(storybook.pages or [])
+
             # 替换已有封面，或插入到最前面
-            if pages and pages[0].page_type == PageType.COVER:
-                pages[0] = cover_page
+            existing_pages = list(storybook.pages)
+            if existing_pages and existing_pages[0].page_type == PageType.COVER:
+                existing_pages[0].text = cover_page.text
+                existing_pages[0].image_url = cover_page.image_url
             else:
-                pages.insert(0, cover_page)
-            storybook.pages = pages
+                # 其他页面 page_index 后移
+                for ep in existing_pages:
+                    ep.page_index += 1
+                cover_page.storybook_id = storybook_id
+                cover_page.page_index = 0
+                session.add(cover_page)
+
             storybook.status = "finished"
             await session.commit()
 
@@ -894,7 +831,9 @@ async def generate_back_cover_async(
                        storybook_id, object_key)
 
             # 创建封底页面
-            back_cover_page = StorybookPage(
+            back_cover_page = Page(
+                storybook_id=storybook_id,
+                page_index=0,  # 稍后设置
                 text="",
                 image_url=oss_url,
                 page_type=PageType.BACK_COVER,
@@ -907,10 +846,10 @@ async def generate_back_cover_async(
                 storybook = result.scalar_one_or_none()
                 if not storybook:
                     return
-                pages = list(storybook.pages or [])
-                # 将封底添加到最后一页
-                pages.append(back_cover_page)
-                storybook.pages = pages
+                # 设置 page_index 为最后
+                back_cover_page.storybook_id = storybook_id
+                back_cover_page.page_index = len(storybook.pages)
+                session.add(back_cover_page)
                 storybook.status = "finished"
                 await session.commit()
 
@@ -1013,7 +952,7 @@ async def create_storybook_from_story_async(
     image_size: ImageSize = ImageSize.SIZE_1K,
 ) -> tuple[int, str, Optional[Template]]:
     """
-    基于已有的故��和分镜创建绘本（同步阶段）
+    基于已有的故事和分镜创建绘本（同步阶段）
 
     在创建时就把 pages（包含 text 和 storyboard）保存到数据库，
     此时 image_url 为空。后台任务只负责生成图片。
@@ -1041,17 +980,7 @@ async def create_storybook_from_story_async(
             )
             template = result.scalar_one_or_none()
 
-    # 创建 pages，此时只有 text 和 storyboard，image_url 为空
-    pages_to_save = [
-        StorybookPage(
-            text=page.text,
-            image_url="",  # 图片由后台任务生成
-            storyboard=page.storyboard,
-            page_type=PageType.CONTENT
-        )
-        for page in pages
-    ]
-
+    # 创建 Storybook 先获取 ID，再构建 Page ORM 对象
     async with async_session_maker() as session:
         new_storybook = Storybook(
             title=title,
@@ -1062,15 +991,28 @@ async def create_storybook_from_story_async(
             cli_type=cli_type,
             aspect_ratio=aspect_ratio,
             image_size=image_size,
-            pages=pages_to_save,
             status="init"
         )
         session.add(new_storybook)
-        await session.commit()
-        await session.refresh(new_storybook)
+        await session.flush()
         storybook_id = new_storybook.id
 
-    logger.info("绘本记录和分镜已保存 | storybook_id=%s pages=%d", storybook_id, len(pages_to_save))
+        # 创建 Page ORM 对象
+        for i, page in enumerate(pages):
+            page_obj = Page(
+                storybook_id=storybook_id,
+                page_index=i,
+                text=page.text,
+                image_url="",
+                storyboard=page.storyboard,
+                page_type=PageType.CONTENT,
+            )
+            session.add(page_obj)
+
+        await session.commit()
+        await session.refresh(new_storybook)
+
+    logger.info("绘本记录和分镜已保存 | storybook_id=%s pages=%d", storybook_id, len(pages))
     return storybook_id, title, template
 
 
@@ -1102,39 +1044,24 @@ async def run_create_storybook_from_story_background(
     start_time = time.time()
 
     # 从数据库读取绘本和已有的分镜
-    async with async_session_maker() as session:
-        result = await session.execute(
-            select(Storybook).where(Storybook.id == storybook_id)
-        )
-        storybook = result.scalar_one_or_none()
-        if not storybook:
-            logger.error("绘本不存在 | storybook_id=%s", storybook_id)
-            return
+    storybook = await get_storybook(storybook_id)
+    if not storybook:
+        logger.error("绘本不存在 | storybook_id=%s", storybook_id)
+        return
 
-        # 更新状态为 creating
-        storybook.status = "creating"
-        await session.commit()
-        await session.refresh(storybook)
+    # 更新状态为 creating
+    await update_storybook_status(storybook_id, "creating")
 
-        # 获取已有的 pages（包含 text 和 storyboard）
-        pages = storybook.pages or []
+    # 获取已有的 pages
+    pages = storybook.pages or []
 
     if not pages:
         logger.error("绘本没有页面数据 | storybook_id=%s", storybook_id)
-        async with async_session_maker() as session:
-            result = await session.execute(
-                select(Storybook).where(Storybook.id == storybook_id)
-            )
-            storybook = result.scalar_one_or_none()
-            if storybook:
-                storybook.status = "error"
-                storybook.error_message = "没有页面数据"
-                await session.commit()
+        await update_storybook_status(storybook_id, "error", error_message="没有页面数据")
         return
 
     try:
         llm_client = LLMClientBase.get_client(cli_type)
-
         # 从 pages 中提取故事文本列表（用于上下文）
         logger.info("提取故事文本和分镜信息 | storybook_id=%s pages=%d", storybook_id, len(pages))
         story_texts = [page.text for page in pages]
@@ -1167,25 +1094,18 @@ async def run_create_storybook_from_story_background(
 
             image_urls.append(image_url)
 
-            # 上传OSS
+            # 上传OSS（直接修改 Page ORM 的 image_url）
             oss_start = time.time()
-            oss_url = await _upload_page_image_to_oss(storybook_id, StorybookPage(text=page.text, image_url=image_url))
+            page.image_url = image_url
+            await _upload_page_image_to_oss(storybook_id, page)
             logger.info("第 %d 页图片上传OSS完成 | storybook_id=%s elapsed=%.2fs",
                        i + 1, storybook_id, time.time() - oss_start)
 
-            # 更新当前页的 image_url
-            page.image_url = oss_url.image_url
-
             # 立即更新数据库（增量更新）
             async with async_session_maker() as session:
-                result = await session.execute(
-                    select(Storybook).where(Storybook.id == storybook_id)
-                )
-                storybook = result.scalar_one_or_none()
-                if storybook:
-                    storybook.pages = pages
-                    await session.commit()
-                    logger.info("更新数据库进度 | storybook_id=%s pages=%d", storybook_id, i + 1)
+                merged_page = await session.merge(page)
+                await session.commit()
+                logger.info("更新数据库进度 | storybook_id=%s pages=%d", storybook_id, i + 1)
 
         # 所有页面生成完成，更新状态为 finished
         async with async_session_maker() as session:

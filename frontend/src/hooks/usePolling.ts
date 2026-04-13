@@ -10,7 +10,7 @@ const POLL_INTERVAL = 5000;
  */
 export function usePolling<T>(
   fetchFn: (id: number) => Promise<T>,
-  onResult: (data: T) => { stop: boolean },
+  onResult: (data: T) => { stop: boolean } | Promise<{ stop: boolean }>,
 ) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeIdRef = useRef<number | null>(null);
@@ -37,7 +37,7 @@ export function usePolling<T>(
         const data = await fetchFn(id);
         if (activeIdRef.current !== id) return;
 
-        const { stop: shouldStop } = onResult(data);
+        const { stop: shouldStop } = await onResult(data);
         if (!shouldStop && activeIdRef.current === id) {
           timerRef.current = setTimeout(tick, POLL_INTERVAL);
         }

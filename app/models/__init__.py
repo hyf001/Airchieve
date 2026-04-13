@@ -18,8 +18,12 @@ from app.models.payment import (
     OrderStatus, SubscriptionStatus,
 )
 # 业务域
-from app.models.storybook import Storybook, StorybookPage, StorybookStatus
+from app.models.storybook import Storybook, StorybookStatus
 from app.models.template import Template
+# 页面与图层
+from app.models.page import Page, Storyboard, JsonText
+from app.models.layer import Layer
+from app.models.enums import LayerType
 
 
 __all__ = [
@@ -31,7 +35,9 @@ __all__ = [
     # payment
     "RechargeOrder", "SubscriptionOrder", "OrderStatus", "SubscriptionStatus",
     # storybook
-    "Storybook", "StorybookPage", "StorybookStatus",
+    "Storybook", "StorybookStatus",
     # template
     "Template",
+    # page & layer
+    "Page", "Layer", "LayerType", "Storyboard", "JsonText",
 ]

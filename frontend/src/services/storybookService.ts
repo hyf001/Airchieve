@@ -239,6 +239,25 @@ export const getStorybook = async (storybookId: number): Promise<Storybook> => {
 };
 
 /**
+ * 获取绘本状态（轻量接口，不查询 pages，适��高频轮询）
+ */
+export interface StorybookStatusResult {
+  id: number;
+  status: StorybookStatus;
+  error_message?: string | null;
+  updated_at?: string | null;
+}
+
+export const getStorybookStatus = async (storybookId: number): Promise<StorybookStatusResult> => {
+  const res = await fetch(`${API_BASE}/${storybookId}/status`);
+  if (!res.ok) {
+    if (res.status === 404) throw new Error("绘本不存在");
+    throw new Error(`Failed to get storybook status: ${res.status}`);
+  }
+  return res.json() as Promise<StorybookStatusResult>;
+};
+
+/**
  * 编辑绘本单页（异步，返回 storybook_id + status: "updating"）
  * 客户端轮询 GET /{storybook_id} 直到 status !== "updating"
  */

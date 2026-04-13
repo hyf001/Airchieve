@@ -2,82 +2,25 @@
 Book Model
 绘本模型
 """
-import json
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Literal, Optional, TypedDict
+from typing import TYPE_CHECKING, Literal, Optional
 
-from enum import Enum
-from pydantic import BaseModel
-from sqlalchemy import Integer, String, DateTime, ForeignKey, Text, Boolean
+from sqlalchemy import Integer, String, DateTime, Text, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.types import TypeDecorator
 
 from app.db.base import Base
-from app.models.enums import CliType, AspectRatio, ImageSize, PageType
+from app.models.enums import CliType, AspectRatio, ImageSize
+
+if TYPE_CHECKING:
+    from app.models.page import Page
 
 
-class JsonText(TypeDecorator):
-    """以 Text 存储 JSON，兼容低版本 MariaDB"""
-    impl = Text
-    cache_ok = True
-
-    @staticmethod
-    def _to_jsonable(value):
-        if isinstance(value, BaseModel):
-            if hasattr(value, "model_dump"):
-                return JsonText._to_jsonable(value.model_dump(mode="json"))
-            return JsonText._to_jsonable(value.dict())
-        if isinstance(value, Enum):
-            return value.value
-        if isinstance(value, list):
-            return [JsonText._to_jsonable(v) for v in value]
-        if isinstance(value, dict):
-            return {k: JsonText._to_jsonable(v) for k, v in value.items()}
-        return value
-
-    def process_bind_param(self, value, dialect):
-        if value is not None:
-            return json.dumps(self._to_jsonable(value), ensure_ascii=False)
-        return value
-
-    def process_result_value(self, value, dialect):
-        if value is not None:
-            data = json.loads(value)
-            if isinstance(data, list):
-                converted = []
-                for item in data:
-                    if isinstance(item, dict):
-                        try:
-                            converted.append(StorybookPage(**item))
-                            continue
-                        except Exception:
-                            pass
-                    converted.append(item)
-                return converted
-            return data
-        return value
-
-
-__all__ = ["Storybook", "StorybookPage", "StorybookStatus", "Storyboard"]
+__all__ = ["Storybook", "StorybookStatus"]
 
 
 # Storybook 状态字面量类型
 StorybookStatus = Literal["init", "creating", "updating", "finished", "error", "terminated"]
 
-
-class Storyboard(TypedDict):
-    scene: str       # 场景环境
-    characters: str  # 人物与动作
-    shot: str        # 景别构图
-    color: str       # 色调氛围
-    lighting: str    # 光线
-
-
-class StorybookPage(BaseModel):
-    text: str
-    image_url: str
-    storyboard: Optional[Storyboard] = None
-    page_type: PageType = PageType.CONTENT  # 页面类型：封面、封底、内页，默认内页
 
 class Storybook(Base):
     """绘本表"""
@@ -105,8 +48,14 @@ class Storybook(Base):
     aspect_ratio: Mapped[AspectRatio] = mapped_column(String(16), default=AspectRatio.RATIO_16_9, nullable=False)  # 图片比例
     image_size: Mapped[ImageSize] = mapped_column(String(8), default=ImageSize.SIZE_1K, nullable=False)  # 图片尺寸
 
-    # 页面内容（JSON格式存储多个页面）
-    pages: Mapped[list[StorybookPage] | None] = mapped_column(JsonText, nullable=True)  # 页面列表
+    # 页面列表（通过 Page 表关联，按 page_index 排序）
+    pages: Mapped[list["Page"]] = relationship(
+        "Page",
+        back_populates="storybook",
+        order_by="Page.page_index",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
 
     # 绘本状态: init-初始化, creating-生成中, updating-更新中, finished-完成, error-错误
     status: Mapped[StorybookStatus] = mapped_column(String(32), default="init", index=True)
@@ -119,4 +68,3 @@ class Storybook(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False
     )  # 更新时间
-

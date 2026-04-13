@@ -45,6 +45,15 @@ class PageType(str, Enum):
     CONTENT = "content"   # 内页（默认）
 
 
+class LayerType(str, Enum):
+    """图层类型"""
+    TEXT = "text"              # 文字图层
+    DRAW = "draw"              # 绘画图层
+    IMAGE = "image"            # 插入图片图层
+    STICKER = "sticker"        # 贴纸图层（预留）
+    ADJUSTMENT = "adjustment"  # 调整图层（亮度/对比度等，预留）
+
+
 class StoryType(str, Enum):
     """故事类型"""
     FAIRY_TALE = "fairy_tale"       # 童话

@@ -9,17 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
-from app.models.storybook import Storybook, StorybookPage, Storyboard
+from app.models.storybook import Storybook
+from app.schemas.page import StorybookPage
 from app.models.user import User
 from app.models.enums import CliType, AspectRatio, ImageSize, PageType, StoryType, Language, AgeGroup
 from app.services.storybook_service import (
     get_storybook,
-    update_storybook_pages,
+    get_storybook_status,
     list_storybooks as list_storybooks_service,
     generate_edited_image,
-    save_page_content,
-    delete_page,
-    reorder_pages,
     insert_pages_async,
     run_insert_pages_background,
     terminate_storybook,
@@ -39,8 +37,8 @@ INSUFFICIENT_POINTS_CODE = "INSUFFICIENT_POINTS"
 
 
 # ============ Schemas ============
-class StorybookPageResponse(BaseModel):
-    """绘本页面响应"""
+class PageResponse(BaseModel):
+    """绘本页面响应（用于列表展示）"""
     text: Optional[str] = Field(None, description="页面文本")
     image_url: Optional[str] = Field(None, description="图片URL")
     page_type: Optional[str] = Field(None, description="页面类型")
@@ -56,7 +54,7 @@ class StorybookResponse(BaseModel):
     title: str
     description: Optional[str]
     creator: str
-    pages: Optional[List[StorybookPageResponse]]
+    pages: Optional[List[PageResponse]]
     status: str
     error_message: Optional[str] = None
     instruction: Optional[str] = None
@@ -78,7 +76,7 @@ class StorybookListResponse(BaseModel):
     status: str
     is_public: bool
     created_at: str
-    pages: Optional[List[StorybookPageResponse]] = None
+    pages: Optional[List[PageResponse]] = None
     cli_type: Optional[CliType]
     aspect_ratio: Optional[AspectRatio]
     image_size: Optional[ImageSize]
@@ -93,17 +91,6 @@ class EditImageRequest(BaseModel):
     image_to_edit: str = Field(..., description="要编辑的图片 URL 或 base64 data URL")
     referenced_image: Optional[str] = Field(None, description="参考图片 URL 或 base64 data URL（可选）")
     storybook_id: int = Field(..., description="绘本ID，用于获取模型、清晰度、图片比例等配置")
-
-
-class SavePageRequest(BaseModel):
-    """直接保存页面内容请求"""
-    text: str = Field(..., description="页面文字")
-    image_url: str = Field(..., description="图片 URL 或 base64 data URL")
-
-
-class ReorderPagesRequest(BaseModel):
-    """重新排序页面请求"""
-    order: List[int] = Field(..., description="原页面下标的新排列，例如 [2,0,1]")
 
 
 class InsertPagesRequest(BaseModel):
@@ -135,6 +122,14 @@ class TerminateResponse(BaseModel):
     """中止响应"""
     success: bool
     message: str
+
+
+class StorybookStatusResponse(BaseModel):
+    """绘本状态响应（轻量，不包含 pages）"""
+    id: int
+    status: str
+    error_message: Optional[str] = None
+    updated_at: Optional[str] = None
 
 
 class GenerateCoverRequest(BaseModel):
@@ -381,6 +376,20 @@ async def list_storybooks(
     return response_data
 
 
+@router.get("/{storybook_id}/status", response_model=StorybookStatusResponse)
+async def get_storybook_status_endpoint(
+    storybook_id: int,
+):
+    """获取绘本状态（轻量接口，不查询 pages，适合高频轮询）"""
+    result = await get_storybook_status(storybook_id)
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="绘本不存在"
+        )
+    return result
+
+
 @router.get("/{storybook_id}", response_model=StorybookResponse)
 async def get_storybook_endpoint(
     storybook_id: int,
@@ -395,20 +404,6 @@ async def get_storybook_endpoint(
             detail="绘本不存在"
         )
 
-    return storybook
-
-
-@router.patch("/{storybook_id}/pages/reorder", response_model=StorybookResponse)
-async def reorder_pages_endpoint(
-    storybook_id: int,
-    req: ReorderPagesRequest,
-    current_user: User = Depends(get_current_user),
-):
-    """重新排列页面顺序，返回更新后的绘本。"""
-    try:
-        storybook = await reorder_pages(storybook_id, req.order)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     return storybook
 
 
@@ -472,40 +467,6 @@ async def update_public_status_endpoint(
             detail=f"更新公开状态时发生错误: {str(e)}"
         )
 
-
-
-@router.put("/{storybook_id}/pages/{page_index}", response_model=StorybookPageResponse)
-async def save_page_endpoint(
-    storybook_id: int,
-    page_index: int,
-    req: SavePageRequest,
-    current_user: User = Depends(get_current_user),
-):
-    """直接保存页面内容（文字 + 图片 URL），不触发 AI 生成。"""
-    try:
-        saved = await save_page_content(storybook_id, page_index, req.text, req.image_url)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    return StorybookPageResponse(
-        text=saved.text,
-        image_url=saved.image_url,
-        page_type=saved.page_type,
-        storyboard=dict(saved.storyboard) if saved.storyboard else None,
-    )
-
-
-@router.delete("/{storybook_id}/pages/{page_index}", response_model=StorybookResponse)
-async def delete_page_endpoint(
-    storybook_id: int,
-    page_index: int,
-    current_user: User = Depends(get_current_user),
-):
-    """删除指定页（至少保留 1 页），返回更新后的绘本。"""
-    try:
-        storybook = await delete_page(storybook_id, page_index)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    return storybook
 
 
 @router.post("/{storybook_id}/pages/insert", status_code=status.HTTP_202_ACCEPTED, response_model=InsertPageAsyncResponse)

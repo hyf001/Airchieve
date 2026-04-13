@@ -14,7 +14,7 @@ from volcenginesdkarkruntime import Ark
 from app.core.config import settings
 from app.core.utils.logger import get_logger
 from app.services.llm_cli import LLMClientBase, LLMError
-from app.models.storybook import Storyboard, StorybookPage
+from app.models.page import Storyboard, Page
 from app.models.template import Template
 from app.models.enums import PageType, StoryType, Language, AgeGroup
 
@@ -467,7 +467,7 @@ class DoubaoCli(LLMClientBase):
 
     async def create_insertion_story_and_storyboard(
         self,
-        pages: List[StorybookPage],
+        pages: List[Page],
         insert_position: int,
         count: int,
         instruction: str,
@@ -623,8 +623,6 @@ class DoubaoCli(LLMClientBase):
 
         prompt = (
             f"根据以下编辑指令，生成修改后的插画：{instruction}\n\n"
-            f"尽可能保留原始构图和风格，仅应用所请求的具体修改。"
-            f"全出血电影感插画，图片中不要出现任何文字或字母。"
         )
         size = _resolve_image_size(aspect_ratio, image_size)
 
@@ -636,7 +634,7 @@ class DoubaoCli(LLMClientBase):
             ref_desc_parts.append("第1张图片是原始插画，请在此基础上进行编辑修改。")
         if referenced_image:
             input_images.append(referenced_image)
-            ref_desc_parts.append(f"第{len(input_images)}张图片是风格参考，用于风格或角色参考。")
+            ref_desc_parts.append(f"第{len(input_images)}张图片是用户上传的参考图片。")
 
         if ref_desc_parts:
             prompt += "\n\n【参考图片说明】" + " ".join(ref_desc_parts)
@@ -673,7 +671,6 @@ class DoubaoCli(LLMClientBase):
             f"书名：{title}\n"
             f"封面描述：{cover_text}\n\n"
             f"要求：\n"
-            f"- 全出血电影感封面构图\n"
             f"- 书名应以装饰性艺术字体的形式呈现\n"
             f"- 温暖、吸引人的氛围，适合儿童绘本封面\n"
             f"- 图片中除书名外不要出现其他文字或字母"

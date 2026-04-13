@@ -3,13 +3,14 @@
  * 处理绘本列表和单个绘本的加载
  */
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   getStorybook,
+  getStorybookStatus,
   listStorybooks,
-  Storybook,
   StorybookListItem,
+  StorybookStatusResult,
 } from '@/services/storybookService';
 import { UseEditorStateReturn } from './useEditorState';
 import { usePolling } from './usePolling';
@@ -40,45 +41,28 @@ export function useStorybookLoader({
 }: UseStorybookLoaderProps) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const prevPagesLengthRef = useRef<number>(0);
-  const prevCompletedSetRef = useRef<Set<number>>(new Set());
 
   // ========== 轮询配置 ==========
-  const handlePollResult = useCallback((book: Storybook) => {
-    const pages = book.pages ?? [];
-    const newCount = pages.length;
-    if (newCount > prevPagesLengthRef.current) {
-      toast({ title: `第 ${newCount} 页已生成 ✓` });
-      setCurrentPageIndex(newCount - 1);
-    } else {
-      // 检测已有页面是否新完成（获得了图片）
-      let newCompletedIndex = -1;
-      for (let i = pages.length - 1; i >= 0; i--) {
-        if (pages[i].image_url && !prevCompletedSetRef.current.has(i)) {
-          newCompletedIndex = i;
-          break;
-        }
-      }
-      if (newCompletedIndex >= 0) {
-        setCurrentPageIndex(newCompletedIndex);
-      }
-    }
-    prevPagesLengthRef.current = newCount;
-    // 记录当前已完成（有图片）的页面
-    prevCompletedSetRef.current = new Set(
-      pages.map((p, i) => (p.image_url ? i : -1)).filter(i => i >= 0)
-    );
-    setCurrentStorybook(book);
-    updateStorybookInList(book.id, { status: book.status });
+  const handlePollResult = useCallback(async (result: StorybookStatusResult) => {
+    updateStorybookInList(result.id, { status: result.status });
 
-    if (book.status === 'error' && book.error_message) {
-      toast({ title: '生成失败', description: book.error_message, variant: 'destructive' });
+    if (result.status === 'error' && result.error_message) {
+      toast({ title: '生成失败', description: result.error_message, variant: 'destructive' });
     }
 
-    return { stop: TERMINAL_STATUSES.has(book.status) };
-  }, [setCurrentStorybook, updateStorybookInList, setCurrentPageIndex, toast]);
+    if (TERMINAL_STATUSES.has(result.status)) {
+      // 终态时拉取完整数据
+      try {
+        const book = await getStorybook(result.id);
+        setCurrentStorybook(book);
+      } catch { /* 轮询已结束，忽略 */ }
+      return { stop: true };
+    }
 
-  const { start: startPolling, stop: stopPolling } = usePolling(getStorybook, handlePollResult);
+    return { stop: false };
+  }, [setCurrentStorybook, updateStorybookInList, toast]);
+
+  const { start: startPolling, stop: stopPolling } = usePolling(getStorybookStatus, handlePollResult);
 
   // ========== 加载绘本列表 ==========
   const loadStorybookList = useCallback(async () => {
@@ -102,10 +86,6 @@ export function useStorybookLoader({
 
     try {
       const book = await getStorybook(id);
-      prevPagesLengthRef.current = book.pages?.length ?? 0;
-      prevCompletedSetRef.current = new Set(
-        (book.pages ?? []).map((p, i) => (p.image_url ? i : -1)).filter(i => i >= 0)
-      );
       setCurrentStorybook(book);
       updateStorybookInList(id, { status: book.status });
 
