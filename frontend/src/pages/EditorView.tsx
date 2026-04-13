@@ -143,11 +143,11 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
     if (!editorState.currentStorybook || editorState.isTerminating) return;
 
     try {
-      const res = await terminateStorybook(editorState.currentStorybook.id);
-      toast({ title: res.message || '已中止' });
+      await terminateStorybook(editorState.currentStorybook.id);
+      toast({ title: '已中止' });
       stopPolling();
-      editorState.setCurrentStorybook({ ...editorState.currentStorybook, status: 'terminated' });
-      editorState.updateStorybookInList(editorState.currentStorybook.id, { status: 'terminated' });
+      // 重新加载绘本数据，确保页面状态同步（移除"生成中"的未完成页面）
+      await loadStorybook(editorState.currentStorybook.id);
     } catch (err) {
       toast({
         variant: 'destructive',
@@ -443,6 +443,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                 pages={editorState.pages}
                 currentIndex={editorState.currentPageIndex}
                 onIndexChange={handlePageChange}
+                isTerminated={editorState.currentStorybook?.status === 'terminated'}
               />
 
               {/* 画布区域 */}

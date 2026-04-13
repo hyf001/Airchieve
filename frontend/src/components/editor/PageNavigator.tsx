@@ -9,12 +9,14 @@ interface PageNavigatorProps {
   pages: StorybookPage[];
   currentIndex: number;
   onIndexChange: (index: number) => void;
+  isTerminated?: boolean;
 }
 
 export const PageNavigator: React.FC<PageNavigatorProps> = ({
   pages,
   currentIndex,
   onIndexChange,
+  isTerminated,
 }) => {
   if (pages.length === 0) {
     return (
@@ -55,6 +57,7 @@ export const PageNavigator: React.FC<PageNavigatorProps> = ({
             index={idx}
             isActive={currentIndex === idx}
             onClick={() => onIndexChange(idx)}
+            isTerminated={isTerminated}
           />
         ))}
       </div>
@@ -67,9 +70,10 @@ interface PageThumbnailProps {
   index: number;
   isActive: boolean;
   onClick: () => void;
+  isTerminated?: boolean;
 }
 
-const PageThumbnail: React.FC<PageThumbnailProps> = ({ page, index, isActive, onClick }) => {
+const PageThumbnail: React.FC<PageThumbnailProps> = ({ page, index, isActive, onClick, isTerminated }) => {
   const pageTypeLabel =
     page.page_type === 'cover'
       ? '封面'
@@ -92,6 +96,13 @@ const PageThumbnail: React.FC<PageThumbnailProps> = ({ page, index, isActive, on
           alt={pageTypeLabel}
           className="w-full h-full object-cover"
         />
+      ) : isTerminated ? (
+        <div className="w-full h-full bg-slate-100 flex flex-col items-center justify-center gap-2">
+          <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          <span className="text-slate-400 text-[10px]">未生成</span>
+        </div>
       ) : (
         <div className="w-full h-full bg-slate-100 flex flex-col items-center justify-center gap-2">
           <div className="w-5 h-5 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" />
