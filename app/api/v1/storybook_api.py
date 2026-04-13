@@ -39,6 +39,7 @@ INSUFFICIENT_POINTS_CODE = "INSUFFICIENT_POINTS"
 # ============ Schemas ============
 class PageResponse(BaseModel):
     """绘本页面响应（用于列表展示）"""
+    id: int
     text: Optional[str] = Field(None, description="页面文本")
     image_url: Optional[str] = Field(None, description="图片URL")
     page_type: Optional[str] = Field(None, description="页面类型")
@@ -130,6 +131,8 @@ class StorybookStatusResponse(BaseModel):
     status: str
     error_message: Optional[str] = None
     updated_at: Optional[str] = None
+    total_pages: int = 0
+    completed_pages: int = 0
 
 
 class GenerateCoverRequest(BaseModel):

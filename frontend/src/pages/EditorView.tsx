@@ -13,6 +13,7 @@ import {
   generateCover,
   savePage,
   InsufficientPointsError,
+  getPageDetail,
 } from '../services/storybookService';
 import { useToast } from '@/hooks/use-toast';
 
@@ -233,12 +234,30 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
   };
 
   useEffect(() => {
-    // 只在页面索引变化时重新初始化历史记录
+    // 只在页面索引变化时从后台获取最新页面详情并初始化历史记录
     if (editorState.pages.length > 0 && editorState.currentPageIndex >= 0 && editorState.currentPageIndex !== prevPageIndexRef.current) {
-      const currentPage = editorState.pages[editorState.currentPageIndex];
-      setHistoryState({
-        history: [{ image_url: currentPage.image_url, text: currentPage.text || '' }],
-        index: 0,
+      const page = editorState.pages[editorState.currentPageIndex];
+      // 从后台获取最新页面详情
+      getPageDetail(page.id).then(detail => {
+        // 更新当前页面的数据到 storybook state
+        editorState.setCurrentStorybook({
+          ...editorState.currentStorybook!,
+          pages: editorState.pages.map((p, i) =>
+            i === editorState.currentPageIndex
+              ? { ...p, image_url: detail.image_url, text: detail.text, storyboard: detail.storyboard }
+              : p
+          ),
+        });
+        setHistoryState({
+          history: [{ image_url: detail.image_url, text: detail.text || '' }],
+          index: 0,
+        });
+      }).catch(() => {
+        // 接口失败时用本地数据兜底
+        setHistoryState({
+          history: [{ image_url: page.image_url, text: page.text || '' }],
+          index: 0,
+        });
       });
       prevPageIndexRef.current = editorState.currentPageIndex;
     }

@@ -381,7 +381,9 @@ async def get_storybook(storybook_id: int) -> Optional[Storybook]:
 
 
 async def get_storybook_status(storybook_id: int) -> Optional[dict]:
-    """查询绘本状态，不关联查询 pages"""
+    """查询绘本状态和页面进度，不加载 page 对象"""
+    from sqlalchemy import func as sa_func
+
     async with async_session_maker() as session:
         result = await session.execute(
             select(
@@ -394,11 +396,25 @@ async def get_storybook_status(storybook_id: int) -> Optional[dict]:
         row = result.one_or_none()
         if row is None:
             return None
+
+        # 轻量 COUNT 查询页面进度
+        total = (await session.execute(
+            select(sa_func.count()).select_from(Page).where(Page.storybook_id == storybook_id)
+        )).scalar_one()
+        completed = (await session.execute(
+            select(sa_func.count()).select_from(Page).where(
+                Page.storybook_id == storybook_id,
+                Page.image_url != "",
+            )
+        )).scalar_one()
+
         return {
             "id": row.id,
             "status": row.status,
             "error_message": row.error_message,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            "total_pages": total,
+            "completed_pages": completed,
         }
 
 

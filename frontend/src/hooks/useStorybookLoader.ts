@@ -3,7 +3,7 @@
  * 处理绘本列表和单个绘本的加载
  */
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   getStorybook,
@@ -41,10 +41,18 @@ export function useStorybookLoader({
 }: UseStorybookLoaderProps) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const prevCompletedRef = useRef<number>(0);
 
   // ========== 轮询配置 ==========
   const handlePollResult = useCallback(async (result: StorybookStatusResult) => {
     updateStorybookInList(result.id, { status: result.status });
+
+    // 检测新增完成的页面
+    if (result.completed_pages > prevCompletedRef.current) {
+      toast({ title: `第 ${result.completed_pages} 页已生成 ✓` });
+      setCurrentPageIndex(result.completed_pages - 1);
+    }
+    prevCompletedRef.current = result.completed_pages;
 
     if (result.status === 'error' && result.error_message) {
       toast({ title: '生成失败', description: result.error_message, variant: 'destructive' });
@@ -56,11 +64,12 @@ export function useStorybookLoader({
         const book = await getStorybook(result.id);
         setCurrentStorybook(book);
       } catch { /* 轮询已结束，忽略 */ }
+      prevCompletedRef.current = 0;
       return { stop: true };
     }
 
     return { stop: false };
-  }, [setCurrentStorybook, updateStorybookInList, toast]);
+  }, [setCurrentStorybook, updateStorybookInList, setCurrentPageIndex, toast]);
 
   const { start: startPolling, stop: stopPolling } = usePolling(getStorybookStatus, handlePollResult);
 

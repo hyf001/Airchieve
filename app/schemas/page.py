@@ -48,7 +48,7 @@ class PageCreate(BaseModel):
     image_url: str = ""
     text: str = ""
     page_type: str = "content"
-    storyboard: Optional[str] = None
+    storyboard: Optional[Storyboard] = None
 
 
 class TextUpdate(BaseModel):
@@ -66,7 +66,7 @@ class PageResponse(BaseModel):
     image_url: str
     text: str
     page_type: str
-    storyboard: Optional[str] = None
+    storyboard: Optional[Storyboard] = None
     created_at: datetime
     updated_at: datetime
 

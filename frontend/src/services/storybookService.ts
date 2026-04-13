@@ -31,6 +31,7 @@ export type ImageSize = "1k" | "2k" | "4k";
 export type PageType = "cover" | "content" | "back_cover";
 
 export interface StorybookPage {
+  id: number;
   text: string;
   image_url: string;
   storyboard?: {
@@ -41,6 +42,26 @@ export interface StorybookPage {
     lighting: string;
   } | null;
   page_type?: PageType;
+}
+
+export interface StorybookLayer {
+  id: number;
+  page_id: number;
+  layer_type: string;
+  layer_index: number;
+  visible: boolean;
+  locked: boolean;
+  content: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StorybookPageWithLayers extends StorybookPage {
+  storybook_id: number;
+  page_index: number;
+  created_at: string;
+  updated_at: string;
+  layers: StorybookLayer[];
 }
 
 export interface Storybook {
@@ -246,6 +267,8 @@ export interface StorybookStatusResult {
   status: StorybookStatus;
   error_message?: string | null;
   updated_at?: string | null;
+  total_pages: number;
+  completed_pages: number;
 }
 
 export const getStorybookStatus = async (storybookId: number): Promise<StorybookStatusResult> => {
@@ -255,6 +278,20 @@ export const getStorybookStatus = async (storybookId: number): Promise<Storybook
     throw new Error(`Failed to get storybook status: ${res.status}`);
   }
   return res.json() as Promise<StorybookStatusResult>;
+};
+
+/**
+ * 获取单个页面详情（含图层列表）
+ */
+const PAGE_API_BASE = "/api/v1/pages";
+
+export const getPageDetail = async (pageId: number): Promise<StorybookPageWithLayers> => {
+  const res = await fetch(`${PAGE_API_BASE}/${pageId}`);
+  if (!res.ok) {
+    if (res.status === 404) throw new Error("页面不存在");
+    throw new Error(`Failed to get page detail: ${res.status}`);
+  }
+  return res.json() as Promise<StorybookPageWithLayers>;
 };
 
 /**
