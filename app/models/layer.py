@@ -82,7 +82,7 @@ class Layer(Base):
         default=False,
     )
 
-    # 图层数据（JSON，结构随 layer_type 不同）
+    # 图层数据（JSON，结构由 layer_type 决定，在 schema/service 层校验）
     content: Mapped[Optional[Any]] = mapped_column(
         JsonColumn,
         nullable=True,

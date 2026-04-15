@@ -1,23 +1,22 @@
 /**
  * 文字工具叠加层组件
  * 在画布上显示可交互的文字图层
+ * 基于 TextLayerViewModel 渲染
  */
 
-import React, { useEffect, useState, useRef } from 'react';
-import { TextLayer } from './types';
+import React from 'react';
+import { TextLayerViewModel } from './types';
 
 interface TextEditOverlayProps {
-  layers: TextLayer[];
-  selectedLayerId: string | null;
+  layers: TextLayerViewModel[];
+  selectedLayerId: number | null;
   isDragging: boolean;
   isResizing: boolean;
-  canvasRef?: React.RefObject<HTMLDivElement>;  // 画布容器，用于限制自动应用范围
-  onLayerMouseDown: (e: React.MouseEvent, layer: TextLayer) => void;
-  onResizeMouseDown: (e: React.MouseEvent, layer: TextLayer, handle: string) => void;
-  onTextChange: (id: string, text: string) => void;
-  onDeleteLayer: (id: string) => void;
-  onLayerClick: (id: string) => void;
-  onApply?: () => void;
+  onLayerMouseDown: (e: React.MouseEvent, layer: TextLayerViewModel) => void;
+  onResizeMouseDown: (e: React.MouseEvent, layer: TextLayerViewModel, handle: string) => void;
+  onTextChange: (id: number, text: string) => void;
+  onDeleteLayer: (id: number) => void;
+  onLayerClick: (id: number) => void;
 }
 
 /**
@@ -28,45 +27,12 @@ export const TextEditOverlay: React.FC<TextEditOverlayProps> = ({
   selectedLayerId,
   isDragging,
   isResizing,
-  canvasRef,
   onLayerMouseDown,
   onResizeMouseDown,
   onTextChange,
   onDeleteLayer,
   onLayerClick,
-  onApply,
 }) => {
-  // 防止重复触发的标记
-  const isApplyingRef = useRef(false);
-
-  // 点击画布空白区域自动应用（仅在画布容器内）
-  useEffect(() => {
-    if (!canvasRef?.current) return;
-
-    const handleClickOutside = (e: MouseEvent) => {
-      if (isDragging || isResizing || isApplyingRef.current) return;
-
-      const target = e.target as HTMLElement;
-
-      // 只处理画布容器内的点击
-      if (!canvasRef.current!.contains(target)) return;
-
-      const isClickOnLayer = target.closest('[data-text-layer]');
-
-      if (!isClickOnLayer && selectedLayerId && onApply) {
-        isApplyingRef.current = true;
-        onApply();
-        setTimeout(() => {
-          isApplyingRef.current = false;
-        }, 500);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isDragging, isResizing, selectedLayerId, onApply, canvasRef]);
   const resizeHandles = ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'];
 
   const getHandleCursor = (handle: string): string => {
@@ -137,14 +103,16 @@ export const TextEditOverlay: React.FC<TextEditOverlayProps> = ({
                   height: '100%',
                   fontSize: `${layer.fontSize}px`,
                   fontFamily: layer.fontFamily,
-                  color: layer.color,
-                  fontWeight: layer.bold ? 'bold' : 'normal',
+                  color: layer.fontColor,
+                  fontWeight: layer.fontWeight,
                   textShadow: '0 1px 4px rgba(0,0,0,0.85)',
-                  background: 'transparent',
+                  background: layer.backgroundColor || 'transparent',
+                  borderRadius: `${layer.borderRadius}px`,
                   border: 'none',
                   outline: 'none',
                   resize: 'none',
-                  textAlign: 'center',
+                  textAlign: layer.textAlign as CanvasTextAlign,
+                  lineHeight: layer.lineHeight,
                   cursor: 'text',
                   overflow: 'hidden',
                   whiteSpace: 'pre-wrap',
@@ -161,10 +129,13 @@ export const TextEditOverlay: React.FC<TextEditOverlayProps> = ({
                   justifyContent: 'center',
                   fontSize: `${layer.fontSize}px`,
                   fontFamily: layer.fontFamily,
-                  color: layer.color,
-                  fontWeight: layer.bold ? 'bold' : 'normal',
+                  color: layer.fontColor,
+                  fontWeight: layer.fontWeight,
                   textShadow: '0 1px 4px rgba(0,0,0,0.85)',
-                  textAlign: 'center',
+                  textAlign: layer.textAlign as CanvasTextAlign,
+                  lineHeight: layer.lineHeight,
+                  background: layer.backgroundColor || 'transparent',
+                  borderRadius: `${layer.borderRadius}px`,
                   wordBreak: 'break-word',
                   pointerEvents: 'none',
                   whiteSpace: 'pre-wrap',

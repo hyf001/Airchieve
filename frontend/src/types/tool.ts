@@ -54,16 +54,10 @@ export interface ToolComponentProps {
   baseImageUrl: string;
   onPageEdited: (newImageUrl: string) => void;
   containerRef?: React.RefObject<HTMLDivElement>;
-  // 通��回调（用于 TextEditTool、DrawTool 等）
+  // 通用回调
   onApply?: (imageUrl: string) => void;
   // AIEditTool 特定字段
   onImageGenerated?: (imageUrl: string, instruction: string) => void;
-  // TextEditTool 特定字段
-  initialText?: string;
-  onLayersChange?: (layers: any[]) => void;
-  onSelectedLayerChange?: (layerId: string | null) => void;
-  onIsDraggingChange?: (isDragging: boolean) => void;
-  onIsResizingChange?: (isResizing: boolean) => void;
   // DrawTool 特定字段
   onStrokesChange?: (strokes: any[]) => void;
   onCurrentStrokeChange?: (stroke: any[] | null) => void;
@@ -130,22 +124,6 @@ export interface Stroke {
   points: StrokePoint[];
   color: string;
   size: number;
-}
-
-/**
- * 文字图层类型（TextEditTool 使用）
- */
-export interface TextLayer {
-  id: string;
-  text: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  fontSize: number;
-  fontFamily: string;
-  color: string;
-  bold: boolean;
 }
 
 /**

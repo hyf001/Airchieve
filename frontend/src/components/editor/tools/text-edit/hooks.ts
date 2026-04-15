@@ -1,19 +1,28 @@
 /**
  * 文字工具 Hooks
- * 管理文字图层的状态和操作
+ * 管理文字图层的状态和操作，支持本地编辑 + 后端持久化
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { TextLayer, TextEditState } from './types';
+import { StorybookLayer, createLayer as createLayerAPI, updateLayer as updateLayerAPI, deleteLayer as deleteLayerAPI } from '@/services/storybookService';
+import { TextLayerViewModel, toTextLayerViewModel, toTextLayerContent } from './types';
+
+interface UseTextLayersParams {
+  pageId: number;
+  initialLayers: StorybookLayer[];
+}
 
 /**
  * 文字图层管理 Hook
+ * - 本地即时更新视图
+ * - 防抖/事件驱动持久化到后端
  */
-export const useTextLayers = (initialText?: string) => {
-  const [layers, setLayers] = useState<TextLayer[]>([]);
-  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
+export const useTextLayers = ({ pageId, initialLayers }: UseTextLayersParams) => {
+  const [layers, setLayers] = useState<TextLayerViewModel[]>([]);
+  const [selectedLayerId, setSelectedLayerId] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
 
   // 调整大小的状态
   const resizeStartRef = useRef<{
@@ -30,55 +39,145 @@ export const useTextLayers = (initialText?: string) => {
     y: number;
   } | null>(null);
 
-  // 标记是否已经初始化过（使用 ref 避免组件重新挂载时重置）
-  const hasInitializedRef = useRef(false);
+  // 防抖定时器
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 当切换到文字工具且当前没有文字图层时，自动添加页面文字
-  useEffect(() => {
-    // 只在第一次初始化时创建，避免删除后又重新创建
-    if (!hasInitializedRef.current && layers.length === 0 && initialText !== undefined) {
-      const text = initialText?.trim() || '请输入文字';  // 使用初始文字或默认文字
-      const newLayer: TextLayer = {
-        id: `text-${Date.now()}`,
-        text: text,
-        x: 100,  // 调整默认位置
-        y: 100,
-        width: 300,
-        height: 60,
-        fontSize: 24,  // 增大默认字体
-        fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif',
-        color: '#000000',  // 改为黑色以便在浅色图片上显示
-        bold: false,
-      };
-      console.log('Creating initial text layer:', newLayer);
-      setLayers([newLayer]);
-      setSelectedLayerId(newLayer.id);
-      hasInitializedRef.current = true;  // 标记已初始化
+  // 上一次已知 pageId，用于判断切页
+  const prevPageIdRef = useRef<number>(pageId);
+
+  // 刷新防抖：切页或卸载��立即提交
+  const flushDebounce = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
     }
-  }, [initialText, layers.length]);
+  }, []);
+
+  // 卸载时清除防抖
+  useEffect(() => {
+    return () => {
+      flushDebounce();
+    };
+  }, [flushDebounce]);
+
+  // 当 initialLayers 或 pageId 变化时重置本地 state
+  useEffect(() => {
+    if (pageId !== prevPageIdRef.current) {
+      // 切页：先 flush，再重置
+      flushDebounce();
+      prevPageIdRef.current = pageId;
+      setSelectedLayerId(null);
+      setIsDragging(false);
+      setIsResizing(false);
+    }
+
+    const textLayers = initialLayers
+      .filter(l => l.layer_type === 'text')
+      .map(toTextLayerViewModel);
+    setLayers(textLayers);
+
+    // 如果之前没有选中图层且有文字图层，选中第一个
+    if (selectedLayerId === null && textLayers.length > 0) {
+      setSelectedLayerId(textLayers[0].id);
+    }
+  }, [initialLayers, pageId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 持久化单个图层到后端（直接调用，不防抖）
+  const persistLayer = useCallback(async (layer: TextLayerViewModel) => {
+    try {
+      await updateLayerAPI(pageId, layer.id, {
+        content: toTextLayerContent(layer) as unknown as Record<string, unknown>,
+      });
+    } catch (err) {
+      console.error('持久化文字图层失败:', err);
+    }
+  }, [pageId]);
+
+  // 防抖持久化
+  const debouncedPersist = useCallback((layer: TextLayerViewModel, delay = 300) => {
+    flushDebounce();
+    debounceTimerRef.current = setTimeout(() => {
+      persistLayer(layer);
+    }, delay);
+  }, [flushDebounce, persistLayer]);
 
   // 图层操作方法
-  const updateLayer = useCallback((id: string, updates: Partial<TextLayer>) => {
-    setLayers(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
-  }, []);
+  const updateLayer = useCallback((id: number, updates: Partial<TextLayerViewModel>) => {
+    setLayers(prev => {
+      const updated = prev.map(l => l.id === id ? { ...l, ...updates } : l);
+      const changed = updated.find(l => l.id === id);
+      if (changed) {
+        // 判断是否需要防抖（文字输入）还是立即持久化（属性变更）
+        if ('text' in updates && Object.keys(updates).length === 1) {
+          debouncedPersist(changed);
+        } else {
+          // 属性变更立即持久化
+          persistLayer(changed);
+        }
+      }
+      return updated;
+    });
+  }, [debouncedPersist, persistLayer]);
 
-  const deleteLayer = useCallback((id: string) => {
-    console.log('Deleting layer:', id);
+  const deleteLayer = useCallback(async (id: number) => {
     setLayers(prev => prev.filter(l => l.id !== id));
-    setSelectedLayerId(null);
-  }, []);
+    if (selectedLayerId === id) {
+      setSelectedLayerId(null);
+    }
+    try {
+      await deleteLayerAPI(pageId, id);
+    } catch (err) {
+      console.error('删除文字图层失败:', err);
+    }
+  }, [pageId, selectedLayerId]);
 
-  const selectLayer = useCallback((id: string | null) => {
+  const selectLayer = useCallback((id: number | null) => {
     setSelectedLayerId(id);
   }, []);
 
-  const handleTextChange = useCallback((id: string, text: string) => {
+  const handleTextChange = useCallback((id: number, text: string) => {
     updateLayer(id, { text });
   }, [updateLayer]);
 
-  const handleLayerMouseDown = useCallback((e: React.MouseEvent, layer: TextLayer) => {
+  // 新增文字图层
+  const addLayer = useCallback(async () => {
+    if (isAdding) return;
+    setIsAdding(true);
+    try {
+      const existingTextLayers = initialLayers.filter(l => l.layer_type === 'text');
+      const newLayer = await createLayerAPI(pageId, {
+        layer_type: 'text',
+        layer_index: existingTextLayers.length,
+        content: {
+          x: 100,
+          y: 100,
+          width: 300,
+          height: 60,
+          text: '请输入文字',
+          fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif',
+          fontSize: 24,
+          fontColor: '#000000',
+          fontWeight: 'normal',
+          textAlign: 'center',
+          lineHeight: 1.2,
+          backgroundColor: '',
+          borderRadius: 0,
+          rotation: 0,
+        },
+      });
+      const viewModel = toTextLayerViewModel(newLayer);
+      setLayers(prev => [...prev, viewModel]);
+      setSelectedLayerId(viewModel.id);
+    } catch (err) {
+      console.error('创建文字图层失败:', err);
+    } finally {
+      setIsAdding(false);
+    }
+  }, [pageId, initialLayers, isAdding]);
+
+  // 拖拽开始
+  const handleLayerMouseDown = useCallback((e: React.MouseEvent, layer: TextLayerViewModel) => {
     e.stopPropagation();
-    console.log('Layer mouse down:', layer.id);
     setSelectedLayerId(layer.id);
     setIsDragging(true);
     dragStartRef.current = {
@@ -87,9 +186,9 @@ export const useTextLayers = (initialText?: string) => {
     };
   }, []);
 
-  const handleResizeMouseDown = useCallback((e: React.MouseEvent, layer: TextLayer, handle: string) => {
+  // 缩放开始
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent, layer: TextLayerViewModel, handle: string) => {
     e.stopPropagation();
-    console.log('Resize mouse down:', layer.id, 'handle:', handle);
     setSelectedLayerId(layer.id);
     setIsResizing(true);
     resizeHandleRef.current = handle;
@@ -101,20 +200,28 @@ export const useTextLayers = (initialText?: string) => {
     };
   }, []);
 
+  // 拖拽/缩放结束后持久化
+  const handleInteractionEnd = useCallback((updatedLayer: TextLayerViewModel) => {
+    persistLayer(updatedLayer);
+  }, [persistLayer]);
+
   return {
     layers,
     selectedLayerId,
     isDragging,
     isResizing,
-    resizeStartRef,  // 返回 ref 对象本身
-    resizeHandleRef,  // 返回 ref 对象本身
-    dragStartRef,  // 返回 ref 对象本身
+    isAdding,
+    resizeStartRef,
+    resizeHandleRef,
+    dragStartRef,
+    addLayer,
     updateLayer,
     deleteLayer,
     selectLayer,
     handleTextChange,
     handleLayerMouseDown,
     handleResizeMouseDown,
+    handleInteractionEnd,
     setIsDragging,
     setIsResizing,
   };

@@ -2,7 +2,6 @@
  * EditorView - 绘本编辑器主组件
  * 经过模块化重构的版本
  */
-
 import React, { useEffect, useState, useRef } from 'react';
 import {
   deleteStorybook,
@@ -14,6 +13,7 @@ import {
   savePage,
   InsufficientPointsError,
   getPageDetail,
+  StorybookLayer,
 } from '../services/storybookService';
 import { useToast } from '@/hooks/use-toast';
 
@@ -25,7 +25,7 @@ import {
   EditorCanvas,
 } from '../components/editor';
 import { ToolPanelWithSelector } from '../components/editor/tools/ToolPanel';
-import { TextEditToolRef, TextLayer } from '../components/editor/tools/text-edit/types';
+import { TextEditToolRef, TextLayerViewModel } from '../components/editor/tools/text-edit/types';
 import { AIEditRef } from '../components/editor/tools/ai-edit/types';
 
 // 导入对话框组件
@@ -61,13 +61,17 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
   // ========== 工具栏状态 ==========
   const toolManager = useToolManager();
 
-  // ========== 文字图层状态 ==========
+  // ========== 文字工具状态 ==========
   const textEditToolRef = useRef<TextEditToolRef>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const [textLayers, setTextLayers] = useState<TextLayer[]>([]);
-  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
+  // text-edit 内部管理的状态，由 text-edit Panel 通过回调通知 EditorCanvas
+  const [textLayers, setTextLayers] = useState<TextLayerViewModel[]>([]);
+  const [textSelectedLayerId, setTextSelectedLayerId] = useState<number | null>(null);
+  const [textIsDragging, setTextIsDragging] = useState(false);
+  const [textIsResizing, setTextIsResizing] = useState(false);
+
+  // ========== 页面图层状态（唯一可信数据源） ==========
+  const [pageLayers, setPageLayers] = useState<StorybookLayer[]>([]);
 
   // ========== AI改图工具状态 ==========
   const aiEditToolRef = useRef<AIEditRef>(null);
@@ -248,12 +252,15 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
               : p
           ),
         });
+        // 存储页面图层（唯一可信数据源）
+        setPageLayers(detail.layers || []);
         setHistoryState({
           history: [{ image_url: detail.image_url, text: detail.text || '' }],
           index: 0,
         });
       }).catch(() => {
         // 接口失败时用本地数据兜底
+        setPageLayers([]);
         setHistoryState({
           history: [{ image_url: page.image_url, text: page.text || '' }],
           index: 0,
@@ -396,6 +403,9 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
     return () => clearInterval(id);
   }, [editorState.download.isDownloading]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 当前页面 ID（用于传给 text-edit）
+  const currentPageId = editorState.pages[editorState.currentPageIndex]?.id;
+
   // ========== 渲染 ==========
   return (
     <>
@@ -464,143 +474,12 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                 activeTool={toolManager.activeTool}
                 textEditToolRef={textEditToolRef}
                 textLayers={textLayers}
-                selectedLayerId={selectedLayerId}
-                isDragging={isDragging}
-                isResizing={isResizing}
+                selectedLayerId={textSelectedLayerId}
+                isDragging={textIsDragging}
+                isResizing={textIsResizing}
                 canvasRef={canvasRef}
                 aiEditToolRef={aiEditToolRef}
                 isAIEditGenerating={isAIEditGenerating}
-                onTextApply={async () => {
-                  // 自动应用文字（本地预览，不保存到后端）
-                  if (textEditToolRef.current && textLayers.length > 0) {
-                    // 使用 OSS 代理 URL
-                    const originalUrl = editorState.pages[editorState.currentPageIndex]?.image_url || '';
-                    const imageUrl = originalUrl.replace('https://airchieve.oss-cn-beijing.aliyuncs.com', '/api/v1/oss');
-
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    if (!ctx) return;
-
-                    const img = new Image();
-                    img.crossOrigin = 'anonymous';
-                    img.src = imageUrl;
-
-                    await new Promise<void>((resolve) => {
-                      img.onload = () => resolve();
-                      img.onerror = () => {
-                        console.error('Failed to load image for text apply');
-                        resolve();
-                      };
-                    });
-
-                    if (img.naturalWidth === 0 || img.naturalHeight === 0) {
-                      console.error('Image dimensions invalid');
-                      return;
-                    }
-
-                    const container = canvasRef.current;
-                    if (!container) {
-                      console.error('Container not found');
-                      return;
-                    }
-                    const containerRect = container.getBoundingClientRect();
-                    const containerWidth = containerRect.width;
-
-                    canvas.width = img.naturalWidth;
-                    canvas.height = img.naturalHeight;
-                    const scale = img.naturalWidth / containerWidth;
-
-                    ctx.drawImage(img, 0, 0);
-                    ctx.lineCap = 'round';
-                    ctx.lineJoin = 'round';
-
-                    textLayers.forEach(layer => {
-                      const scaledX = layer.x * scale;
-                      const scaledY = layer.y * scale;
-                      const scaledFontSize = layer.fontSize * scale;
-                      const scaledWidth = layer.width * scale;
-                      const scaledHeight = layer.height * scale;
-
-                      ctx.font = `${layer.bold ? 'bold' : ''} ${scaledFontSize}px ${layer.fontFamily}`;
-                      ctx.fillStyle = layer.color;
-                      ctx.textAlign = 'center';
-                      ctx.textBaseline = 'middle';
-
-                      ctx.shadowColor = 'rgba(0,0,0,0.85)';
-                      ctx.shadowBlur = 4 * scale;
-                      ctx.shadowOffsetX = 0;
-                      ctx.shadowOffsetY = 1 * scale;
-
-                      const text = layer.text || '';
-                      const wrapText = (text: string, maxWidth: number): string[] => {
-                        const paragraphs = text.split('\n');
-                        const lines: string[] = [];
-                        paragraphs.forEach(paragraph => {
-                          const words = paragraph.split('');
-                          let currentLine = '';
-                          for (let i = 0; i < words.length; i++) {
-                            const testLine = currentLine + words[i];
-                            const metrics = ctx.measureText(testLine);
-                            const testWidth = metrics.width;
-                            if (testWidth > maxWidth && currentLine.length > 0) {
-                              lines.push(currentLine);
-                              currentLine = words[i];
-                            } else {
-                              currentLine = testLine;
-                            }
-                          }
-                          if (currentLine) {
-                            lines.push(currentLine);
-                          }
-                        });
-                        return lines;
-                      };
-
-                      const padding = scaledFontSize * 0.5;
-                      const maxWidth = scaledWidth - padding * 2;
-                      const lines = wrapText(text, maxWidth);
-                      const lineHeight = scaledFontSize * 1.2;
-                      const totalHeight = lines.length * lineHeight;
-                      const startY = scaledY + (scaledHeight - totalHeight) / 2 + lineHeight / 2;
-
-                      lines.forEach((line, index) => {
-                        const x = scaledX + scaledWidth / 2;
-                        const y = startY + index * lineHeight;
-                        ctx.fillText(line, x, y);
-                      });
-                    });
-
-                    const resultImageUrl = canvas.toDataURL('image/png');
-                    console.log('文字自动应用完成:', resultImageUrl);
-
-                    // 更新本地页面图片（不保存到后端）
-                    const updatedPages = [...editorState.pages];
-                    updatedPages[editorState.currentPageIndex] = {
-                      ...updatedPages[editorState.currentPageIndex],
-                      image_url: resultImageUrl,
-                    };
-
-                    // 更新当前绘本的 pages
-                    editorState.setCurrentStorybook({
-                      ...editorState.currentStorybook!,
-                      pages: updatedPages,
-                    });
-
-                    // 记录到历史
-                    pushHistory(resultImageUrl, editorState.pages[editorState.currentPageIndex]?.text || '');
-
-                    toast({
-                      title: '文字已应用（本地预览）',
-                      description: '点击保存按钮将更改保存到服务器',
-                    });
-
-                    // 清空文字图层，防止重复应用
-                    setTextLayers([]);
-
-                    // 取消选中工具
-                    toolManager.setActiveTool(null);
-                  }
-                }}
               />
 
               {/* 右侧：工具栏 */}
@@ -635,13 +514,14 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                 setActiveTool={toolManager.setActiveTool}
                 containerRef={canvasRef}
                 textEditToolRef={textEditToolRef}
+                pageId={currentPageId}
+                initialLayers={pageLayers}
                 aiEditToolRef={aiEditToolRef}
                 onIsAIEditGeneratingChange={setIsAIEditGenerating}
-                onLayersChange={setTextLayers}
-                onSelectedLayerChange={setSelectedLayerId}
-                onIsDraggingChange={setIsDragging}
-                onIsResizingChange={setIsResizing}
-                initialText={editorState.pages[editorState.currentPageIndex]?.text || ''}
+                onTextLayersChange={setTextLayers}
+                onTextSelectedLayerChange={setTextSelectedLayerId}
+                onTextIsDraggingChange={setTextIsDragging}
+                onTextIsResizingChange={setTextIsResizing}
               />
             </>
           )}

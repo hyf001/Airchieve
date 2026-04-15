@@ -10,6 +10,7 @@ description: 用于 AIrchieve 项目的代码审查技能。当用户要求 revi
 1. 逻辑是否正确
 2. 是否尽量使用了项目已有的公共模块
 3. 代码分层和结构是否合规
+4. 类型是否尽量收窄，是否避免使用万能类型
 
 ## 什么时候使用
 
@@ -64,6 +65,24 @@ description: 用于 AIrchieve 项目的代码审查技能。当用户要求 revi
 - 前端页面、组件、hooks、service 是否各司其职
 - 是否有跨层直连、职责混乱、目录放错或循环依赖倾向
 - API 文件里是否堆积了过多 `BaseModel` 请求/响应对象；如果这些对象已经服务于完整业务域而不是极小范围局部场景，应下沉到 `app/schemas/`
+
+### 4. 类型收窄情况
+
+重点检查：
+
+- 是否出现了不必要的 `any`
+- 是否把本应有结构的数据写成 `unknown`
+- 是否把本应区分类型的数据写成万能 `dict` / `Record<string, unknown>` / `Record<string, any>`
+- Python 里是否出现了过宽的 `Any`、`Optional[Any]`
+- JSON / content / payload 类型是否本可按 `layer_type`、`kind`、`type` 等字段收窄却没有收窄
+- 泛型、联合类型、TypedDict、Pydantic schema、TS interface 是否可以进一步表达真实约束
+
+优先指出这些会带来真实风险的情况：
+
+- 掩盖字段拼写错误
+- 让调用方无法获得正确提示
+- 让运行时非法数据混入核心流程
+- 让后续重构和 review 难以判断真实结构
 
 ## AIrchieve 项目中已有的公共模块和工具
 
@@ -120,6 +139,10 @@ review 时要主动检查新代码是否应该复用这些现成能力。
 - `app/models/enums.py`
   - 已有枚举应优先复用，避免重复写字符串常量
 
+- `app/schemas/`
+  - 已有 Pydantic schema、TypedDict、内容结构定义优先复用
+  - 不要把本应结构化的请求、响应、content 长期保留为 `Any`
+
 ### Web 前端公共能力
 
 - `frontend/src/services/`
@@ -145,6 +168,10 @@ review 时要主动检查新代码是否应该复用这些现成能力。
 
 - `frontend/src/components/ui/`
   - 通用 UI 组件优先复用，不要重复造基础按钮、弹窗、输入框
+
+- `frontend/src/types/`
+  - 共享类型应优先集中管理
+  - 不要因为图省事把跨模块数据长期写成 `any`
 
 ### 小程序公共能力
 
@@ -215,7 +242,11 @@ review 时要主动检查新代码是否应该复用这些现成能力。
 5. 特别检查 API 文件里的 schema 定义数量和复杂度：
    - 少量、只在单个超小接口内使用的局部模型，可以暂时留在 API 文件
    - 一旦形成成组 request/response model，或被多个接口共享，就应建议迁移到 `app/schemas/`
-6. 只输出真正成立的问题。
+6. 特别检查类型是否过宽：
+   - TypeScript 中的 `any`、过宽 `unknown`、`Record<string, any>`、无必要的 `as any`
+   - Python 中的 `Any`、`Optional[Any]`、过宽 `dict`
+   - 本应按判别字段收窄的联合类型、content 类型、payload 类型
+7. 只输出真正成立的问题。
 
 ## 输出规则
 
@@ -227,13 +258,14 @@ review 时要主动检查新代码是否应该复用这些现成能力。
 
 每条 finding 尽量写清楚：
 
-- 问题类别：逻辑 / 复用 / 分层
+- 问题类别：逻辑 / 复用 / 分层 / 类型
 - 严重程度
 - 文件路径和行号
 - 问题描述
 - 为什么不符合当前项目
 - 如果适用，指出应该复用的现有模块
 - 如果属于分层问题，尽量指出应该迁移到哪个目录或模块，例如 `app/schemas/storybook.py`
+- 如果属于类型问题，尽量指出可以收窄成什么，例如 union、TypedDict、Pydantic schema、具体 interface
 
 推荐格式：
 
@@ -250,6 +282,7 @@ No findings.
 ## 审查原则
 
 - 优先 correctness，其次复用和结构
+- 遇到 `any` / `Any` / 过宽 `unknown` 时，默认检查是否真的不可避免
 - 不为了显得严格而硬凑问题
 - 不把纯风格问题当成主要 finding
 - 不模糊表述，要尽量定位到具体模块和层级

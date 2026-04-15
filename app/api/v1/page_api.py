@@ -102,13 +102,19 @@ async def create_layer(page_id: int, data: LayerCreate, db: AsyncSession = Depen
             status_code=status.HTTP_404_NOT_FOUND,
             detail="页面不存在",
         )
-    return await layer_service.create_layer(db, page_id, data)
+    try:
+        return await layer_service.create_layer(db, page_id, data)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
 
 @router.patch("/{page_id}/layers/{layer_id}", response_model=LayerResponse)
 async def update_layer(page_id: int, layer_id: int, data: LayerUpdate, db: AsyncSession = Depends(get_db)):
     """更新图层（位置、内容、显隐等）"""
-    layer = await layer_service.update_layer(db, layer_id, data)
+    try:
+        layer = await layer_service.update_layer(db, layer_id, data)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     if layer is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

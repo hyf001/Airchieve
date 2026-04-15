@@ -3,7 +3,7 @@ Page & Layer Schemas
 页面与图层的 Pydantic 请求/响应模型
 """
 from datetime import datetime
-from typing import Any, Optional, TypedDict
+from typing import Optional, TypedDict, Union
 
 from pydantic import BaseModel, Field
 
@@ -82,6 +82,48 @@ class BaseImageUpdate(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Layer Content Schemas（按 layer_type 收窄 content 结构）
+# ---------------------------------------------------------------------------
+
+class TextLayerContent(BaseModel):
+    """文字图层内容"""
+    x: float
+    y: float
+    width: float
+    height: float
+    text: str = ""
+    fontFamily: str = '"PingFang SC", "Microsoft YaHei", sans-serif'
+    fontSize: float = 24
+    fontColor: str = "#000000"
+    fontWeight: str = "normal"          # "normal" | "bold"
+    textAlign: str = "center"
+    lineHeight: float = 1.2
+    backgroundColor: str = ""
+    borderRadius: float = 0
+    rotation: float = 0
+
+
+class DrawLayerContent(BaseModel):
+    """绘画图层内容"""
+    strokes: list[dict] = []
+
+
+class ImageLayerContent(BaseModel):
+    """图片图层内容"""
+    x: float = 0
+    y: float = 0
+    width: float = 100
+    height: float = 100
+    url: str = ""
+    rotation: float = 0
+    opacity: float = 1
+
+
+# 联合类型：content 字段的合法取值
+LayerContent = Union[TextLayerContent, DrawLayerContent, ImageLayerContent, dict]
+
+
+# ---------------------------------------------------------------------------
 # Layer Schemas
 # ---------------------------------------------------------------------------
 
@@ -89,7 +131,7 @@ class LayerCreate(BaseModel):
     """创建图层"""
     layer_type: str
     layer_index: int = 0
-    content: Optional[Any] = None
+    content: Optional[LayerContent] = None
 
 
 class LayerUpdate(BaseModel):
@@ -98,7 +140,7 @@ class LayerUpdate(BaseModel):
     layer_index: Optional[int] = None
     visible: Optional[bool] = None
     locked: Optional[bool] = None
-    content: Optional[Any] = None
+    content: Optional[LayerContent] = None
 
 
 class LayerResponse(BaseModel):
@@ -111,7 +153,7 @@ class LayerResponse(BaseModel):
     layer_index: int
     visible: bool
     locked: bool
-    content: Optional[Any] = None
+    content: Optional[LayerContent] = None
     created_at: datetime
     updated_at: datetime
 

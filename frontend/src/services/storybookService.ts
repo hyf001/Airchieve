@@ -44,14 +44,55 @@ export interface StorybookPage {
   page_type?: PageType;
 }
 
+// ============ Layer Types ============
+
+export type LayerType = 'text' | 'draw' | 'image' | 'sticker' | 'adjustment';
+
+export interface TextLayerContent {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  text: string;
+  fontFamily: string;
+  fontSize: number;
+  fontColor: string;
+  fontWeight: 'normal' | 'bold';
+  textAlign: string;
+  lineHeight: number;
+  backgroundColor: string;
+  borderRadius: number;
+  rotation: number;
+}
+
+export interface DrawLayerContent {
+  strokes: Array<{
+    points: number[][];
+    color: string;
+    brushSize: number;
+  }>;
+}
+
+export interface ImageLayerContent {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  url: string;
+  rotation: number;
+  opacity: number;
+}
+
+export type LayerContent = TextLayerContent | DrawLayerContent | ImageLayerContent | Record<string, unknown>;
+
 export interface StorybookLayer {
   id: number;
   page_id: number;
-  layer_type: string;
+  layer_type: LayerType;
   layer_index: number;
   visible: boolean;
   locked: boolean;
-  content: unknown;
+  content: LayerContent | null;
   created_at: string;
   updated_at: string;
 }
@@ -494,6 +535,93 @@ export const updateStorybookPublicStatus = async (
   if (!res.ok) {
     await handleWriteError(res, `Failed to update public status: ${res.status}`);
   }
+};
+
+// ============ Layer API Functions ============
+
+interface LayerCreateData {
+  layer_type: string;
+  layer_index?: number;
+  content?: Record<string, unknown>;
+}
+
+interface LayerUpdateData {
+  layer_type?: string;
+  layer_index?: number;
+  visible?: boolean;
+  locked?: boolean;
+  content?: Record<string, unknown>;
+}
+
+/**
+ * 创建图层
+ */
+export const createLayer = async (
+  pageId: number,
+  data: LayerCreateData
+): Promise<StorybookLayer> => {
+  const res = await fetch(`${PAGE_API_BASE}/${pageId}/layers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    await handleWriteError(res, '创建图层失败');
+  }
+  return res.json() as Promise<StorybookLayer>;
+};
+
+/**
+ * 更新图层
+ */
+export const updateLayer = async (
+  pageId: number,
+  layerId: number,
+  data: LayerUpdateData
+): Promise<StorybookLayer> => {
+  const res = await fetch(`${PAGE_API_BASE}/${pageId}/layers/${layerId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    await handleWriteError(res, '更新图层失败');
+  }
+  return res.json() as Promise<StorybookLayer>;
+};
+
+/**
+ * 删除图层
+ */
+export const deleteLayer = async (
+  pageId: number,
+  layerId: number
+): Promise<void> => {
+  const res = await fetch(`${PAGE_API_BASE}/${pageId}/layers/${layerId}`, {
+    method: 'DELETE',
+    headers: { ...getAuthHeaders() },
+  });
+  if (!res.ok) {
+    await handleWriteError(res, '删除图层失败');
+  }
+};
+
+/**
+ * 批量调整图层顺序
+ */
+export const reorderLayers = async (
+  pageId: number,
+  layerIds: number[]
+): Promise<StorybookLayer[]> => {
+  const res = await fetch(`${PAGE_API_BASE}/${pageId}/layers/reorder`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify({ layer_ids: layerIds }),
+  });
+  if (!res.ok) {
+    await handleWriteError(res, '调整图层顺序失败');
+  }
+  return res.json() as Promise<StorybookLayer[]>;
 };
 
 /**

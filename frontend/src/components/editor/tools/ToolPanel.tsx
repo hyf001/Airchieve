@@ -6,6 +6,8 @@ import React, { useEffect } from 'react';
 import { getToolConfig } from './ToolRegistry';
 import { ToolComponentProps, ToolId } from '@/types/tool';
 import { ToolSelector } from './ToolSelector';
+import { StorybookLayer } from '@/services/storybookService';
+import { TextLayerViewModel } from './text-edit/types';
 
 interface ToolPanelProps {
   storybookId: string | number;
@@ -15,14 +17,15 @@ interface ToolPanelProps {
   activeTool: ToolId;
   // 文字工具相关 props
   textEditToolRef?: React.RefObject<any>;
+  pageId?: number;
+  initialLayers?: StorybookLayer[];
   // AI改图工具相关 props
   aiEditToolRef?: React.RefObject<any>;
   onIsAIEditGeneratingChange?: (isGenerating: boolean) => void;
-  onLayersChange?: (layers: any[]) => void;
-  onSelectedLayerChange?: (layerId: string | null) => void;
-  onIsDraggingChange?: (isDragging: boolean) => void;
-  onIsResizingChange?: (isResizing: boolean) => void;
-  initialText?: string;
+  onTextLayersChange?: (layers: TextLayerViewModel[]) => void;
+  onTextSelectedLayerChange?: (layerId: number | null) => void;
+  onTextIsDraggingChange?: (isDragging: boolean) => void;
+  onTextIsResizingChange?: (isResizing: boolean) => void;
 }
 
 /**
@@ -36,13 +39,14 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
   containerRef,
   activeTool,
   textEditToolRef,
+  pageId,
+  initialLayers = [],
   aiEditToolRef,
   onIsAIEditGeneratingChange,
-  onLayersChange,
-  onSelectedLayerChange,
-  onIsDraggingChange,
-  onIsResizingChange,
-  initialText,
+  onTextLayersChange,
+  onTextSelectedLayerChange,
+  onTextIsDraggingChange,
+  onTextIsResizingChange,
 }) => {
 
   const toolConfig = getToolConfig(activeTool as any);
@@ -74,15 +78,13 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
     // TextEditTool 特殊处理
     if (activeTool === 'text') {
       return {
-        ...baseProps,
-        onApply: onPageEdited,
-        initialText: initialText || '',
-        onLayersChange,
-        onSelectedLayerChange,
-        onIsDraggingChange,
-        onIsResizingChange,
-        ref: textEditToolRef,
-        containerRef,  // 添加 containerRef
+        pageId: pageId ?? 0,
+        initialLayers,
+        containerRef,
+        onLayersChange: onTextLayersChange,
+        onSelectedLayerChange: onTextSelectedLayerChange,
+        onIsDraggingChange: onTextIsDraggingChange,
+        onIsResizingChange: onTextIsResizingChange,
       };
     }
 
@@ -139,14 +141,15 @@ interface ToolPanelWithSelectorProps {
   setActiveTool: (toolId: ToolId) => void;
   // 文字工具相关 props
   textEditToolRef?: React.RefObject<any>;
+  pageId?: number;
+  initialLayers?: StorybookLayer[];
   // AI改图工具相关 props
   aiEditToolRef?: React.RefObject<any>;
   onIsAIEditGeneratingChange?: (isGenerating: boolean) => void;
-  onLayersChange?: (layers: any[]) => void;
-  onSelectedLayerChange?: (layerId: string | null) => void;
-  onIsDraggingChange?: (isDragging: boolean) => void;
-  onIsResizingChange?: (isResizing: boolean) => void;
-  initialText?: string;
+  onTextLayersChange?: (layers: TextLayerViewModel[]) => void;
+  onTextSelectedLayerChange?: (layerId: number | null) => void;
+  onTextIsDraggingChange?: (isDragging: boolean) => void;
+  onTextIsResizingChange?: (isResizing: boolean) => void;
 }
 
 export const ToolPanelWithSelector: React.FC<ToolPanelWithSelectorProps> = ({
@@ -159,13 +162,14 @@ export const ToolPanelWithSelector: React.FC<ToolPanelWithSelectorProps> = ({
   activeTool,
   setActiveTool,
   textEditToolRef,
+  pageId,
+  initialLayers = [],
   aiEditToolRef,
   onIsAIEditGeneratingChange,
-  onLayersChange,
-  onSelectedLayerChange,
-  onIsDraggingChange,
-  onIsResizingChange,
-  initialText,
+  onTextLayersChange,
+  onTextSelectedLayerChange,
+  onTextIsDraggingChange,
+  onTextIsResizingChange,
 }) => {
   return (
     <div className="w-80 shrink-0 border-l border-slate-200 bg-white flex flex-col overflow-hidden">
@@ -189,13 +193,14 @@ export const ToolPanelWithSelector: React.FC<ToolPanelWithSelectorProps> = ({
         containerRef={containerRef}
         activeTool={activeTool}
         textEditToolRef={textEditToolRef}
+        pageId={pageId}
+        initialLayers={initialLayers}
         aiEditToolRef={aiEditToolRef}
         onIsAIEditGeneratingChange={onIsAIEditGeneratingChange}
-        onLayersChange={onLayersChange}
-        onSelectedLayerChange={onSelectedLayerChange}
-        onIsDraggingChange={onIsDraggingChange}
-        onIsResizingChange={onIsResizingChange}
-        initialText={initialText}
+        onTextLayersChange={onTextLayersChange}
+        onTextSelectedLayerChange={onTextSelectedLayerChange}
+        onTextIsDraggingChange={onTextIsDraggingChange}
+        onTextIsResizingChange={onTextIsResizingChange}
       />
     </div>
   );

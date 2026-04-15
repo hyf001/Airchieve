@@ -1,5 +1,5 @@
 /**
- * 编辑器画布组�� - 主要内容区域
+ * 编辑器画布组件 - 主要内容区域
  */
 
 import React, { useState } from 'react';
@@ -11,7 +11,7 @@ import { getAspectRatioClass } from '@/utils/editorUtils';
 import { STATUS_TEXT_MAP } from '@/constants/editor';
 import { Storybook } from '@/services/storybookService';
 import { TextEditOverlay } from './tools/text-edit/Overlay';
-import { TextEditToolRef, TextLayer } from './tools/text-edit/types';
+import { TextEditToolRef, TextLayerViewModel } from './tools/text-edit/types';
 import { AIEditOverlay } from './tools/ai-edit/Overlay';
 import { AIEditRef } from './tools/ai-edit/types';
 import { ToolId } from '@/types/tool';
@@ -33,12 +33,11 @@ interface EditorCanvasProps {
   // 文字工具相关 props
   activeTool?: ToolId;
   textEditToolRef?: React.RefObject<TextEditToolRef>;
-  textLayers?: TextLayer[];
-  selectedLayerId?: string | null;
+  textLayers?: TextLayerViewModel[];
+  selectedLayerId?: number | null;
   isDragging?: boolean;
   isResizing?: boolean;
   canvasRef?: React.RefObject<HTMLDivElement>;
-  onTextApply?: () => void;  // 新增：文字自动应用回调
   // AI改图工具相关 props
   aiEditToolRef?: React.RefObject<AIEditRef>;
   isAIEditGenerating?: boolean;
@@ -65,7 +64,6 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
   isDragging = false,
   isResizing = false,
   canvasRef: externalCanvasRef,
-  onTextApply,
   aiEditToolRef,
   isAIEditGenerating = false,
 }) => {
@@ -129,7 +127,6 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
           isDragging,
           isResizing,
           canvasRef,
-          onTextApply,
           aiEditToolRef,
           isAIEditGenerating,
         })}
@@ -155,12 +152,11 @@ interface RenderContentProps {
   setPlaybackSpeed: (speed: string) => void;
   activeTool?: ToolId;
   textEditToolRef?: React.RefObject<TextEditToolRef>;
-  textLayers?: TextLayer[];
-  selectedLayerId?: string | null;
+  textLayers?: TextLayerViewModel[];
+  selectedLayerId?: number | null;
   isDragging?: boolean;
   isResizing?: boolean;
   canvasRef?: React.RefObject<HTMLDivElement>;
-  onTextApply?: () => void;
   aiEditToolRef?: React.RefObject<AIEditRef>;
   isAIEditGenerating?: boolean;
 }
@@ -187,7 +183,6 @@ function renderContent({
   isDragging = false,
   isResizing = false,
   canvasRef,
-  onTextApply,
   aiEditToolRef,
   isAIEditGenerating = false,
 }: RenderContentProps): React.ReactNode {
@@ -280,7 +275,6 @@ function renderContent({
               <TextEditOverlay
                 layers={textLayers}
                 selectedLayerId={selectedLayerId}
-                canvasRef={canvasRef}
                 onLayerMouseDown={(e, layer) => {
                   textEditToolRef.current?.handleLayerMouseDown(e, layer);
                 }}
@@ -298,7 +292,6 @@ function renderContent({
                 }}
                 isDragging={isDragging}
                 isResizing={isResizing}
-                onApply={onTextApply}
               />
             )}
             {/* AI改图叠加层 */}

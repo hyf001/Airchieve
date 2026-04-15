@@ -4,12 +4,55 @@ Layer Service
 """
 from typing import Optional
 
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.layer import Layer
 from app.models.enums import LayerType
-from app.schemas.page import LayerCreate, LayerUpdate, LayerReorder
+from app.schemas.page import (
+    LayerCreate,
+    LayerUpdate,
+    LayerReorder,
+    TextLayerContent,
+    DrawLayerContent,
+    ImageLayerContent,
+)
+
+# layer_type -> content schema 映射
+_CONTENT_SCHEMA_MAP = {
+    LayerType.TEXT: TextLayerContent,
+    LayerType.DRAW: DrawLayerContent,
+    LayerType.IMAGE: ImageLayerContent,
+}
+
+
+def _to_dict(content) -> Optional[dict]:
+    """将 content 统一转为 plain dict（Pydantic 模型 -> dict，dict 保持不变）。"""
+    if content is None:
+        return None
+    if isinstance(content, BaseModel):
+        return content.model_dump()
+    return content
+
+
+def _validate_content(layer_type: str, content) -> None:
+    """按 layer_type 校验 content 结构，校验失败抛 ValueError。"""
+    if content is None:
+        return
+    try:
+        lt = LayerType(layer_type)
+    except ValueError:
+        return  # 未知类型不校验
+    schema = _CONTENT_SCHEMA_MAP.get(lt)
+    if schema is None:
+        return  # 无对应 schema 的类型不校验
+    try:
+        schema.model_validate(content)
+    except ValidationError as e:
+        raise ValueError(
+            f"图层 content 与 layer_type={layer_type!r} 不匹配: {e}"
+        ) from e
 
 
 async def get_layer_by_id(session: AsyncSession, layer_id: int) -> Optional[Layer]:
@@ -46,13 +89,15 @@ async def get_layers_by_page_id(session: AsyncSession, page_id: int) -> list[dic
 
 async def create_layer(session: AsyncSession, page_id: int, data: LayerCreate) -> Layer:
     """创建图层"""
+    if data.content is not None:
+        _validate_content(data.layer_type, data.content)
     layer = Layer(
         page_id=page_id,
         layer_type=LayerType(data.layer_type),
         layer_index=data.layer_index,
         visible=True,
         locked=False,
-        content=data.content,
+        content=_to_dict(data.content),
     )
     session.add(layer)
     await session.flush()
@@ -75,7 +120,8 @@ async def update_layer(session: AsyncSession, layer_id: int, data: LayerUpdate) 
     if data.locked is not None:
         layer.locked = data.locked
     if data.content is not None:
-        layer.content = data.content
+        _validate_content(layer.layer_type if data.layer_type is None else data.layer_type, data.content)
+        layer.content = _to_dict(data.content)
 
     await session.flush()
     await session.refresh(layer)
