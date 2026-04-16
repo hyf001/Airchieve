@@ -9,12 +9,135 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 import ProgressCaterpillar from '@/components/ProgressCaterpillar';
 import { getAspectRatioClass } from '@/utils/editorUtils';
 import { STATUS_TEXT_MAP } from '@/constants/editor';
-import { Storybook } from '@/services/storybookService';
+import { Storybook, StorybookLayer, TextLayerContent, DrawLayerContent, ImageLayerContent } from '@/services/storybookService';
 import { TextEditOverlay } from './tools/text-edit/Overlay';
 import { TextEditToolRef, TextLayerViewModel } from './tools/text-edit/types';
 import { AIEditOverlay } from './tools/ai-edit/Overlay';
 import { AIEditRef } from './tools/ai-edit/types';
 import { ToolId } from '@/types/tool';
+
+/**
+ * 图层预览组件 - 在画布上只读渲染所有可见图层
+ * 当 text tool 激活时跳过 text 图层（由 TextEditOverlay 负责渲染，避免重影）
+ */
+const LayersPreview: React.FC<{ layers: StorybookLayer[]; activeTool?: ToolId }> = ({ layers, activeTool }) => {
+  const visibleLayers = layers
+    .filter(l => l.visible && l.content)
+    // text tool 激活时，text 图层由 TextEditOverlay 渲染，这里跳过避免重影
+    .filter(l => !(activeTool === 'text' && l.layer_type === 'text'))
+    .sort((a, b) => a.layer_index - b.layer_index);
+
+  if (visibleLayers.length === 0) return null;
+
+  return (
+    <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 2 }}>
+      {visibleLayers.map(layer => {
+        if (!layer.content) return null;
+
+        switch (layer.layer_type) {
+          case 'text': {
+            const c = layer.content as TextLayerContent;
+            return (
+              <div
+                key={layer.id}
+                style={{
+                  position: 'absolute',
+                  left: c.x,
+                  top: c.y,
+                  width: c.width,
+                  height: c.height,
+                  fontSize: `${c.fontSize}px`,
+                  fontFamily: c.fontFamily,
+                  color: c.fontColor,
+                  fontWeight: c.fontWeight,
+                  textShadow: '0 1px 4px rgba(0,0,0,0.85)',
+                  textAlign: c.textAlign as CanvasTextAlign,
+                  lineHeight: c.lineHeight,
+                  background: c.backgroundColor || 'transparent',
+                  borderRadius: `${c.borderRadius}px`,
+                  wordBreak: 'break-word',
+                  whiteSpace: 'pre-wrap',
+                  overflow: 'hidden',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {c.text}
+              </div>
+            );
+          }
+
+          case 'draw': {
+            const c = layer.content as DrawLayerContent;
+            const strokes = c.strokes ?? [];
+            if (strokes.length === 0) return null;
+            return (
+              <svg
+                key={layer.id}
+                className="absolute inset-0 w-full h-full"
+              >
+                {strokes.map((stroke, si) => {
+                  const points = stroke.points ?? [];
+                  if (points.length === 0) return null;
+                  if (points.length === 1) {
+                    return (
+                      <circle
+                        key={si}
+                        cx={points[0][0]}
+                        cy={points[0][1]}
+                        r={stroke.brushSize / 2}
+                        fill={stroke.color}
+                      />
+                    );
+                  }
+                  const pathData = points.reduce((acc, p, i) =>
+                    i === 0 ? `M ${p[0]} ${p[1]}` : `${acc} L ${p[0]} ${p[1]}`, '');
+                  return (
+                    <path
+                      key={si}
+                      d={pathData}
+                      stroke={stroke.color}
+                      strokeWidth={stroke.brushSize}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      fill="none"
+                    />
+                  );
+                })}
+              </svg>
+            );
+          }
+
+          case 'image': {
+            const c = layer.content as ImageLayerContent;
+            return (
+              <img
+                key={layer.id}
+                src={c.url}
+                alt=""
+                style={{
+                  position: 'absolute',
+                  left: c.x,
+                  top: c.y,
+                  width: c.width,
+                  height: c.height,
+                  opacity: c.opacity ?? 1,
+                  transform: c.rotation ? `rotate(${c.rotation}deg)` : undefined,
+                }}
+                className="object-contain"
+                draggable={false}
+              />
+            );
+          }
+
+          default:
+            return null;
+        }
+      })}
+    </div>
+  );
+};
 
 interface EditorCanvasProps {
   currentStorybook: Storybook | null;
@@ -41,6 +164,8 @@ interface EditorCanvasProps {
   // AI改图工具相关 props
   aiEditToolRef?: React.RefObject<AIEditRef>;
   isAIEditGenerating?: boolean;
+  // 图层数据
+  pageLayers?: StorybookLayer[];
 }
 
 export const EditorCanvas: React.FC<EditorCanvasProps> = ({
@@ -66,6 +191,7 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
   canvasRef: externalCanvasRef,
   aiEditToolRef,
   isAIEditGenerating = false,
+  pageLayers = [],
 }) => {
   const [playbackSpeed, setPlaybackSpeed] = useState('1.0x');
 
@@ -129,6 +255,7 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
           canvasRef,
           aiEditToolRef,
           isAIEditGenerating,
+          pageLayers,
         })}
       </div>
     </div>
@@ -159,6 +286,7 @@ interface RenderContentProps {
   canvasRef?: React.RefObject<HTMLDivElement>;
   aiEditToolRef?: React.RefObject<AIEditRef>;
   isAIEditGenerating?: boolean;
+  pageLayers?: StorybookLayer[];
 }
 
 function renderContent({
@@ -185,6 +313,7 @@ function renderContent({
   canvasRef,
   aiEditToolRef,
   isAIEditGenerating = false,
+  pageLayers = [],
 }: RenderContentProps): React.ReactNode {
   if (loading) {
     return <LoadingSpinner size={48} text="加载中..." className="py-8" />;
@@ -241,6 +370,15 @@ function renderContent({
           <div
             ref={canvasRef}
             className={`relative ${currentPage.image_url ? getAspectRatioClass(aspectRatio as any) : 'w-full h-full'} bg-slate-100 max-h-full`}
+            onMouseDown={(e) => {
+              // 点击画布空白区域时，取消选中文字图层
+              if (activeTool === 'text' && selectedLayerId !== null) {
+                const target = e.target as HTMLElement;
+                if (!target.closest('[data-text-layer]')) {
+                  textEditToolRef?.current?.selectLayer(null);
+                }
+              }
+            }}
           >
             {currentPage.image_url ? (
               <img
@@ -270,6 +408,8 @@ function renderContent({
                 )}
               </div>
             )}
+            {/* 图层预览 - 始终显示所有可见图层 */}
+            <LayersPreview layers={pageLayers} activeTool={activeTool} />
             {/* 文字图层叠加层 */}
             {activeTool === 'text' && textLayers.length > 0 && textEditToolRef?.current && (
               <TextEditOverlay

@@ -10,6 +10,7 @@ import { TextLayerViewModel, toTextLayerViewModel, toTextLayerContent } from './
 interface UseTextLayersParams {
   pageId: number;
   initialLayers: StorybookLayer[];
+  onPersisted?: () => void;
 }
 
 /**
@@ -17,7 +18,7 @@ interface UseTextLayersParams {
  * - 本地即时更新视图
  * - 防抖/事件驱动持久化到后端
  */
-export const useTextLayers = ({ pageId, initialLayers }: UseTextLayersParams) => {
+export const useTextLayers = ({ pageId, initialLayers, onPersisted }: UseTextLayersParams) => {
   const [layers, setLayers] = useState<TextLayerViewModel[]>([]);
   const [selectedLayerId, setSelectedLayerId] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -62,24 +63,24 @@ export const useTextLayers = ({ pageId, initialLayers }: UseTextLayersParams) =>
 
   // 当 initialLayers 或 pageId 变化时重置本地 state
   useEffect(() => {
-    if (pageId !== prevPageIdRef.current) {
-      // 切页：先 flush，再重置
+    const isPageSwitch = pageId !== prevPageIdRef.current;
+    if (isPageSwitch) {
+      // 切页：先 flush，再重置所有状态
       flushDebounce();
       prevPageIdRef.current = pageId;
       setSelectedLayerId(null);
       setIsDragging(false);
       setIsResizing(false);
+      // 立即清空图层，避免旧页面文字在新页面上短暂显示
+      setLayers([]);
+      return;
     }
 
+    // 同一页面内 initialLayers 变化时，更新图层
     const textLayers = initialLayers
       .filter(l => l.layer_type === 'text')
       .map(toTextLayerViewModel);
     setLayers(textLayers);
-
-    // 如果之前没有选中图层且有文字图层，选中第一个
-    if (selectedLayerId === null && textLayers.length > 0) {
-      setSelectedLayerId(textLayers[0].id);
-    }
   }, [initialLayers, pageId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 持久化单个图层到后端（直接调用，不防抖）
@@ -88,10 +89,11 @@ export const useTextLayers = ({ pageId, initialLayers }: UseTextLayersParams) =>
       await updateLayerAPI(pageId, layer.id, {
         content: toTextLayerContent(layer) as unknown as Record<string, unknown>,
       });
+      onPersisted?.();
     } catch (err) {
       console.error('持久化文字图层失败:', err);
     }
-  }, [pageId]);
+  }, [pageId, onPersisted]);
 
   // 防抖持久化
   const debouncedPersist = useCallback((layer: TextLayerViewModel, delay = 300) => {
@@ -126,28 +128,62 @@ export const useTextLayers = ({ pageId, initialLayers }: UseTextLayersParams) =>
     }
     try {
       await deleteLayerAPI(pageId, id);
+      onPersisted?.();
     } catch (err) {
       console.error('删除文字图层失败:', err);
     }
-  }, [pageId, selectedLayerId]);
+  }, [pageId, selectedLayerId, onPersisted]);
 
   const selectLayer = useCallback((id: number | null) => {
+    // 切换图层前，先提交当前选中的图层
+    if (selectedLayerId !== null && id !== selectedLayerId) {
+      flushDebounce();
+      setLayers(prev => {
+        const layer = prev.find(l => l.id === selectedLayerId);
+        if (layer) {
+          persistLayer(layer);
+        }
+        return prev;
+      });
+    }
     setSelectedLayerId(id);
-  }, []);
+  }, [selectedLayerId, flushDebounce, persistLayer]);
+
+  // 提交当前选中图层的编辑（供外部在切工具/切页/卸载时调用）
+  const commitCurrentEdits = useCallback(() => {
+    flushDebounce();
+    setLayers(prev => {
+      if (selectedLayerId === null) return prev;
+      const layer = prev.find(l => l.id === selectedLayerId);
+      if (layer) {
+        persistLayer(layer);
+      }
+      return prev;
+    });
+  }, [selectedLayerId, flushDebounce, persistLayer]);
+
+  // 组件卸载前提交
+  useEffect(() => {
+    return () => {
+      flushDebounce();
+    };
+  }, [flushDebounce]);
 
   const handleTextChange = useCallback((id: number, text: string) => {
-    updateLayer(id, { text });
-  }, [updateLayer]);
+    // 仅更新本地状态，不持久化（等取消选中时再持久化）
+    setLayers(prev => prev.map(l => l.id === id ? { ...l, text } : l));
+  }, []);
 
   // 新增文字图层
   const addLayer = useCallback(async () => {
     if (isAdding) return;
+    // 先提交当前选中图层的编辑，避免 refreshCurrentPage 冲掉未保存的本地修改
+    commitCurrentEdits();
     setIsAdding(true);
     try {
-      const existingTextLayers = initialLayers.filter(l => l.layer_type === 'text');
       const newLayer = await createLayerAPI(pageId, {
         layer_type: 'text',
-        layer_index: existingTextLayers.length,
+        layer_index: layers.length,
         content: {
           x: 100,
           y: 100,
@@ -168,12 +204,13 @@ export const useTextLayers = ({ pageId, initialLayers }: UseTextLayersParams) =>
       const viewModel = toTextLayerViewModel(newLayer);
       setLayers(prev => [...prev, viewModel]);
       setSelectedLayerId(viewModel.id);
+      onPersisted?.();
     } catch (err) {
       console.error('创建文字图层失败:', err);
     } finally {
       setIsAdding(false);
     }
-  }, [pageId, initialLayers, isAdding]);
+  }, [pageId, layers, isAdding, commitCurrentEdits, onPersisted]);
 
   // 拖拽开始
   const handleLayerMouseDown = useCallback((e: React.MouseEvent, layer: TextLayerViewModel) => {
@@ -222,6 +259,7 @@ export const useTextLayers = ({ pageId, initialLayers }: UseTextLayersParams) =>
     handleLayerMouseDown,
     handleResizeMouseDown,
     handleInteractionEnd,
+    commitCurrentEdits,
     setIsDragging,
     setIsResizing,
   };

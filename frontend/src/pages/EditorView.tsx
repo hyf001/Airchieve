@@ -2,7 +2,7 @@
  * EditorView - 绘本编辑器主组件
  * 经过模块化重构的版本
  */
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import {
   deleteStorybook,
   updateStorybookPublicStatus,
@@ -72,6 +72,40 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
 
   // ========== 页面图层状态（唯一可信数据源） ==========
   const [pageLayers, setPageLayers] = useState<StorybookLayer[]>([]);
+
+  // 刷新当前页面数据（与切页加载逻辑一致）
+  const refreshCurrentPage = useCallback(() => {
+    const page = editorState.pages[editorState.currentPageIndex];
+    if (!page) return;
+    getPageDetail(page.id).then(detail => {
+      editorState.setCurrentStorybook({
+        ...editorState.currentStorybook!,
+        pages: editorState.pages.map((p, i) =>
+          i === editorState.currentPageIndex
+            ? { ...p, image_url: detail.image_url, text: detail.text, storyboard: detail.storyboard }
+            : p
+        ),
+      });
+      setPageLayers(detail.layers || []);
+    }).catch(() => {});
+  }, [editorState.pages, editorState.currentPageIndex, editorState.currentStorybook, editorState.setCurrentStorybook]);
+
+  // ========== 编辑上下文退出时提交 ==========
+  const prevActiveToolRef = useRef(toolManager.activeTool);
+  // 切换工具前提交当前编辑
+  useEffect(() => {
+    if (prevActiveToolRef.current === 'text' && toolManager.activeTool !== 'text') {
+      textEditToolRef.current?.commitCurrentEdits();
+    }
+    prevActiveToolRef.current = toolManager.activeTool;
+  }, [toolManager.activeTool]);
+
+  // 组件卸载前提交
+  useEffect(() => {
+    return () => {
+      textEditToolRef.current?.commitCurrentEdits();
+    };
+  }, []);
 
   // ========== AI改图工具状态 ==========
   const aiEditToolRef = useRef<AIEditRef>(null);
@@ -207,6 +241,13 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
   // 当页面切换时，初始化历史记录
   const prevPageIndexRef = useRef<number>(-1);
 
+  // 安全切页：先提交当前编辑，再切换页面索引
+  const safeSwitchPage = useCallback((newIndex: number) => {
+    if (newIndex === editorState.currentPageIndex) return;
+    textEditToolRef.current?.commitCurrentEdits();
+    editorState.setCurrentPageIndex(newIndex);
+  }, [editorState.currentPageIndex, editorState.setCurrentPageIndex]);
+
   // 页面切换：有未保存修改时提示
   const handlePageChange = (newIndex: number) => {
     if (newIndex === editorState.currentPageIndex) return;
@@ -215,7 +256,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
       editorState.setDialogState('unsavedSwitch', true);
       pendingPageIndexRef.current = newIndex;
     } else {
-      editorState.setCurrentPageIndex(newIndex);
+      safeSwitchPage(newIndex);
     }
   };
 
@@ -225,7 +266,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
   const confirmPageSwitch = () => {
     const idx = pendingPageIndexRef.current;
     if (idx >= 0) {
-      editorState.setCurrentPageIndex(idx);
+      safeSwitchPage(idx);
       pendingPageIndexRef.current = -1;
     }
     editorState.setDialogState('unsavedSwitch', false);
@@ -467,7 +508,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                 error={editorState.error}
                 downloadProgress={editorState.download.progress}
                 isDownloading={editorState.download.isDownloading}
-                onPageIndexChange={editorState.setCurrentPageIndex}
+                onPageIndexChange={safeSwitchPage}
                 onTerminateClick={() => editorState.setDialogState('terminate', true)}
                 isTerminating={editorState.isTerminating}
                 onBack={onBack}
@@ -480,6 +521,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                 canvasRef={canvasRef}
                 aiEditToolRef={aiEditToolRef}
                 isAIEditGenerating={isAIEditGenerating}
+                pageLayers={pageLayers}
               />
 
               {/* 右侧：工具栏 */}
@@ -522,6 +564,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                 onTextSelectedLayerChange={setTextSelectedLayerId}
                 onTextIsDraggingChange={setTextIsDragging}
                 onTextIsResizingChange={setTextIsResizing}
+                onLayerPersisted={refreshCurrentPage}
               />
             </>
           )}

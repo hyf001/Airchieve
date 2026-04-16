@@ -26,6 +26,7 @@ interface ToolPanelProps {
   onTextSelectedLayerChange?: (layerId: number | null) => void;
   onTextIsDraggingChange?: (isDragging: boolean) => void;
   onTextIsResizingChange?: (isResizing: boolean) => void;
+  onLayerPersisted?: () => void;
 }
 
 /**
@@ -47,6 +48,7 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
   onTextSelectedLayerChange,
   onTextIsDraggingChange,
   onTextIsResizingChange,
+  onLayerPersisted,
 }) => {
 
   const toolConfig = getToolConfig(activeTool as any);
@@ -85,6 +87,7 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
         onSelectedLayerChange: onTextSelectedLayerChange,
         onIsDraggingChange: onTextIsDraggingChange,
         onIsResizingChange: onTextIsResizingChange,
+        onPersisted: onLayerPersisted,
       };
     }
 
@@ -150,6 +153,7 @@ interface ToolPanelWithSelectorProps {
   onTextSelectedLayerChange?: (layerId: number | null) => void;
   onTextIsDraggingChange?: (isDragging: boolean) => void;
   onTextIsResizingChange?: (isResizing: boolean) => void;
+  onLayerPersisted?: () => void;
 }
 
 export const ToolPanelWithSelector: React.FC<ToolPanelWithSelectorProps> = ({
@@ -170,6 +174,7 @@ export const ToolPanelWithSelector: React.FC<ToolPanelWithSelectorProps> = ({
   onTextSelectedLayerChange,
   onTextIsDraggingChange,
   onTextIsResizingChange,
+  onLayerPersisted,
 }) => {
   return (
     <div className="w-80 shrink-0 border-l border-slate-200 bg-white flex flex-col overflow-hidden">
@@ -201,6 +206,7 @@ export const ToolPanelWithSelector: React.FC<ToolPanelWithSelectorProps> = ({
         onTextSelectedLayerChange={onTextSelectedLayerChange}
         onTextIsDraggingChange={onTextIsDraggingChange}
         onTextIsResizingChange={onTextIsResizingChange}
+        onLayerPersisted={onLayerPersisted}
       />
     </div>
   );

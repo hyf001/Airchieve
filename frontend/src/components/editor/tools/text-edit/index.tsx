@@ -22,6 +22,7 @@ interface TextEditPanelProps {
   onSelectedLayerChange?: (layerId: number | null) => void;
   onIsDraggingChange?: (isDragging: boolean) => void;
   onIsResizingChange?: (isResizing: boolean) => void;
+  onPersisted?: () => void;
 }
 
 const TextEditPanel = forwardRef<TextEditToolRef, TextEditPanelProps>(({
@@ -32,6 +33,7 @@ const TextEditPanel = forwardRef<TextEditToolRef, TextEditPanelProps>(({
   onSelectedLayerChange,
   onIsDraggingChange,
   onIsResizingChange,
+  onPersisted,
 }, ref) => {
   const {
     layers,
@@ -50,9 +52,10 @@ const TextEditPanel = forwardRef<TextEditToolRef, TextEditPanelProps>(({
     handleLayerMouseDown,
     handleResizeMouseDown,
     handleInteractionEnd,
+    commitCurrentEdits,
     setIsDragging,
     setIsResizing,
-  } = useTextLayers({ pageId, initialLayers });
+  } = useTextLayers({ pageId, initialLayers, onPersisted });
 
   const selectedLayer = layers.find(l => l.id === selectedLayerId);
 
@@ -160,7 +163,8 @@ const TextEditPanel = forwardRef<TextEditToolRef, TextEditPanelProps>(({
     handleLayerMouseDown,
     handleResizeMouseDown,
     handleTextChange,
-  }), [layers, selectedLayerId, isDragging, isResizing, addLayer, updateLayer, deleteLayer, selectLayer, handleLayerMouseDown, handleResizeMouseDown, handleTextChange]);
+    commitCurrentEdits,
+  }), [layers, selectedLayerId, isDragging, isResizing, addLayer, updateLayer, deleteLayer, selectLayer, handleLayerMouseDown, handleResizeMouseDown, handleTextChange, commitCurrentEdits]);
 
   // 无文字图层时：显示添加按钮
   if (layers.length === 0) {

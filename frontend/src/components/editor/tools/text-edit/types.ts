@@ -97,6 +97,7 @@ export interface TextEditToolRef {
   handleLayerMouseDown: (e: React.MouseEvent, layer: TextLayerViewModel) => void;
   handleResizeMouseDown: (e: React.MouseEvent, layer: TextLayerViewModel, handle: string) => void;
   handleTextChange: (id: number, text: string) => void;
+  commitCurrentEdits: () => void;
 }
 
 /**
