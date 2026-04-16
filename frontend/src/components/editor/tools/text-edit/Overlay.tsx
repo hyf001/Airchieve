@@ -4,7 +4,7 @@
  * 基于 TextLayerViewModel 渲染
  */
 
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { TextLayerViewModel } from './types';
 
 interface TextEditOverlayProps {
@@ -34,6 +34,29 @@ export const TextEditOverlay: React.FC<TextEditOverlayProps> = ({
   onLayerClick,
 }) => {
   const resizeHandles = ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'];
+
+  // ======== 本地草稿状态 ========
+  const [draftText, setDraftText] = useState('');
+  const composingRef = useRef(false);
+  const draftLayerIdRef = useRef<number | null>(null);
+  // 用 ref 持有最新 layers，避免 useEffect 缺依赖
+  const layersRef = useRef(layers);
+  layersRef.current = layers;
+
+  // 选中图层变化时，从外部同步一次草稿
+  useEffect(() => {
+    if (selectedLayerId == null) {
+      draftLayerIdRef.current = null;
+      return;
+    }
+    if (draftLayerIdRef.current !== selectedLayerId) {
+      const layer = layersRef.current.find(l => l.id === selectedLayerId);
+      setDraftText(layer?.text ?? '');
+      draftLayerIdRef.current = selectedLayerId;
+    }
+  }, [selectedLayerId]);
+
+  // ======== 样式工具函数 ========
 
   const getHandleCursor = (handle: string): string => {
     if (handle === 'nw' || handle === 'se') return 'nwse-resize';
@@ -77,6 +100,7 @@ export const TextEditOverlay: React.FC<TextEditOverlayProps> = ({
     <>
       {layers.map(layer => {
         const isSelected = selectedLayerId === layer.id;
+        const isDraftLayer = isSelected && layer.id === draftLayerIdRef.current;
         return (
           <div
             key={layer.id}
@@ -90,14 +114,40 @@ export const TextEditOverlay: React.FC<TextEditOverlayProps> = ({
               cursor: isDragging && isSelected ? 'grabbing' : 'grab',
               outline: isSelected ? '2px solid #00CDD4' : '2px dashed transparent',
               userSelect: 'none',
+              // 选中时留出边框区域用于拖拽，未选中时无 padding
+              padding: isSelected ? '6px' : '0',
             }}
             onMouseDown={(e) => onLayerMouseDown(e, layer)}
             onClick={() => onLayerClick(layer.id)}
           >
             {isSelected ? (
               <textarea
-                value={layer.text}
-                onChange={(e) => onTextChange(layer.id, e.target.value)}
+                value={isDraftLayer ? draftText : layer.text}
+                onChange={(e) => {
+                  const text = e.target.value;
+                  setDraftText(text);
+                  draftLayerIdRef.current = layer.id;
+                  // IME 组合中不同步外部，避免打断输入法
+                  if (!composingRef.current) {
+                    onTextChange(layer.id, text);
+                  }
+                }}
+                onCompositionStart={() => {
+                  composingRef.current = true;
+                }}
+                onCompositionEnd={(e) => {
+                  composingRef.current = false;
+                  const text = e.currentTarget.value;
+                  setDraftText(text);
+                  onTextChange(layer.id, text);
+                }}
+                onBlur={() => {
+                  if (draftLayerIdRef.current === layer.id) {
+                    onTextChange(layer.id, draftText);
+                  }
+                }}
+                // 阻止冒泡：点击 textarea 时只做文字输入，不触发拖拽
+                onMouseDown={(e) => e.stopPropagation()}
                 style={{
                   width: '100%',
                   height: '100%',
@@ -117,6 +167,7 @@ export const TextEditOverlay: React.FC<TextEditOverlayProps> = ({
                   overflow: 'hidden',
                   whiteSpace: 'pre-wrap',
                   wordWrap: 'break-word',
+                  userSelect: 'text',
                 }}
               />
             ) : (
