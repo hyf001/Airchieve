@@ -131,6 +131,23 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
     setError: editorState.setError,
   });
 
+  // ========== 切换绘本时清理图层状态 ==========
+  const prevStorybookIdRef = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const currentId = editorState.currentStorybook?.id;
+    if (currentId !== undefined && currentId !== prevStorybookIdRef.current) {
+      prevStorybookIdRef.current = currentId;
+      // 清理上一个绘本的图层和编辑状态
+      setTextLayers([]);
+      setTextSelectedLayerId(null);
+      setTextIsDragging(false);
+      setTextIsResizing(false);
+      setPageLayers([]);
+      setHistoryState({ history: [], index: -1 });
+      prevPageIndexRef.current = -1;
+    }
+  }, [editorState.currentStorybook?.id]);
+
   // ========== 业务操作 ==========
   const handleDelete = async (id: number) => {
     try {
