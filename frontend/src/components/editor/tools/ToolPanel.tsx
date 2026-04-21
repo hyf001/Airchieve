@@ -19,6 +19,7 @@ interface ToolPanelProps {
   textEditToolRef?: React.RefObject<any>;
   pageId?: number;
   initialLayers?: StorybookLayer[];
+  pageText?: string;
   // AI改图工具相关 props
   aiEditToolRef?: React.RefObject<any>;
   onIsAIEditGeneratingChange?: (isGenerating: boolean) => void;
@@ -42,6 +43,7 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
   textEditToolRef,
   pageId,
   initialLayers = [],
+  pageText,
   aiEditToolRef,
   onIsAIEditGeneratingChange,
   onTextLayersChange,
@@ -82,6 +84,7 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
       return {
         pageId: pageId ?? 0,
         initialLayers,
+        pageText,
         containerRef,
         onLayersChange: onTextLayersChange,
         onSelectedLayerChange: onTextSelectedLayerChange,
@@ -146,6 +149,7 @@ interface ToolPanelWithSelectorProps {
   textEditToolRef?: React.RefObject<any>;
   pageId?: number;
   initialLayers?: StorybookLayer[];
+  pageText?: string;
   // AI改图工具相关 props
   aiEditToolRef?: React.RefObject<any>;
   onIsAIEditGeneratingChange?: (isGenerating: boolean) => void;
@@ -168,6 +172,7 @@ export const ToolPanelWithSelector: React.FC<ToolPanelWithSelectorProps> = ({
   textEditToolRef,
   pageId,
   initialLayers = [],
+  pageText,
   aiEditToolRef,
   onIsAIEditGeneratingChange,
   onTextLayersChange,
@@ -200,6 +205,7 @@ export const ToolPanelWithSelector: React.FC<ToolPanelWithSelectorProps> = ({
         textEditToolRef={textEditToolRef}
         pageId={pageId}
         initialLayers={initialLayers}
+        pageText={pageText}
         aiEditToolRef={aiEditToolRef}
         onIsAIEditGeneratingChange={onIsAIEditGeneratingChange}
         onTextLayersChange={onTextLayersChange}

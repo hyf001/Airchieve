@@ -573,6 +573,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                 textEditToolRef={textEditToolRef}
                 pageId={currentPageId}
                 initialLayers={pageLayers}
+                pageText={editorState.pages[editorState.currentPageIndex]?.text || ''}
                 aiEditToolRef={aiEditToolRef}
                 onIsAIEditGeneratingChange={setIsAIEditGenerating}
                 onTextLayersChange={setTextLayers}

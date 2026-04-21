@@ -413,7 +413,7 @@ function renderContent({
             {/* 文字图层叠加层 */}
             {activeTool === 'text' && textLayers.length > 0 && textEditToolRef?.current && (
               <TextEditOverlay
-                layers={textLayers}
+                layers={textLayers.filter(layer => layer.pageId === currentPage.id)}
                 selectedLayerId={selectedLayerId}
                 onLayerMouseDown={(e, layer) => {
                   textEditToolRef.current?.handleLayerMouseDown(e, layer);

@@ -10,6 +10,7 @@ import { TextLayerViewModel, toTextLayerViewModel, toTextLayerContent } from './
 interface UseTextLayersParams {
   pageId: number;
   initialLayers: StorybookLayer[];
+  pageText?: string;
   onPersisted?: () => void;
 }
 
@@ -18,7 +19,7 @@ interface UseTextLayersParams {
  * - 本地即时更新视图
  * - 离开编辑上下文或交互结束时持久化到后端
  */
-export const useTextLayers = ({ pageId, initialLayers, onPersisted }: UseTextLayersParams) => {
+export const useTextLayers = ({ pageId, initialLayers, pageText, onPersisted }: UseTextLayersParams) => {
   const [layers, setLayers] = useState<TextLayerViewModel[]>([]);
   const [selectedLayerId, setSelectedLayerId] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -62,6 +63,15 @@ export const useTextLayers = ({ pageId, initialLayers, onPersisted }: UseTextLay
   useEffect(() => {
     const isPageSwitch = pageId !== prevPageIdRef.current;
     if (isPageSwitch) {
+      // 先提交当前选中图层的编辑，避免丢失用户输入
+      const id = selectedLayerIdRef.current;
+      if (id !== null) {
+        const layer = layersRef.current.find(l => l.id === id);
+        if (layer) {
+          void persistLayer(layer);
+        }
+      }
+
       prevPageIdRef.current = pageId;
       setSelectedLayerId(null);
       selectedLayerIdRef.current = null;
@@ -196,7 +206,7 @@ export const useTextLayers = ({ pageId, initialLayers, onPersisted }: UseTextLay
           y: 100,
           width: 300,
           height: 60,
-          text: '请输入文字',
+          text: pageText || '请输入文字',
           fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif',
           fontSize: 24,
           fontColor: '#000000',
@@ -222,7 +232,7 @@ export const useTextLayers = ({ pageId, initialLayers, onPersisted }: UseTextLay
     } finally {
       setIsAdding(false);
     }
-  }, [pageId, layers, isAdding, commitCurrentEdits, onPersisted]);
+  }, [pageId, layers, isAdding, commitCurrentEdits, onPersisted, pageText]);
 
   // 拖拽开始
   const handleLayerMouseDown = useCallback((e: React.MouseEvent, layer: TextLayerViewModel) => {

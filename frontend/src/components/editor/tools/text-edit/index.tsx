@@ -17,6 +17,7 @@ import { TextEditOverlay } from './Overlay';
 interface TextEditPanelProps {
   pageId: number;
   initialLayers: StorybookLayer[];
+  pageText?: string;
   containerRef?: React.RefObject<HTMLDivElement>;
   onLayersChange?: (layers: TextLayerViewModel[]) => void;
   onSelectedLayerChange?: (layerId: number | null) => void;
@@ -28,6 +29,7 @@ interface TextEditPanelProps {
 const TextEditPanel = forwardRef<TextEditToolRef, TextEditPanelProps>(({
   pageId,
   initialLayers,
+  pageText,
   containerRef,
   onLayersChange,
   onSelectedLayerChange,
@@ -59,7 +61,7 @@ const TextEditPanel = forwardRef<TextEditToolRef, TextEditPanelProps>(({
     commitCurrentEdits,
     setIsDragging,
     setIsResizing,
-  } = useTextLayers({ pageId, initialLayers, onPersisted });
+  } = useTextLayers({ pageId, initialLayers, pageText, onPersisted });
 
   const selectedLayer = layers.find(l => l.id === selectedLayerId);
 
