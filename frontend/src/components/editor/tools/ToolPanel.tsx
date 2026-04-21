@@ -4,7 +4,7 @@
 
 import React, { useEffect } from 'react';
 import { getToolConfig } from './ToolRegistry';
-import { ToolComponentProps, ToolId } from '@/types/tool';
+import { OptionalToolId, ToolComponentProps, ToolId } from '@/types/tool';
 import { ToolSelector } from './ToolSelector';
 import { StorybookLayer } from '@/services/storybookService';
 import { TextLayerViewModel } from './text-edit/types';
@@ -141,7 +141,7 @@ interface ToolPanelWithSelectorProps {
   showSelector?: boolean;
   selectorColumns?: number;
   activeTool: ToolId;
-  setActiveTool: (toolId: ToolId) => void;
+  setActiveTool: (toolId: OptionalToolId) => void;
   // 文字工具相关 props
   textEditToolRef?: React.RefObject<any>;
   pageId?: number;

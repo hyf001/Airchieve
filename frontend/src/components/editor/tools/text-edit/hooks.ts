@@ -16,7 +16,7 @@ interface UseTextLayersParams {
 /**
  * 文字图层管理 Hook
  * - 本地即时更新视图
- * - 防抖/事件驱动持久化到后端
+ * - 离开编辑上下文或交互结束时持久化到后端
  */
 export const useTextLayers = ({ pageId, initialLayers, onPersisted }: UseTextLayersParams) => {
   const [layers, setLayers] = useState<TextLayerViewModel[]>([]);
@@ -24,11 +24,18 @@ export const useTextLayers = ({ pageId, initialLayers, onPersisted }: UseTextLay
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
+  const layersRef = useRef<TextLayerViewModel[]>([]);
+  const selectedLayerIdRef = useRef<number | null>(null);
+  const isDraggingRef = useRef(false);
+  const isResizingRef = useRef(false);
+  const persistLayerRef = useRef<((layer: TextLayerViewModel) => void | Promise<void>) | null>(null);
 
   // 调整大小的状态
   const resizeStartRef = useRef<{
     x: number;
     y: number;
+    layerX: number;
+    layerY: number;
     width: number;
     height: number;
   } | null>(null);
@@ -40,39 +47,35 @@ export const useTextLayers = ({ pageId, initialLayers, onPersisted }: UseTextLay
     y: number;
   } | null>(null);
 
-  // 防抖定时器
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   // 上一次已知 pageId，用于判断切页
   const prevPageIdRef = useRef<number>(pageId);
 
-  // 刷新防抖：切页或卸载��立即提交
-  const flushDebounce = useCallback(() => {
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-      debounceTimerRef.current = null;
-    }
-  }, []);
-
-  // 卸载时清除防抖
   useEffect(() => {
-    return () => {
-      flushDebounce();
-    };
-  }, [flushDebounce]);
+    layersRef.current = layers;
+  }, [layers]);
+
+  useEffect(() => {
+    selectedLayerIdRef.current = selectedLayerId;
+  }, [selectedLayerId]);
 
   // 当 initialLayers 或 pageId 变化时重置本地 state
   useEffect(() => {
     const isPageSwitch = pageId !== prevPageIdRef.current;
     if (isPageSwitch) {
-      // 切页：先 flush，再重置所有状态
-      flushDebounce();
       prevPageIdRef.current = pageId;
       setSelectedLayerId(null);
+      selectedLayerIdRef.current = null;
       setIsDragging(false);
       setIsResizing(false);
+      isDraggingRef.current = false;
+      isResizingRef.current = false;
       // 立即清空图层，避免旧页面文字在新页面上短暂显示
       setLayers([]);
+      layersRef.current = [];
+      return;
+    }
+
+    if (isDraggingRef.current || isResizingRef.current) {
       return;
     }
 
@@ -81,7 +84,8 @@ export const useTextLayers = ({ pageId, initialLayers, onPersisted }: UseTextLay
       .filter(l => l.layer_type === 'text')
       .map(toTextLayerViewModel);
     setLayers(textLayers);
-  }, [initialLayers, pageId]); // eslint-disable-line react-hooks/exhaustive-deps
+    layersRef.current = textLayers;
+  }, [initialLayers, pageId]);
 
   // 持久化单个图层到后端（直接调用，不防抖）
   const persistLayer = useCallback(async (layer: TextLayerViewModel) => {
@@ -95,36 +99,46 @@ export const useTextLayers = ({ pageId, initialLayers, onPersisted }: UseTextLay
     }
   }, [pageId, onPersisted]);
 
-  // 防抖持久化
-  const debouncedPersist = useCallback((layer: TextLayerViewModel, delay = 300) => {
-    flushDebounce();
-    debounceTimerRef.current = setTimeout(() => {
-      persistLayer(layer);
-    }, delay);
-  }, [flushDebounce, persistLayer]);
+  useEffect(() => {
+    persistLayerRef.current = persistLayer;
+  }, [persistLayer]);
 
-  // 图层操作方法
+  useEffect(() => {
+    return () => {
+      const id = selectedLayerIdRef.current;
+      if (id === null) return;
+      const layer = layersRef.current.find(l => l.id === id);
+      if (layer) {
+        void persistLayerRef.current?.(layer);
+      }
+    };
+  }, []);
+
   const updateLayer = useCallback((id: number, updates: Partial<TextLayerViewModel>) => {
     setLayers(prev => {
       const updated = prev.map(l => l.id === id ? { ...l, ...updates } : l);
-      const changed = updated.find(l => l.id === id);
-      if (changed) {
-        // 判断是否需要防抖（文字输入）还是立即持久化（属性变更）
-        if ('text' in updates && Object.keys(updates).length === 1) {
-          debouncedPersist(changed);
-        } else {
-          // 属性变更立即持久化
-          persistLayer(changed);
-        }
-      }
+      layersRef.current = updated;
       return updated;
     });
-  }, [debouncedPersist, persistLayer]);
+  }, []);
+
+  const updateLayerLocal = useCallback((id: number, updates: Partial<TextLayerViewModel>) => {
+    setLayers(prev => {
+      const updated = prev.map(l => l.id === id ? { ...l, ...updates } : l);
+      layersRef.current = updated;
+      return updated;
+    });
+  }, []);
 
   const deleteLayer = useCallback(async (id: number) => {
-    setLayers(prev => prev.filter(l => l.id !== id));
+    setLayers(prev => {
+      const updated = prev.filter(l => l.id !== id);
+      layersRef.current = updated;
+      return updated;
+    });
     if (selectedLayerId === id) {
       setSelectedLayerId(null);
+      selectedLayerIdRef.current = null;
     }
     try {
       await deleteLayerAPI(pageId, id);
@@ -137,41 +151,34 @@ export const useTextLayers = ({ pageId, initialLayers, onPersisted }: UseTextLay
   const selectLayer = useCallback((id: number | null) => {
     // 切换图层前，先提交当前选中的图层
     if (selectedLayerId !== null && id !== selectedLayerId) {
-      flushDebounce();
-      setLayers(prev => {
-        const layer = prev.find(l => l.id === selectedLayerId);
-        if (layer) {
-          persistLayer(layer);
-        }
-        return prev;
-      });
-    }
-    setSelectedLayerId(id);
-  }, [selectedLayerId, flushDebounce, persistLayer]);
-
-  // 提交当前选中图层的编辑（供外部在切工具/切页/卸载时调用）
-  const commitCurrentEdits = useCallback(() => {
-    flushDebounce();
-    setLayers(prev => {
-      if (selectedLayerId === null) return prev;
-      const layer = prev.find(l => l.id === selectedLayerId);
+      const layer = layersRef.current.find(l => l.id === selectedLayerId);
       if (layer) {
         persistLayer(layer);
       }
-      return prev;
-    });
-  }, [selectedLayerId, flushDebounce, persistLayer]);
+    }
+    setSelectedLayerId(id);
+    selectedLayerIdRef.current = id;
+  }, [selectedLayerId, persistLayer]);
 
-  // 组件卸载前提交
-  useEffect(() => {
-    return () => {
-      flushDebounce();
-    };
-  }, [flushDebounce]);
+  // 提交当前选中图层的编辑（供外部在切工具/切页/卸载时调用）
+  const commitCurrentEdits = useCallback(() => {
+    const id = selectedLayerIdRef.current;
+    if (id === null) return;
+    const layer = layersRef.current.find(l => l.id === id);
+    if (layer) {
+      persistLayer(layer);
+    }
+    setSelectedLayerId(null);
+    selectedLayerIdRef.current = null;
+  }, [persistLayer]);
 
   const handleTextChange = useCallback((id: number, text: string) => {
     // 仅更新本地状态，不持久化（等取消选中时再持久化）
-    setLayers(prev => prev.map(l => l.id === id ? { ...l, text } : l));
+    setLayers(prev => {
+      const updated = prev.map(l => l.id === id ? { ...l, text } : l);
+      layersRef.current = updated;
+      return updated;
+    });
   }, []);
 
   // 新增文字图层
@@ -202,8 +209,13 @@ export const useTextLayers = ({ pageId, initialLayers, onPersisted }: UseTextLay
         },
       });
       const viewModel = toTextLayerViewModel(newLayer);
-      setLayers(prev => [...prev, viewModel]);
+      setLayers(prev => {
+        const updated = [...prev, viewModel];
+        layersRef.current = updated;
+        return updated;
+      });
       setSelectedLayerId(viewModel.id);
+      selectedLayerIdRef.current = viewModel.id;
       onPersisted?.();
     } catch (err) {
       console.error('创建文字图层失败:', err);
@@ -215,27 +227,45 @@ export const useTextLayers = ({ pageId, initialLayers, onPersisted }: UseTextLay
   // 拖拽开始
   const handleLayerMouseDown = useCallback((e: React.MouseEvent, layer: TextLayerViewModel) => {
     e.stopPropagation();
+    if (selectedLayerId !== null && selectedLayerId !== layer.id) {
+      const previousLayer = layersRef.current.find(l => l.id === selectedLayerId);
+      if (previousLayer) {
+        persistLayer(previousLayer);
+      }
+    }
     setSelectedLayerId(layer.id);
+    selectedLayerIdRef.current = layer.id;
     setIsDragging(true);
+    isDraggingRef.current = true;
     dragStartRef.current = {
       x: e.clientX - layer.x,
       y: e.clientY - layer.y,
     };
-  }, []);
+  }, [selectedLayerId, persistLayer]);
 
   // 缩放开始
   const handleResizeMouseDown = useCallback((e: React.MouseEvent, layer: TextLayerViewModel, handle: string) => {
     e.stopPropagation();
+    if (selectedLayerId !== null && selectedLayerId !== layer.id) {
+      const previousLayer = layersRef.current.find(l => l.id === selectedLayerId);
+      if (previousLayer) {
+        persistLayer(previousLayer);
+      }
+    }
     setSelectedLayerId(layer.id);
+    selectedLayerIdRef.current = layer.id;
     setIsResizing(true);
+    isResizingRef.current = true;
     resizeHandleRef.current = handle;
     resizeStartRef.current = {
       x: e.clientX,
       y: e.clientY,
+      layerX: layer.x,
+      layerY: layer.y,
       width: layer.width,
       height: layer.height,
     };
-  }, []);
+  }, [selectedLayerId, persistLayer]);
 
   // 拖拽/缩放结束后持久化
   const handleInteractionEnd = useCallback((updatedLayer: TextLayerViewModel) => {
@@ -251,8 +281,12 @@ export const useTextLayers = ({ pageId, initialLayers, onPersisted }: UseTextLay
     resizeStartRef,
     resizeHandleRef,
     dragStartRef,
+    layersRef,
+    isDraggingRef,
+    isResizingRef,
     addLayer,
     updateLayer,
+    updateLayerLocal,
     deleteLayer,
     selectLayer,
     handleTextChange,

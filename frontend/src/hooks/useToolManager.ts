@@ -28,7 +28,7 @@ export function useToolManager(initialTool?: ToolId) {
   /**
    * 切换到指定工具
    */
-  const switchToTool = useCallback((toolId: ToolId) => {
+  const switchToTool = useCallback((toolId: OptionalToolId) => {
     setActiveTool(toolId);
 
     setToolHistory(prev => {

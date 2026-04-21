@@ -42,6 +42,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useEditorState } from '@/hooks/useEditorState';
 import { useStorybookLoader } from '@/hooks/useStorybookLoader';
 import { useToolManager } from '@/hooks/useToolManager';
+import { OptionalToolId } from '@/types/tool';
 
 interface EditorViewProps {
   storybookId?: number;
@@ -90,15 +91,12 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
     }).catch(() => {});
   }, [editorState.pages, editorState.currentPageIndex, editorState.currentStorybook, editorState.setCurrentStorybook]);
 
-  // ========== 编辑上下文退出时提交 ==========
-  const prevActiveToolRef = useRef(toolManager.activeTool);
-  // 切换工具前提交当前编辑
-  useEffect(() => {
-    if (prevActiveToolRef.current === 'text' && toolManager.activeTool !== 'text') {
+  const handleActiveToolChange = useCallback((toolId: OptionalToolId) => {
+    if (toolManager.activeTool === 'text' && toolId !== 'text') {
       textEditToolRef.current?.commitCurrentEdits();
     }
-    prevActiveToolRef.current = toolManager.activeTool;
-  }, [toolManager.activeTool]);
+    toolManager.setActiveTool(toolId);
+  }, [toolManager]);
 
   // 组件卸载前提交
   useEffect(() => {
@@ -567,10 +565,10 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                     description: '点击保存按钮将更改保存到服务器',
                   });
 
-                  toolManager.setActiveTool(null);
+                  handleActiveToolChange(null);
                 }}
                 activeTool={toolManager.activeTool}
-                setActiveTool={toolManager.setActiveTool}
+                setActiveTool={handleActiveToolChange}
                 containerRef={canvasRef}
                 textEditToolRef={textEditToolRef}
                 pageId={currentPageId}

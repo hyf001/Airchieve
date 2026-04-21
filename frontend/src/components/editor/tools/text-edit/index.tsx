@@ -44,8 +44,12 @@ const TextEditPanel = forwardRef<TextEditToolRef, TextEditPanelProps>(({
     resizeStartRef,
     resizeHandleRef,
     dragStartRef,
+    layersRef,
+    isDraggingRef,
+    isResizingRef,
     addLayer,
     updateLayer,
+    updateLayerLocal,
     deleteLayer,
     selectLayer,
     handleTextChange,
@@ -83,10 +87,12 @@ const TextEditPanel = forwardRef<TextEditToolRef, TextEditPanelProps>(({
     }
 
     const handleMouseMove = (e: MouseEvent) => {
-      const layer = layers.find(l => l.id === selectedLayerId);
+      const layer = layersRef.current.find(l => l.id === selectedLayerId);
       if (!layer) return;
 
       const rect = containerRef.current!.getBoundingClientRect();
+      const minWidth = 50;
+      const minHeight = 30;
 
       if (isDragging && dragStartRef.current) {
         const newX = e.clientX - dragStartRef.current.x;
@@ -96,32 +102,40 @@ const TextEditPanel = forwardRef<TextEditToolRef, TextEditPanelProps>(({
         const constrainedX = Math.max(0, Math.min(newX, rect.width - layer.width));
         const constrainedY = Math.max(0, Math.min(newY, rect.height - layer.height));
 
-        updateLayer(selectedLayerId, { x: constrainedX, y: constrainedY });
+        updateLayerLocal(selectedLayerId, { x: constrainedX, y: constrainedY });
       } else if (isResizing && resizeStartRef.current && resizeHandleRef.current) {
+        const start = resizeStartRef.current;
+        const handle = resizeHandleRef.current;
         const deltaX = e.clientX - resizeStartRef.current.x;
         const deltaY = e.clientY - resizeStartRef.current.y;
 
-        let newWidth = resizeStartRef.current.width;
-        let newHeight = resizeStartRef.current.height;
-        let newX = layer.x;
-        let newY = layer.y;
+        let newWidth = start.width;
+        let newHeight = start.height;
+        let newX = start.layerX;
+        let newY = start.layerY;
 
-        if (resizeHandleRef.current.includes('e')) {
-          newWidth = Math.max(50, resizeStartRef.current.width + deltaX);
+        if (handle.includes('e')) {
+          const maxWidth = Math.max(minWidth, rect.width - start.layerX);
+          newWidth = Math.min(maxWidth, Math.max(minWidth, start.width + deltaX));
         }
-        if (resizeHandleRef.current.includes('s')) {
-          newHeight = Math.max(30, resizeStartRef.current.height + deltaY);
+        if (handle.includes('s')) {
+          const maxHeight = Math.max(minHeight, rect.height - start.layerY);
+          newHeight = Math.min(maxHeight, Math.max(minHeight, start.height + deltaY));
         }
-        if (resizeHandleRef.current.includes('w')) {
-          newWidth = Math.max(50, resizeStartRef.current.width - deltaX);
-          newX = layer.x + deltaX;
+        if (handle.includes('w')) {
+          const right = start.layerX + start.width;
+          const maxX = Math.max(0, right - minWidth);
+          newX = Math.min(maxX, Math.max(0, start.layerX + deltaX));
+          newWidth = right - newX;
         }
-        if (resizeHandleRef.current.includes('n')) {
-          newHeight = Math.max(30, resizeStartRef.current.height - deltaY);
-          newY = layer.y + deltaY;
+        if (handle.includes('n')) {
+          const bottom = start.layerY + start.height;
+          const maxY = Math.max(0, bottom - minHeight);
+          newY = Math.min(maxY, Math.max(0, start.layerY + deltaY));
+          newHeight = bottom - newY;
         }
 
-        updateLayer(selectedLayerId, {
+        updateLayerLocal(selectedLayerId, {
           width: newWidth,
           height: newHeight,
           x: newX,
@@ -131,12 +145,14 @@ const TextEditPanel = forwardRef<TextEditToolRef, TextEditPanelProps>(({
     };
 
     const handleMouseUp = () => {
-      const layer = layers.find(l => l.id === selectedLayerId);
+      const layer = layersRef.current.find(l => l.id === selectedLayerId);
       if (layer && (isDragging || isResizing)) {
         handleInteractionEnd(layer);
       }
       setIsDragging(false);
       setIsResizing(false);
+      isDraggingRef.current = false;
+      isResizingRef.current = false;
       resizeStartRef.current = null;
       resizeHandleRef.current = null;
       dragStartRef.current = null;
@@ -148,7 +164,7 @@ const TextEditPanel = forwardRef<TextEditToolRef, TextEditPanelProps>(({
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, isResizing, selectedLayerId, layers, dragStartRef, resizeStartRef, resizeHandleRef, containerRef, updateLayer, setIsDragging, setIsResizing, handleInteractionEnd]);
+  }, [isDragging, isResizing, selectedLayerId, dragStartRef, resizeStartRef, resizeHandleRef, layersRef, isDraggingRef, isResizingRef, containerRef, updateLayerLocal, setIsDragging, setIsResizing, handleInteractionEnd]);
 
   // 暴露方法给父组件
   useImperativeHandle(ref, () => ({
