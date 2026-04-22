@@ -11,6 +11,7 @@ interface UseTextLayersParams {
   pageId: number;
   initialLayers: StorybookLayer[];
   pageText?: string;
+  containerRef?: React.RefObject<HTMLDivElement>;
   onPersisted?: () => void;
 }
 
@@ -19,7 +20,7 @@ interface UseTextLayersParams {
  * - 本地即时更新视图
  * - 离开编辑上下文或交互结束时持久化到后端
  */
-export const useTextLayers = ({ pageId, initialLayers, pageText, onPersisted }: UseTextLayersParams) => {
+export const useTextLayers = ({ pageId, initialLayers, pageText, containerRef, onPersisted }: UseTextLayersParams) => {
   const [layers, setLayers] = useState<TextLayerViewModel[]>([]);
   const [selectedLayerId, setSelectedLayerId] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -29,7 +30,7 @@ export const useTextLayers = ({ pageId, initialLayers, pageText, onPersisted }: 
   const selectedLayerIdRef = useRef<number | null>(null);
   const isDraggingRef = useRef(false);
   const isResizingRef = useRef(false);
-  const persistLayerRef = useRef<((layer: TextLayerViewModel) => void | Promise<void>) | null>(null);
+  const persistLayerRef = useRef<((layer: TextLayerViewModel) => Promise<void>) | null>(null);
 
   // 调整大小的状态
   const resizeStartRef = useRef<{
@@ -98,16 +99,31 @@ export const useTextLayers = ({ pageId, initialLayers, pageText, onPersisted }: 
   }, [initialLayers, pageId]);
 
   // 持久化单个图层到后端（直接调用，不防抖）
+  const getCanvasSize = useCallback(() => {
+    const rect = containerRef?.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return {};
+    return {
+      canvasWidth: Math.round(rect.width),
+      canvasHeight: Math.round(rect.height),
+    };
+  }, [containerRef]);
+
+  const withCanvasSize = useCallback((layer: TextLayerViewModel): TextLayerViewModel => ({
+    ...layer,
+    ...getCanvasSize(),
+  }), [getCanvasSize]);
+
   const persistLayer = useCallback(async (layer: TextLayerViewModel) => {
     try {
+      const sizedLayer = withCanvasSize(layer);
       await updateLayerAPI(pageId, layer.id, {
-        content: toTextLayerContent(layer) as unknown as Record<string, unknown>,
+        content: toTextLayerContent(sizedLayer) as unknown as Record<string, unknown>,
       });
       onPersisted?.();
     } catch (err) {
       console.error('持久化文字图层失败:', err);
     }
-  }, [pageId, onPersisted]);
+  }, [pageId, onPersisted, withCanvasSize]);
 
   useEffect(() => {
     persistLayerRef.current = persistLayer;
@@ -171,12 +187,12 @@ export const useTextLayers = ({ pageId, initialLayers, pageText, onPersisted }: 
   }, [selectedLayerId, persistLayer]);
 
   // 提交当前选中图层的编辑（供外部在切工具/切页/卸载时调用）
-  const commitCurrentEdits = useCallback(() => {
+  const commitCurrentEdits = useCallback(async () => {
     const id = selectedLayerIdRef.current;
     if (id === null) return;
     const layer = layersRef.current.find(l => l.id === id);
     if (layer) {
-      persistLayer(layer);
+      await persistLayer(layer);
     }
     setSelectedLayerId(null);
     selectedLayerIdRef.current = null;
@@ -195,7 +211,7 @@ export const useTextLayers = ({ pageId, initialLayers, pageText, onPersisted }: 
   const addLayer = useCallback(async () => {
     if (isAdding) return;
     // 先提交当前选中图层的编辑，避免 refreshCurrentPage 冲掉未保存的本地修改
-    commitCurrentEdits();
+    void commitCurrentEdits();
     setIsAdding(true);
     try {
       const newLayer = await createLayerAPI(pageId, {
@@ -216,6 +232,7 @@ export const useTextLayers = ({ pageId, initialLayers, pageText, onPersisted }: 
           backgroundColor: '',
           borderRadius: 0,
           rotation: 0,
+          ...getCanvasSize(),
         },
       });
       const viewModel = toTextLayerViewModel(newLayer);
@@ -232,7 +249,7 @@ export const useTextLayers = ({ pageId, initialLayers, pageText, onPersisted }: 
     } finally {
       setIsAdding(false);
     }
-  }, [pageId, layers, isAdding, commitCurrentEdits, onPersisted, pageText]);
+  }, [pageId, layers, isAdding, commitCurrentEdits, onPersisted, pageText, getCanvasSize]);
 
   // 拖拽开始
   const handleLayerMouseDown = useCallback((e: React.MouseEvent, layer: TextLayerViewModel) => {

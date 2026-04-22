@@ -80,25 +80,30 @@ const LayersPreview: React.FC<{ layers: StorybookLayer[]; activeTool?: ToolId }>
                 {strokes.map((stroke, si) => {
                   const points = stroke.points ?? [];
                   if (points.length === 0) return null;
+                  const getPoint = (point: number[] | { x: number; y: number }) =>
+                    Array.isArray(point) ? { x: point[0] ?? 0, y: point[1] ?? 0 } : point;
+                  const firstPoint = getPoint(points[0]);
                   if (points.length === 1) {
                     return (
                       <circle
                         key={si}
-                        cx={points[0][0]}
-                        cy={points[0][1]}
-                        r={stroke.brushSize / 2}
+                        cx={firstPoint.x}
+                        cy={firstPoint.y}
+                        r={(stroke.brushSize ?? stroke.size ?? 1) / 2}
                         fill={stroke.color}
                       />
                     );
                   }
-                  const pathData = points.reduce((acc, p, i) =>
-                    i === 0 ? `M ${p[0]} ${p[1]}` : `${acc} L ${p[0]} ${p[1]}`, '');
+                  const pathData = points.reduce((acc, p, i) => {
+                    const point = getPoint(p);
+                    return i === 0 ? `M ${point.x} ${point.y}` : `${acc} L ${point.x} ${point.y}`;
+                  }, '');
                   return (
                     <path
                       key={si}
                       d={pathData}
                       stroke={stroke.color}
-                      strokeWidth={stroke.brushSize}
+                      strokeWidth={stroke.brushSize ?? stroke.size ?? 1}
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       fill="none"

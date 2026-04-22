@@ -63,14 +63,19 @@ export interface TextLayerContent {
   backgroundColor: string;
   borderRadius: number;
   rotation: number;
+  canvasWidth?: number;
+  canvasHeight?: number;
 }
 
 export interface DrawLayerContent {
   strokes: Array<{
-    points: number[][];
+    points: number[][] | Array<{ x: number; y: number }>;
     color: string;
-    brushSize: number;
+    brushSize?: number;
+    size?: number;
   }>;
+  canvasWidth?: number;
+  canvasHeight?: number;
 }
 
 export interface ImageLayerContent {
@@ -81,6 +86,8 @@ export interface ImageLayerContent {
   url: string;
   rotation: number;
   opacity: number;
+  canvasWidth?: number;
+  canvasHeight?: number;
 }
 
 export type LayerContent = TextLayerContent | DrawLayerContent | ImageLayerContent | Record<string, unknown>;
@@ -638,197 +645,4 @@ export const toApiUrl = (url: string): string => {
   } catch {
     return url;
   }
-};
-
-/**
- * 加载图片为 HTMLImageElement（用于 Canvas 绘制）
- * OSS 直链先转为同源的 /api/v1/oss/... 路径，避免 CORS 污染 Canvas。
- */
-const loadImage = async (url: string): Promise<HTMLImageElement | null> => {
-  if (!url) return null;
-  const src = toApiUrl(url);
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = src;
-  });
-};
-
-/**
- * 在浏览器端用 Canvas 为每页单独生成图片，然后合并成 PDF 下载
- * 布局与 EditorView 一致：图片全屏 + 底部渐变遮罩 + 白色文字
- * @param watermark 是否在每页右下角添加水印（默认 true）
- */
-export const downloadStorybookImage = async (
-  storybook: Storybook,
-  watermark: boolean = true,
-): Promise<void> => {
-  // 动态导入 jsPDF，避免在文件顶部导入导致类型问题
-  const { default: jsPDF } = await import('jspdf');
-
-  const pages = storybook.pages || [];
-  if (pages.length === 0) throw new Error('绘本无页面内容');
-
-  // 并行加载所有图片（含水印图）
-  const [images, watermarkImg] = await Promise.all([
-    Promise.all(pages.map(p => loadImage(p.image_url))),
-    watermark ? loadImage('/watermark.png') : Promise.resolve(null),
-  ]);
-  const validImages = images.filter((img): img is HTMLImageElement => img !== null);
-
-  // 计算单页尺寸（使用原始图片尺寸，保持分辨率）
-  const rawW = validImages.length > 0 ? Math.max(...validImages.map(img => img.naturalWidth)) : 800;
-  const rawH = validImages.length > 0 ? Math.max(...validImages.map(img => img.naturalHeight)) : 800;
-
-  // 限制单页最大尺寸，避免内存溢出
-  const MAX_PANEL_W = 2000;
-  const MAX_PANEL_H = 2000;
-  const PANEL_W = Math.min(rawW, MAX_PANEL_W);
-  const PANEL_H = Math.min(rawH, MAX_PANEL_H);
-
-  const GRAD_RATIO = 0.42;
-  const gradH = Math.floor(PANEL_H * GRAD_RATIO);
-  const padding = Math.floor(PANEL_W * 0.05);
-  const fontSize = Math.max(22, Math.floor(PANEL_H * 0.030));
-  const maxTextW = PANEL_W - padding * 2;
-
-  const fontStack = `${fontSize}px "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif`;
-
-  // 为每一页生成图片
-  const pageImages: string[] = [];
-  for (let i = 0; i < pages.length; i++) {
-    const page = pages[i];
-
-    // 创建单页 Canvas
-    const canvas = document.createElement('canvas');
-    canvas.width = PANEL_W;
-    canvas.height = PANEL_H;
-    const ctx = canvas.getContext('2d')!;
-
-    // 面板底色
-    ctx.fillStyle = 'rgb(20, 20, 28)';
-    ctx.fillRect(0, 0, PANEL_W, PANEL_H);
-
-    // 图片（letterbox fit，不裁剪）
-    const img = images[i];
-    if (img) {
-      const scale = Math.min(PANEL_W / img.naturalWidth, PANEL_H / img.naturalHeight);
-      const w = img.naturalWidth * scale;
-      const h = img.naturalHeight * scale;
-      ctx.drawImage(img, (PANEL_W - w) / 2, (PANEL_H - h) / 2, w, h);
-      if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
-    }
-
-    // 封页/封底不添加渐变遮罩和文字
-    const isCoverPage = page.page_type === 'cover' || page.page_type === 'back_cover';
-
-    if (!isCoverPage) {
-      // 底部渐变遮罩（transparent → black/75）
-      const gradY = PANEL_H - gradH;
-      const grad = ctx.createLinearGradient(0, gradY, 0, PANEL_H);
-      grad.addColorStop(0, 'rgba(0,0,0,0)');
-      grad.addColorStop(1, 'rgba(0,0,0,0.75)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, gradY, PANEL_W, gradH);
-
-      // 白色文字（带阴影）
-      ctx.font = fontStack;
-      ctx.textBaseline = 'top';
-
-      const text = page.text || '';
-      const lines: string[] = [];
-      let cur = '';
-      for (const ch of text) {
-        const test = cur + ch;
-        if (ctx.measureText(test).width > maxTextW && cur) {
-          lines.push(cur);
-          cur = ch;
-        } else {
-          cur = test;
-        }
-      }
-      if (cur) lines.push(cur);
-
-      const lineH = fontSize * 1.55;
-      const totalH = lines.length * lineH;
-      let textY = gradY + (gradH - totalH) * 1.0;
-      textY = Math.max(gradY + padding / 2, textY);
-
-      ctx.shadowColor = 'rgba(0,0,0,0.6)';
-      ctx.shadowBlur = 4;
-      ctx.shadowOffsetX = 1;
-      ctx.shadowOffsetY = 1;
-      ctx.fillStyle = 'white';
-      for (const line of lines) {
-        const lw = ctx.measureText(line).width;
-        ctx.fillText(line, (PANEL_W - lw) / 2, textY);
-        textY += lineH;
-      }
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
-    }
-
-    // 水印（右下角，使用 watermark.png）
-    if (watermark && watermarkImg) {
-      const wmMaxW = Math.floor(PANEL_W * 0.28);
-      const wmScale = wmMaxW / watermarkImg.naturalWidth;
-      const wmW = wmMaxW;
-      const wmH = Math.round(watermarkImg.naturalHeight * wmScale);
-      const wmPad = Math.floor(PANEL_W * 0.02);
-      const wmX = PANEL_W - wmW - wmPad;
-      const wmY = PANEL_H - wmH - wmPad;
-      ctx.globalAlpha = 0.55;
-      ctx.drawImage(watermarkImg, wmX, wmY, wmW, wmH);
-      ctx.globalAlpha = 1;
-    }
-
-    // 将 Canvas 转换为 JPEG Data URL
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-    pageImages.push(dataUrl);
-  }
-
-  // 创建 PDF
-  const pdf = new jsPDF({
-    orientation: PANEL_W > PANEL_H ? 'landscape' : 'portrait',
-    unit: 'px',
-    format: [PANEL_W, PANEL_H],
-  });
-
-  // 将每页图片添加到 PDF，并添加页码
-  const pageNumberSize = Math.max(14, Math.floor(PANEL_W * 0.018));
-  const circleRadius = Math.max(16, Math.floor(PANEL_W * 0.02));
-  const pageNumberMargin = circleRadius + Math.floor(PANEL_W * 0.01);  // 圆的半径加上小边距
-
-  pageImages.forEach((dataUrl, index) => {
-    if (index > 0) {
-      pdf.addPage([PANEL_W, PANEL_H]);
-    }
-    pdf.addImage(dataUrl, 'JPEG', 0, 0, PANEL_W, PANEL_H);
-
-    // 添加页码（右下角，实心圆背景）
-    const pageNumber = index + 1;
-    const pageNumberText = `${pageNumber}`;
-
-    // 计算圆心的位置
-    const circleX = PANEL_W - pageNumberMargin;
-    const circleY = PANEL_H - pageNumberMargin;
-
-    // 绘制实心圆背景（半透明黑色）
-    pdf.setFillColor(0, 0, 0, 0.7);  // RGB + 透明度
-    pdf.circle(circleX, circleY, circleRadius, 'F');
-
-    // 在圆心添加页码文字
-    pdf.setFontSize(pageNumberSize);
-    pdf.setTextColor(255, 255, 255);  // 白色文字
-    pdf.text(pageNumberText, circleX, circleY, {
-      align: 'center',
-      baseline: 'middle'
-    });
-  });
-
-  // 触发下载
-  pdf.save(`${storybook.title || 'storybook'}_${storybook.id}.pdf`);
 };

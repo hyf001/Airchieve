@@ -61,7 +61,7 @@ const TextEditPanel = forwardRef<TextEditToolRef, TextEditPanelProps>(({
     commitCurrentEdits,
     setIsDragging,
     setIsResizing,
-  } = useTextLayers({ pageId, initialLayers, pageText, onPersisted });
+  } = useTextLayers({ pageId, initialLayers, pageText, containerRef, onPersisted });
 
   const selectedLayer = layers.find(l => l.id === selectedLayerId);
 

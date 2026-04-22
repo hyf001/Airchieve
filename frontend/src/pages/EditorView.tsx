@@ -6,7 +6,6 @@ import React, { useCallback, useEffect, useState, useRef } from 'react';
 import {
   deleteStorybook,
   updateStorybookPublicStatus,
-  downloadStorybookImage,
   terminateStorybook,
   insertPages,
   generateCover,
@@ -15,6 +14,7 @@ import {
   getPageDetail,
   StorybookLayer,
 } from '../services/storybookService';
+import { exportStorybook, ExportOptions } from '../services/exportService';
 import { useToast } from '@/hooks/use-toast';
 
 // 导入重构后的组件
@@ -69,6 +69,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
   const [textSelectedLayerId, setTextSelectedLayerId] = useState<number | null>(null);
   const [textIsDragging, setTextIsDragging] = useState(false);
   const [textIsResizing, setTextIsResizing] = useState(false);
+  const exportAbortControllerRef = useRef<AbortController | null>(null);
 
   // ========== 页面图层状态（唯一可信数据源） ==========
   const [pageLayers, setPageLayers] = useState<StorybookLayer[]>([]);
@@ -92,7 +93,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
 
   const handleActiveToolChange = useCallback((toolId: OptionalToolId) => {
     if (toolManager.activeTool === 'text' && toolId !== 'text') {
-      textEditToolRef.current?.commitCurrentEdits();
+      void textEditToolRef.current?.commitCurrentEdits();
     }
     toolManager.setActiveTool(toolId);
   }, [toolManager]);
@@ -100,7 +101,8 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
   // 组件卸载前提交
   useEffect(() => {
     return () => {
-      textEditToolRef.current?.commitCurrentEdits();
+      void textEditToolRef.current?.commitCurrentEdits();
+      exportAbortControllerRef.current?.abort();
     };
   }, []);
 
@@ -163,24 +165,47 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
     }
   };
 
-  const handleDownloadConfirm = async (watermark: boolean) => {
+  const handleDownloadConfirm = async (options: ExportOptions) => {
     if (!editorState.currentStorybook) return;
-    editorState.setDialogState('download', false);
+
+    // Commit any in-progress text edits before export
+    await textEditToolRef.current?.commitCurrentEdits();
+
     editorState.setDownloadState({ isDownloading: true, progress: 0 });
+    const abortController = new AbortController();
+    exportAbortControllerRef.current = abortController;
 
     try {
-      await downloadStorybookImage(editorState.currentStorybook, watermark);
-      toast({ title: '下载成功' });
+      await exportStorybook(
+        editorState.currentStorybook,
+        options,
+        (_stage, progress) => {
+          editorState.setDownloadState({ progress: Math.round(progress) });
+        },
+        { signal: abortController.signal },
+      );
+      editorState.setDialogState('download', false);
+      toast({ title: '导出成功' });
     } catch (err) {
+      if (err instanceof Error && err.message === '导出已取消') {
+        editorState.setDialogState('download', false);
+        toast({ title: '已取消导出' });
+        return;
+      }
       toast({
         variant: 'destructive',
-        title: '下载失败',
+        title: '导出失败',
         description: err instanceof Error ? err.message : undefined,
       });
     } finally {
+      exportAbortControllerRef.current = null;
       editorState.setDownloadState({ isDownloading: false, progress: 100 });
     }
   };
+
+  const handleDownloadCancel = useCallback(() => {
+    exportAbortControllerRef.current?.abort();
+  }, []);
 
   const handleTerminate = async () => {
     if (!editorState.currentStorybook || editorState.isTerminating) return;
@@ -248,8 +273,10 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
   // 安全切页：先提交当前编辑，再切换页面索引
   const safeSwitchPage = useCallback((newIndex: number) => {
     if (newIndex === editorState.currentPageIndex) return;
-    textEditToolRef.current?.commitCurrentEdits();
-    editorState.setCurrentPageIndex(newIndex);
+    void (async () => {
+      await textEditToolRef.current?.commitCurrentEdits();
+      editorState.setCurrentPageIndex(newIndex);
+    })();
   }, [editorState.currentPageIndex, editorState.setCurrentPageIndex]);
 
   // 页面切换
@@ -483,8 +510,18 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
       {/* 对话框 */}
       <DownloadDialog
         open={editorState.dialogs.download}
-        onOpenChange={(open) => editorState.setDialogState('download', open)}
+        onOpenChange={(open) => {
+          if (!open && editorState.download.isDownloading) {
+            handleDownloadCancel();
+            return;
+          }
+          editorState.setDialogState('download', open);
+        }}
         onConfirm={handleDownloadConfirm}
+        onCancelExport={handleDownloadCancel}
+        isExporting={editorState.download.isDownloading}
+        currentPageIndex={editorState.currentPageIndex}
+        pages={editorState.pages}
       />
 
       <TerminateConfirmDialog
