@@ -36,7 +36,6 @@ import {
   GenerateCoverDialog,
   BackCoverDialog,
 } from '../components/editor/dialogs';
-import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 // 导入 Hooks
 import { useEditorState } from '@/hooks/useEditorState';
@@ -109,14 +108,6 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
   const aiEditToolRef = useRef<AIEditRef>(null);
   const [isAIEditGenerating, setIsAIEditGenerating] = useState(false);
 
-  // ========== 历史记录状态（撤销/重做） ==========
-  const [historyState, setHistoryState] = useState<{
-    history: Array<{ image_url: string; text: string }>;
-    index: number;
-  }>({
-    history: [],
-    index: -1,
-  });
   const [isSavingPage, setIsSavingPage] = useState(false);
 
   // ========== 数据加载 ==========
@@ -141,7 +132,6 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
       setTextIsDragging(false);
       setTextIsResizing(false);
       setPageLayers([]);
-      setHistoryState({ history: [], index: -1 });
       prevPageIndexRef.current = -1;
     }
   }, [editorState.currentStorybook?.id]);
@@ -252,8 +242,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
     }
   };
 
-  // ========== 历史记录管理 ==========
-  // 当页面切换时，初始化历史记录
+  // ========== 页面切换 ==========
   const prevPageIndexRef = useRef<number>(-1);
 
   // 安全切页：先提交当前编辑，再切换页面索引
@@ -263,38 +252,14 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
     editorState.setCurrentPageIndex(newIndex);
   }, [editorState.currentPageIndex, editorState.setCurrentPageIndex]);
 
-  // 页面切换：有未保存修改时提示
+  // 页面切换
   const handlePageChange = (newIndex: number) => {
     if (newIndex === editorState.currentPageIndex) return;
-    const hasUnsaved = historyState.index > 0;
-    if (hasUnsaved) {
-      editorState.setDialogState('unsavedSwitch', true);
-      pendingPageIndexRef.current = newIndex;
-    } else {
-      safeSwitchPage(newIndex);
-    }
-  };
-
-  const pendingPageIndexRef = useRef<number>(-1);
-
-  // 确认切换：放弃修改，切换页面
-  const confirmPageSwitch = () => {
-    const idx = pendingPageIndexRef.current;
-    if (idx >= 0) {
-      safeSwitchPage(idx);
-      pendingPageIndexRef.current = -1;
-    }
-    editorState.setDialogState('unsavedSwitch', false);
-  };
-
-  // 取消切换：留在当前页
-  const cancelPageSwitch = () => {
-    pendingPageIndexRef.current = -1;
-    editorState.setDialogState('unsavedSwitch', false);
+    safeSwitchPage(newIndex);
   };
 
   useEffect(() => {
-    // 只在页面索引变化时从后台获取最新页面详情并初始化历史记录
+    // 只在页面索引变化时从后台获取最新页面详情
     if (editorState.pages.length > 0 && editorState.currentPageIndex >= 0 && editorState.currentPageIndex !== prevPageIndexRef.current) {
       const page = editorState.pages[editorState.currentPageIndex];
       // 从后台获取最新页面详情
@@ -310,74 +275,13 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
         });
         // 存储页面图层（唯一可信数据源）
         setPageLayers(detail.layers || []);
-        setHistoryState({
-          history: [{ image_url: detail.image_url, text: detail.text || '' }],
-          index: 0,
-        });
       }).catch(() => {
         // 接口失败时用本地数据兜底
         setPageLayers([]);
-        setHistoryState({
-          history: [{ image_url: page.image_url, text: page.text || '' }],
-          index: 0,
-        });
       });
       prevPageIndexRef.current = editorState.currentPageIndex;
     }
   }, [editorState.currentPageIndex, editorState.pages]);
-
-  // 记录新的历史状态
-  const pushHistory = (imageUrl: string, text: string) => {
-    setHistoryState(prev => {
-      // 如果当前不在历史记录末尾，删除后面的记录
-      const newHistory = prev.history.slice(0, prev.index + 1);
-      newHistory.push({ image_url: imageUrl, text });
-      // 限制历史记录长度（最多20条）
-      const trimmedHistory = newHistory.length > 20 ? newHistory.slice(-20) : newHistory;
-      return {
-        history: trimmedHistory,
-        index: trimmedHistory.length - 1,
-      };
-    });
-  };
-
-  // 撤销
-  const handleUndo = () => {
-    if (historyState.index > 0) {
-      const newIndex = historyState.index - 1;
-      const entry = historyState.history[newIndex];
-      setHistoryState(prev => ({ ...prev, index: newIndex }));
-      const updatedPages = [...editorState.pages];
-      updatedPages[editorState.currentPageIndex] = {
-        ...updatedPages[editorState.currentPageIndex],
-        image_url: entry.image_url,
-        text: entry.text,
-      };
-      editorState.setCurrentStorybook({
-        ...editorState.currentStorybook!,
-        pages: updatedPages,
-      });
-    }
-  };
-
-  // 重做
-  const handleRedo = () => {
-    if (historyState.index < historyState.history.length - 1) {
-      const newIndex = historyState.index + 1;
-      const entry = historyState.history[newIndex];
-      setHistoryState(prev => ({ ...prev, index: newIndex }));
-      const updatedPages = [...editorState.pages];
-      updatedPages[editorState.currentPageIndex] = {
-        ...updatedPages[editorState.currentPageIndex],
-        image_url: entry.image_url,
-        text: entry.text,
-      };
-      editorState.setCurrentStorybook({
-        ...editorState.currentStorybook!,
-        pages: updatedPages,
-      });
-    }
-  };
 
   // 保存页面
   const handleSavePage = async () => {
@@ -408,11 +312,6 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
         description: '页面已保存到服务器',
       });
 
-      // 保存成功后清空历史
-      setHistoryState({
-        history: [{ image_url: updatedPage.image_url, text: updatedPage.text || '' }],
-        index: 0,
-      });
     } catch (err) {
       toast({
         variant: 'destructive',
@@ -478,10 +377,6 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
           onGenerateCover={() => editorState.setDialogState('cover', true)}
           onGenerateBackCover={() => editorState.setDialogState('backCover', true)}
           onDownload={() => editorState.setDialogState('download', true)}
-          canUndo={historyState.index > 0}
-          canRedo={historyState.index < historyState.history.length - 1}
-          onUndo={handleUndo}
-          onRedo={handleRedo}
           onSavePage={handleSavePage}
           isSavingPage={isSavingPage}
         />
@@ -558,8 +453,6 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                     pages: updatedPages,
                   });
 
-                  pushHistory(imageUrl, currentPage.text || '');
-
                   toast({
                     title: '图片已更新（本地预览）',
                     description: '点击保存按钮将更改保存到服务器',
@@ -623,17 +516,6 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
             await loadStorybook(editorState.currentStorybook.id);
           }
         }}
-      />
-
-      {/* 未保存提示对话框 */}
-      <ConfirmDialog
-        open={editorState.dialogs.unsavedSwitch}
-        title="未保存的修改"
-        description="当前页面有未保存的修改，切换页面将丢失这些修改。是否继续？"
-        confirmText="放弃修改"
-        cancelText="留在当前页"
-        onConfirm={confirmPageSwitch}
-        onCancel={cancelPageSwitch}
       />
     </>
   );

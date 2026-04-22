@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { ChevronLeft, Plus, BookImage, Download, Gift, Undo, Redo, Save } from 'lucide-react';
+import { ChevronLeft, Plus, BookImage, Download, Gift, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { STATUS_TEXT_MAP } from '@/constants/editor';
 
@@ -21,11 +21,6 @@ interface EditorHeaderProps {
   onGenerateCover: () => void;
   onGenerateBackCover: () => void;
   onDownload: () => void;
-  // 新增：撤销、重做、保存按钮
-  canUndo?: boolean;
-  canRedo?: boolean;
-  onUndo?: () => void;
-  onRedo?: () => void;
   onSavePage?: () => void;
   isSavingPage?: boolean;
 }
@@ -41,10 +36,6 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
   onGenerateCover,
   onGenerateBackCover,
   onDownload,
-  canUndo = false,
-  canRedo = false,
-  onUndo,
-  onRedo,
   onSavePage,
   isSavingPage = false,
 }) => {
@@ -81,40 +72,18 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
 
       {/* 右侧：功能按钮组 */}
       <div className="flex items-center gap-3">
-        {/* 撤销、重做、保存按钮 */}
+        {/* 保存按钮 */}
         {canReadPages && (
-          <>
-            <Button
-              onClick={onUndo}
-              disabled={!canUndo || isCreating}
-              variant="outline"
-              title="撤销"
-              className="text-slate-700 border-slate-300 hover:border-[#00CDD4] hover:text-[#00CDD4] hover:bg-[#00CDD4]/5 disabled:opacity-40"
-            >
-              <Undo size={16} className="md:mr-1" />
-              <span className="hidden md:inline">撤销</span>
-            </Button>
-            <Button
-              onClick={onRedo}
-              disabled={!canRedo || isCreating}
-              variant="outline"
-              title="重做"
-              className="text-slate-700 border-slate-300 hover:border-[#00CDD4] hover:text-[#00CDD4] hover:bg-[#00CDD4]/5 disabled:opacity-40"
-            >
-              <Redo size={16} className="md:mr-1" />
-              <span className="hidden md:inline">重做</span>
-            </Button>
-            <Button
-              onClick={onSavePage}
-              disabled={isSavingPage || isCreating}
-              variant="outline"
-              title="保存页面"
-              className="text-slate-700 border-slate-300 hover:border-[#00CDD4] hover:text-[#00CDD4] hover:bg-[#00CDD4]/5 disabled:opacity-40"
-            >
-              <Save size={16} className="md:mr-1" />
-              <span className="hidden md:inline">保存</span>
-            </Button>
-          </>
+          <Button
+            onClick={onSavePage}
+            disabled={isSavingPage || isCreating}
+            variant="outline"
+            title="保存页面"
+            className="text-slate-700 border-slate-300 hover:border-[#00CDD4] hover:text-[#00CDD4] hover:bg-[#00CDD4]/5 disabled:opacity-40"
+          >
+            <Save size={16} className="md:mr-1" />
+            <span className="hidden md:inline">保存</span>
+          </Button>
         )}
 
         {/* 编辑功能按钮 */}

@@ -16,7 +16,6 @@ interface DialogStates {
   download: boolean;
   terminate: boolean;
   deleteConfirm: number | null;
-  unsavedSwitch: boolean;
 }
 
 /**
@@ -70,7 +69,6 @@ const initialState: EditorState = {
     download: false,
     terminate: false,
     deleteConfirm: null,
-    unsavedSwitch: false,
   },
   isTerminating: false,
 };
