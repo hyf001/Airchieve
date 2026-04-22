@@ -184,6 +184,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
         },
         { signal: abortController.signal },
       );
+      editorState.setDownloadState({ progress: 100 });
       editorState.setDialogState('download', false);
       toast({ title: '导出成功' });
     } catch (err) {
@@ -199,7 +200,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
       });
     } finally {
       exportAbortControllerRef.current = null;
-      editorState.setDownloadState({ isDownloading: false, progress: 100 });
+      editorState.setDownloadState({ isDownloading: false });
     }
   };
 
@@ -365,25 +366,6 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
 
     initialize();
   }, [storybookId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ========== 下载进度模拟 ==========
-  useEffect(() => {
-    if (!editorState.download.isDownloading) {
-      if (editorState.download.progress > 0) {
-        editorState.setDownloadState({ progress: 100 });
-      }
-      return;
-    }
-    editorState.setDownloadState({ progress: 5 });
-    const id = setInterval(() => {
-      const newProgress = Math.min(99, editorState.download.progress + (99 - editorState.download.progress) * 0.06 + 0.35);
-      editorState.setDownloadState({ progress: newProgress });
-      if (newProgress >= 99) {
-        clearInterval(id);
-      }
-    }, 400);
-    return () => clearInterval(id);
-  }, [editorState.download.isDownloading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 当前页面 ID（用于传给 text-edit）
   const currentPageId = editorState.pages[editorState.currentPageIndex]?.id;
