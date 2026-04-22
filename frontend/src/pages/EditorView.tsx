@@ -6,7 +6,6 @@ import React, { useCallback, useEffect, useState, useRef } from 'react';
 import {
   deleteStorybook,
   updateStorybookPublicStatus,
-  downloadStorybookImage,
   terminateStorybook,
   insertPages,
   generateCover,
@@ -15,6 +14,7 @@ import {
   getPageDetail,
   StorybookLayer,
 } from '../services/storybookService';
+import { exportStorybook, ExportOptions } from '../services/exportService';
 import { useToast } from '@/hooks/use-toast';
 
 // 导入重构后的组件
@@ -36,7 +36,6 @@ import {
   GenerateCoverDialog,
   BackCoverDialog,
 } from '../components/editor/dialogs';
-import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 // 导入 Hooks
 import { useEditorState } from '@/hooks/useEditorState';
@@ -70,6 +69,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
   const [textSelectedLayerId, setTextSelectedLayerId] = useState<number | null>(null);
   const [textIsDragging, setTextIsDragging] = useState(false);
   const [textIsResizing, setTextIsResizing] = useState(false);
+  const exportAbortControllerRef = useRef<AbortController | null>(null);
 
   // ========== 页面图层状态（唯一可信数据源） ==========
   const [pageLayers, setPageLayers] = useState<StorybookLayer[]>([]);
@@ -93,7 +93,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
 
   const handleActiveToolChange = useCallback((toolId: OptionalToolId) => {
     if (toolManager.activeTool === 'text' && toolId !== 'text') {
-      textEditToolRef.current?.commitCurrentEdits();
+      void textEditToolRef.current?.commitCurrentEdits();
     }
     toolManager.setActiveTool(toolId);
   }, [toolManager]);
@@ -101,7 +101,8 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
   // 组件卸载前提交
   useEffect(() => {
     return () => {
-      textEditToolRef.current?.commitCurrentEdits();
+      void textEditToolRef.current?.commitCurrentEdits();
+      exportAbortControllerRef.current?.abort();
     };
   }, []);
 
@@ -109,14 +110,6 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
   const aiEditToolRef = useRef<AIEditRef>(null);
   const [isAIEditGenerating, setIsAIEditGenerating] = useState(false);
 
-  // ========== 历史记录状态（撤销/重做） ==========
-  const [historyState, setHistoryState] = useState<{
-    history: Array<{ image_url: string; text: string }>;
-    index: number;
-  }>({
-    history: [],
-    index: -1,
-  });
   const [isSavingPage, setIsSavingPage] = useState(false);
 
   // ========== 数据加载 ==========
@@ -141,7 +134,6 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
       setTextIsDragging(false);
       setTextIsResizing(false);
       setPageLayers([]);
-      setHistoryState({ history: [], index: -1 });
       prevPageIndexRef.current = -1;
     }
   }, [editorState.currentStorybook?.id]);
@@ -173,24 +165,48 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
     }
   };
 
-  const handleDownloadConfirm = async (watermark: boolean) => {
+  const handleExportConfirm = async (options: ExportOptions) => {
     if (!editorState.currentStorybook) return;
-    editorState.setDialogState('download', false);
-    editorState.setDownloadState({ isDownloading: true, progress: 0 });
+
+    // Commit any in-progress text edits before export
+    await textEditToolRef.current?.commitCurrentEdits();
+
+    editorState.setExportState({ isExporting: true, progress: 0 });
+    const abortController = new AbortController();
+    exportAbortControllerRef.current = abortController;
 
     try {
-      await downloadStorybookImage(editorState.currentStorybook, watermark);
-      toast({ title: '下载成功' });
+      await exportStorybook(
+        editorState.currentStorybook,
+        options,
+        (_stage, progress) => {
+          editorState.setExportState({ progress: Math.round(progress) });
+        },
+        { signal: abortController.signal },
+      );
+      editorState.setExportState({ progress: 100 });
+      editorState.setDialogState('export', false);
+      toast({ title: '导出成功' });
     } catch (err) {
+      if (err instanceof Error && err.message === '导出已取消') {
+        editorState.setDialogState('export', false);
+        toast({ title: '已取消导出' });
+        return;
+      }
       toast({
         variant: 'destructive',
-        title: '下载失败',
+        title: '导出失败',
         description: err instanceof Error ? err.message : undefined,
       });
     } finally {
-      editorState.setDownloadState({ isDownloading: false, progress: 100 });
+      exportAbortControllerRef.current = null;
+      editorState.setExportState({ isExporting: false });
     }
   };
+
+  const handleExportCancel = useCallback(() => {
+    exportAbortControllerRef.current?.abort();
+  }, []);
 
   const handleTerminate = async () => {
     if (!editorState.currentStorybook || editorState.isTerminating) return;
@@ -252,49 +268,26 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
     }
   };
 
-  // ========== 历史记录管理 ==========
-  // 当页面切换时，初始化历史记录
+  // ========== 页面切换 ==========
   const prevPageIndexRef = useRef<number>(-1);
 
   // 安全切页：先提交当前编辑，再切换页面索引
   const safeSwitchPage = useCallback((newIndex: number) => {
     if (newIndex === editorState.currentPageIndex) return;
-    textEditToolRef.current?.commitCurrentEdits();
-    editorState.setCurrentPageIndex(newIndex);
+    void (async () => {
+      await textEditToolRef.current?.commitCurrentEdits();
+      editorState.setCurrentPageIndex(newIndex);
+    })();
   }, [editorState.currentPageIndex, editorState.setCurrentPageIndex]);
 
-  // 页面切换：有未保存修改时提示
+  // 页面切换
   const handlePageChange = (newIndex: number) => {
     if (newIndex === editorState.currentPageIndex) return;
-    const hasUnsaved = historyState.index > 0;
-    if (hasUnsaved) {
-      editorState.setDialogState('unsavedSwitch', true);
-      pendingPageIndexRef.current = newIndex;
-    } else {
-      safeSwitchPage(newIndex);
-    }
-  };
-
-  const pendingPageIndexRef = useRef<number>(-1);
-
-  // 确认切换：放弃修改，切换页面
-  const confirmPageSwitch = () => {
-    const idx = pendingPageIndexRef.current;
-    if (idx >= 0) {
-      safeSwitchPage(idx);
-      pendingPageIndexRef.current = -1;
-    }
-    editorState.setDialogState('unsavedSwitch', false);
-  };
-
-  // 取消切换：留在当前页
-  const cancelPageSwitch = () => {
-    pendingPageIndexRef.current = -1;
-    editorState.setDialogState('unsavedSwitch', false);
+    safeSwitchPage(newIndex);
   };
 
   useEffect(() => {
-    // 只在页面索引变化时从后台获取最新页面详情并初始化历史记录
+    // 只在页面索引变化时从后台获取最新页面详情
     if (editorState.pages.length > 0 && editorState.currentPageIndex >= 0 && editorState.currentPageIndex !== prevPageIndexRef.current) {
       const page = editorState.pages[editorState.currentPageIndex];
       // 从后台获取最新页面详情
@@ -310,74 +303,13 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
         });
         // 存储页面图层（唯一可信数据源）
         setPageLayers(detail.layers || []);
-        setHistoryState({
-          history: [{ image_url: detail.image_url, text: detail.text || '' }],
-          index: 0,
-        });
       }).catch(() => {
         // 接口失败时用本地数据兜底
         setPageLayers([]);
-        setHistoryState({
-          history: [{ image_url: page.image_url, text: page.text || '' }],
-          index: 0,
-        });
       });
       prevPageIndexRef.current = editorState.currentPageIndex;
     }
   }, [editorState.currentPageIndex, editorState.pages]);
-
-  // 记录新的历史状态
-  const pushHistory = (imageUrl: string, text: string) => {
-    setHistoryState(prev => {
-      // 如果当前不在历史记录末尾，删除后面的记录
-      const newHistory = prev.history.slice(0, prev.index + 1);
-      newHistory.push({ image_url: imageUrl, text });
-      // 限制历史记录长度（最多20条）
-      const trimmedHistory = newHistory.length > 20 ? newHistory.slice(-20) : newHistory;
-      return {
-        history: trimmedHistory,
-        index: trimmedHistory.length - 1,
-      };
-    });
-  };
-
-  // 撤销
-  const handleUndo = () => {
-    if (historyState.index > 0) {
-      const newIndex = historyState.index - 1;
-      const entry = historyState.history[newIndex];
-      setHistoryState(prev => ({ ...prev, index: newIndex }));
-      const updatedPages = [...editorState.pages];
-      updatedPages[editorState.currentPageIndex] = {
-        ...updatedPages[editorState.currentPageIndex],
-        image_url: entry.image_url,
-        text: entry.text,
-      };
-      editorState.setCurrentStorybook({
-        ...editorState.currentStorybook!,
-        pages: updatedPages,
-      });
-    }
-  };
-
-  // 重做
-  const handleRedo = () => {
-    if (historyState.index < historyState.history.length - 1) {
-      const newIndex = historyState.index + 1;
-      const entry = historyState.history[newIndex];
-      setHistoryState(prev => ({ ...prev, index: newIndex }));
-      const updatedPages = [...editorState.pages];
-      updatedPages[editorState.currentPageIndex] = {
-        ...updatedPages[editorState.currentPageIndex],
-        image_url: entry.image_url,
-        text: entry.text,
-      };
-      editorState.setCurrentStorybook({
-        ...editorState.currentStorybook!,
-        pages: updatedPages,
-      });
-    }
-  };
 
   // 保存页面
   const handleSavePage = async () => {
@@ -408,11 +340,6 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
         description: '页面已保存到服务器',
       });
 
-      // 保存成功后清空历史
-      setHistoryState({
-        history: [{ image_url: updatedPage.image_url, text: updatedPage.text || '' }],
-        index: 0,
-      });
     } catch (err) {
       toast({
         variant: 'destructive',
@@ -440,25 +367,6 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
     initialize();
   }, [storybookId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ========== 下载进度模拟 ==========
-  useEffect(() => {
-    if (!editorState.download.isDownloading) {
-      if (editorState.download.progress > 0) {
-        editorState.setDownloadState({ progress: 100 });
-      }
-      return;
-    }
-    editorState.setDownloadState({ progress: 5 });
-    const id = setInterval(() => {
-      const newProgress = Math.min(99, editorState.download.progress + (99 - editorState.download.progress) * 0.06 + 0.35);
-      editorState.setDownloadState({ progress: newProgress });
-      if (newProgress >= 99) {
-        clearInterval(id);
-      }
-    }, 400);
-    return () => clearInterval(id);
-  }, [editorState.download.isDownloading]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // 当前页面 ID（用于传给 text-edit）
   const currentPageId = editorState.pages[editorState.currentPageIndex]?.id;
 
@@ -477,11 +385,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
           onInsertPage={() => editorState.setDialogState('insertPage', true)}
           onGenerateCover={() => editorState.setDialogState('cover', true)}
           onGenerateBackCover={() => editorState.setDialogState('backCover', true)}
-          onDownload={() => editorState.setDialogState('download', true)}
-          canUndo={historyState.index > 0}
-          canRedo={historyState.index < historyState.history.length - 1}
-          onUndo={handleUndo}
-          onRedo={handleRedo}
+          onExport={() => editorState.setDialogState('export', true)}
           onSavePage={handleSavePage}
           isSavingPage={isSavingPage}
         />
@@ -521,8 +425,8 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                 canReadPages={editorState.canReadPages}
                 loading={editorState.loading}
                 error={editorState.error}
-                downloadProgress={editorState.download.progress}
-                isDownloading={editorState.download.isDownloading}
+                exportProgress={editorState.export.progress}
+                isExporting={editorState.export.isExporting}
                 onPageIndexChange={safeSwitchPage}
                 onTerminateClick={() => editorState.setDialogState('terminate', true)}
                 isTerminating={editorState.isTerminating}
@@ -558,8 +462,6 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                     pages: updatedPages,
                   });
 
-                  pushHistory(imageUrl, currentPage.text || '');
-
                   toast({
                     title: '图片已更新（本地预览）',
                     description: '点击保存按钮将更改保存到服务器',
@@ -589,9 +491,20 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
 
       {/* 对话框 */}
       <DownloadDialog
-        open={editorState.dialogs.download}
-        onOpenChange={(open) => editorState.setDialogState('download', open)}
-        onConfirm={handleDownloadConfirm}
+        open={editorState.dialogs.export}
+        onOpenChange={(open) => {
+          if (!open && editorState.export.isExporting) {
+            handleExportCancel();
+            return;
+          }
+          editorState.setDialogState('export', open);
+        }}
+        onConfirm={handleExportConfirm}
+        onCancelExport={handleExportCancel}
+        isExporting={editorState.export.isExporting}
+        currentPageIndex={editorState.currentPageIndex}
+        pages={editorState.pages}
+        exportProgress={editorState.export.progress}
       />
 
       <TerminateConfirmDialog
@@ -623,17 +536,6 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
             await loadStorybook(editorState.currentStorybook.id);
           }
         }}
-      />
-
-      {/* 未保存提示对话框 */}
-      <ConfirmDialog
-        open={editorState.dialogs.unsavedSwitch}
-        title="未保存的修改"
-        description="当前页面有未保存的修改，切换页面将丢失这些修改。是否继续？"
-        confirmText="放弃修改"
-        cancelText="留在当前页"
-        onConfirm={confirmPageSwitch}
-        onCancel={cancelPageSwitch}
       />
     </>
   );

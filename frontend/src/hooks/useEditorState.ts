@@ -13,17 +13,16 @@ interface DialogStates {
   insertPage: boolean;
   cover: boolean;
   backCover: boolean;
-  download: boolean;
+  export: boolean;
   terminate: boolean;
   deleteConfirm: number | null;
-  unsavedSwitch: boolean;
 }
 
 /**
- * 下载状态
+ * 导出状态
  */
-interface DownloadState {
-  isDownloading: boolean;
+interface ExportState {
+  isExporting: boolean;
   progress: number;
 }
 
@@ -40,8 +39,8 @@ interface EditorState {
   loading: boolean;
   error: string | null;
 
-  // 下载状态
-  download: DownloadState;
+  // 导出状态
+  export: ExportState;
 
   // 对话框状态
   dialogs: DialogStates;
@@ -59,18 +58,17 @@ const initialState: EditorState = {
   currentPageIndex: 0,
   loading: true,
   error: null,
-  download: {
-    isDownloading: false,
+  export: {
+    isExporting: false,
     progress: 0,
   },
   dialogs: {
     insertPage: false,
     cover: false,
     backCover: false,
-    download: false,
+    export: false,
     terminate: false,
     deleteConfirm: null,
-    unsavedSwitch: false,
   },
   isTerminating: false,
 };
@@ -116,11 +114,11 @@ export function useEditorState() {
     setState(prev => ({ ...prev, error }));
   }, []);
 
-  // ========== 下载状态 ==========
-  const setDownloadState = useCallback((updates: Partial<DownloadState>) => {
+  // ========== 导出状态 ==========
+  const setExportState = useCallback((updates: Partial<ExportState>) => {
     setState(prev => ({
       ...prev,
-      download: { ...prev.download, ...updates },
+      export: { ...prev.export, ...updates },
     }));
   }, []);
 
@@ -167,9 +165,9 @@ export function useEditorState() {
     setLoading,
     setError,
 
-    // 下载状态
-    download: state.download,
-    setDownloadState,
+    // 导出状态
+    export: state.export,
+    setExportState,
 
     // 对话框状态
     dialogs: state.dialogs,

@@ -29,6 +29,8 @@ export interface TextLayerViewModel {
   backgroundColor: string;
   borderRadius: number;
   rotation: number;
+  canvasWidth?: number;
+  canvasHeight?: number;
 }
 
 /**
@@ -56,6 +58,8 @@ export function toTextLayerViewModel(layer: StorybookLayer): TextLayerViewModel 
     backgroundColor: content?.backgroundColor ?? '',
     borderRadius: content?.borderRadius ?? 0,
     rotation: content?.rotation ?? 0,
+    canvasWidth: content?.canvasWidth,
+    canvasHeight: content?.canvasHeight,
   };
 }
 
@@ -78,6 +82,8 @@ export function toTextLayerContent(view: TextLayerViewModel): TextLayerContent {
     backgroundColor: view.backgroundColor,
     borderRadius: view.borderRadius,
     rotation: view.rotation,
+    canvasWidth: view.canvasWidth,
+    canvasHeight: view.canvasHeight,
   };
 }
 
@@ -97,7 +103,7 @@ export interface TextEditToolRef {
   handleLayerMouseDown: (e: React.MouseEvent, layer: TextLayerViewModel) => void;
   handleResizeMouseDown: (e: React.MouseEvent, layer: TextLayerViewModel, handle: string) => void;
   handleTextChange: (id: number, text: string) => void;
-  commitCurrentEdits: () => void;
+  commitCurrentEdits: () => Promise<void>;
 }
 
 /**

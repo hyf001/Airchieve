@@ -28,9 +28,9 @@ export const TERMINAL_STATUSES = new Set(['finished', 'error', 'terminated']);
 export const IN_PROGRESS_STATUSES = new Set(['creating', 'updating']);
 
 /**
- * 下载进度配置
+ * 导出进度配置
  */
-export const DOWNLOAD_CONFIG = {
+export const EXPORT_CONFIG = {
   updateInterval: 400, // 进度更新间隔 (ms)
   progressIncrement: 0.06, // 每次更新的增量系数
   minIncrement: 0.35, // 最小增量

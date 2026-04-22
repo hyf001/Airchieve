@@ -80,25 +80,30 @@ const LayersPreview: React.FC<{ layers: StorybookLayer[]; activeTool?: ToolId }>
                 {strokes.map((stroke, si) => {
                   const points = stroke.points ?? [];
                   if (points.length === 0) return null;
+                  const getPoint = (point: number[] | { x: number; y: number }) =>
+                    Array.isArray(point) ? { x: point[0] ?? 0, y: point[1] ?? 0 } : point;
+                  const firstPoint = getPoint(points[0]);
                   if (points.length === 1) {
                     return (
                       <circle
                         key={si}
-                        cx={points[0][0]}
-                        cy={points[0][1]}
-                        r={stroke.brushSize / 2}
+                        cx={firstPoint.x}
+                        cy={firstPoint.y}
+                        r={(stroke.brushSize ?? stroke.size ?? 1) / 2}
                         fill={stroke.color}
                       />
                     );
                   }
-                  const pathData = points.reduce((acc, p, i) =>
-                    i === 0 ? `M ${p[0]} ${p[1]}` : `${acc} L ${p[0]} ${p[1]}`, '');
+                  const pathData = points.reduce((acc, p, i) => {
+                    const point = getPoint(p);
+                    return i === 0 ? `M ${point.x} ${point.y}` : `${acc} L ${point.x} ${point.y}`;
+                  }, '');
                   return (
                     <path
                       key={si}
                       d={pathData}
                       stroke={stroke.color}
-                      strokeWidth={stroke.brushSize}
+                      strokeWidth={stroke.brushSize ?? stroke.size ?? 1}
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       fill="none"
@@ -147,8 +152,8 @@ interface EditorCanvasProps {
   canReadPages: boolean;
   loading: boolean;
   error: string | null;
-  downloadProgress: number;
-  isDownloading: boolean;
+  exportProgress: number;
+  isExporting: boolean;
   onPageIndexChange: (index: number) => void;
   onTerminateClick: () => void;
   isTerminating: boolean;
@@ -176,8 +181,8 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
   canReadPages,
   loading,
   error,
-  downloadProgress,
-  isDownloading,
+  exportProgress,
+  isExporting,
   onPageIndexChange,
   onTerminateClick,
   isTerminating,
@@ -211,10 +216,10 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
 
   return (
     <div className="flex-1 relative overflow-hidden bg-[#FAF3ED] p-4">
-      {/* 下载进度条 */}
-      {isDownloading && (
+      {/* 导出进度条 */}
+      {isExporting && (
         <div className="absolute top-4 left-4 right-4 z-50 px-4 pt-2 pb-1 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg">
-          <ProgressCaterpillar progress={downloadProgress} showLabel />
+          <ProgressCaterpillar progress={exportProgress} showLabel />
         </div>
       )}
 
