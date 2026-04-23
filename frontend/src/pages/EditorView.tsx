@@ -32,6 +32,7 @@ import {
   DownloadDialog,
   TerminateConfirmDialog,
   InsertPageDialog,
+  RegeneratePageDialog,
 } from '../components/editor/dialogs';
 
 // 导入 Hooks
@@ -359,6 +360,7 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
           onBack={onBack}
           onCreateNew={onCreateNew}
           onInsertPage={() => editorState.setDialogState('insertPage', true)}
+          onRegeneratePage={() => editorState.setDialogState('regeneratePage', true)}
           onExport={() => editorState.setDialogState('export', true)}
           onSavePage={handleSavePage}
           isSavingPage={isSavingPage}
@@ -497,6 +499,18 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
         onOpenChange={(open) => editorState.setDialogState('insertPage', open)}
         storybook={editorState.currentStorybook}
         onInsert={handleInsertPages}
+      />
+
+      <RegeneratePageDialog
+        open={editorState.dialogs.regeneratePage}
+        onOpenChange={(open) => editorState.setDialogState('regeneratePage', open)}
+        storybookId={editorState.currentStorybook?.id || 0}
+        pageId={editorState.pages[editorState.currentPageIndex]?.id}
+        pageType={editorState.pages[editorState.currentPageIndex]?.page_type as any}
+        pages={editorState.pages}
+        onPageRegenerated={(storybookId: number) => {
+          startPolling(storybookId);
+        }}
       />
     </>
   );

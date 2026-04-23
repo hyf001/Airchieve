@@ -147,7 +147,7 @@ const StoryboardEditStep: React.FC<StoryboardEditStepProps> = ({
                     <div className="p-4">
                       <div className="flex items-center justify-between mb-3">
                         <span className="text-xs font-semibold text-amber-600">
-                          {item.page_type === 'cover' ? '封面' : `第 ${storyboards.slice(0, index + 1).filter(p => p.page_type !== 'cover').length} 页`}
+                          {item.page_type === 'cover' ? '封面' : `第 ${storyboards.slice(0, index).filter(p => p.page_type !== 'cover').length} 页`}
                         </span>
                         <div className="flex items-center gap-2">
                           <Button

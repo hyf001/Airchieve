@@ -4,7 +4,6 @@
 
 export type ToolId =
   | 'ai-edit'       // AI改图
-  | 'regenerate'    // AI调整当前页
   | 'text'          // 文字工具
   | 'adjust'        // 调整工具
   | 'color'         // 调色工具

@@ -11,6 +11,7 @@ import { Storybook, StorybookListItem } from '@/services/storybookService';
  */
 interface DialogStates {
   insertPage: boolean;
+  regeneratePage: boolean;
   cover: boolean;
   backCover: boolean;
   export: boolean;
@@ -64,6 +65,7 @@ const initialState: EditorState = {
   },
   dialogs: {
     insertPage: false,
+    regeneratePage: false,
     cover: false,
     backCover: false,
     export: false,
@@ -80,8 +82,11 @@ export function useEditorState() {
   const [state, setState] = useState<EditorState>(initialState);
 
   // ========== 绘本状态 ==========
-  const setCurrentStorybook = useCallback((storybook: Storybook | null) => {
-    setState(prev => ({ ...prev, currentStorybook: storybook }));
+  const setCurrentStorybook = useCallback((storybook: Storybook | null | ((prev: Storybook | null) => Storybook | null)) => {
+    setState(prev => ({
+      ...prev,
+      currentStorybook: typeof storybook === 'function' ? (storybook as (prev: Storybook | null) => Storybook | null)(prev.currentStorybook) : storybook,
+    }));
   }, []);
 
   const setStorybookList = useCallback((list: StorybookListItem[]) => {

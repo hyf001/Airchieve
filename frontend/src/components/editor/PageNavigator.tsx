@@ -80,7 +80,7 @@ const PageThumbnail: React.FC<PageThumbnailProps> = ({ page, index, isActive, on
       ? '封面'
       : page.page_type === 'back_cover'
       ? '封底'
-      : `第 ${index + 1} 页`;
+      : `第 ${page.page_index} 页`;
 
   return (
     <button

@@ -15,6 +15,7 @@ class StorybookPagePreviewResponse(BaseModel):
     model_config = {"from_attributes": True}
 
     id: int
+    page_index: int = Field(0, description="页面索引（用于显示页码）")
     text: Optional[str] = Field(None, description="页面文本")
     image_url: Optional[str] = Field(None, description="图片URL")
     page_type: Optional[str] = Field(None, description="页面类型")
@@ -97,8 +98,17 @@ class TerminateResponse(BaseModel):
     message: str
 
 
+class PageStatusItem(BaseModel):
+    """页面状态项"""
+    id: int = Field(..., description="页面ID")
+    page_index: int = Field(..., description="页面索引")
+    page_type: str = Field(..., description="页面类型")
+    status: str = Field(..., description="页面状态")
+    image_url: Optional[str] = Field(None, description="图片URL（仅当状态为finished时有值）")
+
+
 class StorybookStatusResponse(BaseModel):
-    """绘本状态响应（轻量，不包含 pages）"""
+    """绘本状态响应（轻量，包含页面简要状态）"""
     id: int
     status: str
     error_message: Optional[str] = None
@@ -107,6 +117,7 @@ class StorybookStatusResponse(BaseModel):
     completed_pages: int = 0
     generating_pages: int = 0
     failed_pages: int = 0
+    pages: list[PageStatusItem] = Field(default_factory=list, description="页面状态列表")
 
 
 class CreateStoryRequest(BaseModel):

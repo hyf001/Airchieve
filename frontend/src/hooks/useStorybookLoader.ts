@@ -9,7 +9,6 @@ import {
   getStorybook,
   getStorybookStatus,
   listStorybooks,
-  StorybookListItem,
   StorybookStatusResult,
 } from '@/services/storybookService';
 import { UseEditorStateReturn } from './useEditorState';
@@ -53,12 +52,54 @@ export function useStorybookLoader({
     }
     prevCompletedRef.current = result.completed_pages;
 
+    // 使用页面状态列表更新本地页面数据（增量更新，避免频繁拉取完整数据）
+    if (result.pages && result.pages.length > 0) {
+      setCurrentStorybook((currentBook) => {
+        if (!currentBook || currentBook.id !== result.id) return currentBook;
+        const currentPages = currentBook.pages || [];
+
+        // 创建页面ID到页面的映射，方便快速查找
+        const pageMap = new Map(currentPages.map(p => [p.id, p]));
+
+        // 更新或添加页面
+        result.pages.forEach(statusPage => {
+          const existingPage = pageMap.get(statusPage.id);
+          if (existingPage) {
+            // 更新现有页面的 status 和 image_url
+            pageMap.set(statusPage.id, {
+              ...existingPage,
+              status: statusPage.status,
+              image_url: statusPage.image_url || existingPage.image_url,
+            });
+          } else {
+            // 添加新页面（使用状态接口的数据，text和storyboard会在终态时补全）
+            pageMap.set(statusPage.id, {
+              id: statusPage.id,
+              page_index: statusPage.page_index,
+              text: '',
+              image_url: statusPage.image_url || '',
+              page_type: statusPage.page_type,
+              status: statusPage.status,
+            });
+          }
+        });
+
+        // 按 page_index 排序并转换回数组
+        const sortedPages = Array.from(pageMap.values()).sort((a, b) => a.page_index - b.page_index);
+
+        return {
+          ...currentBook,
+          pages: sortedPages,
+        };
+      });
+    }
+
     if (result.status === 'error' && result.error_message) {
       toast({ title: '生成失败', description: result.error_message, variant: 'destructive' });
     }
 
     if (TERMINAL_STATUSES.has(result.status)) {
-      // 终态时拉取完整数据
+      // 终态时拉取完整数据（包含完整的 storyboard、text 等）
       try {
         const book = await getStorybook(result.id);
         setCurrentStorybook(book);

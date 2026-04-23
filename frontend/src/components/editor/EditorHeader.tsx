@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { ChevronLeft, Plus, Download, Gift, Save } from 'lucide-react';
+import { ChevronLeft, Plus, Download, Gift, Save, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { STATUS_TEXT_MAP } from '@/constants/editor';
 
@@ -21,6 +21,7 @@ interface EditorHeaderProps {
   onExport: () => void;
   onSavePage?: () => void;
   isSavingPage?: boolean;
+  onRegeneratePage?: () => void;
 }
 
 export const EditorHeader: React.FC<EditorHeaderProps> = ({
@@ -34,6 +35,7 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
   onExport,
   onSavePage,
   isSavingPage = false,
+  onRegeneratePage,
 }) => {
   const pagesCount = pages.length;
   const status = currentStorybook?.status;
@@ -93,6 +95,15 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
             >
               <Plus size={16} />
               插入页
+            </Button>
+            <Button
+              onClick={onRegeneratePage}
+              disabled={isCreating}
+              variant="outline"
+              className="hidden md:flex text-slate-700 border-slate-300 hover:border-[#00CDD4] hover:text-[#00CDD4] hover:bg-[#00CDD4]/5 disabled:opacity-40"
+            >
+              <Sparkles size={16} />
+              调整页面
             </Button>
           </>
         )}

@@ -7,7 +7,6 @@ import { ToolConfig, ToolId, ToolCategory } from '@/types/tool';
 
 // 导入已实现工具
 import { AIEditTool } from './ai-edit';
-import { RegenerateTool } from './regenerate';
 import { TextEditTool } from './text-edit';
 import { DrawTool } from './draw';
 
@@ -34,16 +33,6 @@ export const TOOL_REGISTRY: Record<ToolId, ToolConfig> = {
     Panel: AIEditTool.Panel,
     Overlay: AIEditTool.Overlay,
     description: '输入指令描述你想要的修改',
-  },
-
-  'regenerate': {
-    id: 'regenerate',
-    label: '调整页面',
-    icon: '🔄',
-    category: 'basic',
-    component: RegenerateTool.Panel as any,
-    Panel: RegenerateTool.Panel,
-    description: 'AI 重新生成当前页的文字、分镜或图片',
   },
 
   'text': {

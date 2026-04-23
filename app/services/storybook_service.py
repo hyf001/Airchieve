@@ -367,7 +367,7 @@ async def get_storybook(storybook_id: int) -> Optional[Storybook]:
 
 
 async def get_storybook_status(storybook_id: int) -> Optional[dict]:
-    """查询绘本状态和页面进度，不加载 page 对象"""
+    """查询绘本状态和页面进度，包含页面简要状态列表"""
     from sqlalchemy import func as sa_func
 
     async with async_session_maker() as session:
@@ -411,6 +411,29 @@ async def get_storybook_status(storybook_id: int) -> Optional[dict]:
             )
         )).scalar_one()
 
+        # 查询所有页面的简要状态（按 page_index 排序）
+        pages_result = await session.execute(
+            select(
+                Page.id,
+                Page.page_index,
+                Page.page_type,
+                Page.status,
+                Page.image_url,
+            )
+            .where(Page.storybook_id == storybook_id)
+            .order_by(Page.page_index)
+        )
+        pages = [
+            {
+                "id": p.id,
+                "page_index": p.page_index,
+                "page_type": p.page_type,
+                "status": p.status,
+                "image_url": p.image_url if p.status == PageStatus.FINISHED.value else None,
+            }
+            for p in pages_result.all()
+        ]
+
         return {
             "id": row.id,
             "status": row.status,
@@ -420,6 +443,7 @@ async def get_storybook_status(storybook_id: int) -> Optional[dict]:
             "completed_pages": completed,
             "generating_pages": generating,
             "failed_pages": failed,
+            "pages": pages,
         }
 
 

@@ -33,6 +33,7 @@ export type PageType = "cover" | "content" | "back_cover";
 
 export interface StorybookPage {
   id: number;
+  page_index: number;
   text: string;
   image_url: string;
   storyboard?: {
@@ -320,6 +321,14 @@ export const getStorybook = async (storybookId: number): Promise<Storybook> => {
 /**
  * 获取绘本状态（轻量接口，不查询 pages，适��高频轮询）
  */
+export interface PageStatusItem {
+  id: number;
+  page_index: number;
+  page_type: PageType;
+  status: PageStatus;
+  image_url?: string | null;
+}
+
 export interface StorybookStatusResult {
   id: number;
   status: StorybookStatus;
@@ -329,6 +338,7 @@ export interface StorybookStatusResult {
   completed_pages: number;
   generating_pages: number;
   failed_pages: number;
+  pages: PageStatusItem[];
 }
 
 export const getStorybookStatus = async (storybookId: number): Promise<StorybookStatusResult> => {
