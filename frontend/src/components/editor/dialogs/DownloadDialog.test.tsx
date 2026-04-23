@@ -117,16 +117,35 @@ describe('DownloadDialog', () => {
     estimateLongImageMock.mockResolvedValue(longImageEstimate);
     renderDialog();
 
-    await user.click(screen.getByRole('tab', { name: 'PNG 长图' }));
+    await user.click(screen.getByRole('tab', { name: 'PNG' }));
 
     expect(screen.queryByText('纸张尺寸')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '上一页' })).not.toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'PNG 长图' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'PNG' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('导出方式')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '长图' })).toHaveAttribute('aria-selected', 'true');
 
     expect(await screen.findByText('800 x 600 px')).toBeInTheDocument();
+    expect(screen.getByText('3 页')).toBeInTheDocument();
     expect(screen.getByText('800 x 1800 px')).toBeInTheDocument();
     expect(screen.getByText('长图高度超过限制，将自动分为 2 个文件导出')).toBeInTheDocument();
     expect(screen.getAllByRole('presentation')).toHaveLength(pages.length);
+  });
+
+  it('submits zip export mode for image formats', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    renderDialog({ onConfirm });
+
+    await user.click(screen.getByRole('tab', { name: 'PNG' }));
+    await user.click(screen.getByRole('tab', { name: '压缩包' }));
+    await user.click(screen.getByRole('button', { name: '导出' }));
+
+    expect(onConfirm).toHaveBeenCalledWith({
+      ...DEFAULT_EXPORT_OPTIONS,
+      format: 'png',
+      exportMode: 'zip',
+    } satisfies ExportOptions);
   });
 
   it('submits the selected export options', async () => {
@@ -153,7 +172,7 @@ describe('DownloadDialog', () => {
     const onConfirm = vi.fn();
     renderDialog({ isExporting: true, onCancelExport, onConfirm });
 
-    expect(screen.getByRole('button', { name: '导出' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '导出中 0%' })).toBeDisabled();
 
     await user.click(screen.getByRole('button', { name: '取消导出' }));
 

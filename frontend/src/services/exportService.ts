@@ -13,12 +13,14 @@ import {
 // ============ Types ============
 
 export type ExportFormat = 'pdf' | 'png' | 'jpg';
+export type ExportMode = 'long' | 'zip';
 export type PaperSize = 'original' | 'a4' | 'a5' | 'square-210';
 export type PaperOrientation = 'auto' | 'portrait' | 'landscape';
 export type FitMode = 'contain' | 'cover';
 
 export interface ExportOptions {
   format: ExportFormat;
+  exportMode: ExportMode;
   paperSize: PaperSize;
   orientation: PaperOrientation;
   fitMode: FitMode;
@@ -34,6 +36,7 @@ export interface ExportRuntimeOptions {
 
 export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   format: 'pdf',
+  exportMode: 'long',
   paperSize: 'original',
   orientation: 'auto',
   fitMode: 'contain',
@@ -630,6 +633,78 @@ const renderAndDownloadSplit = async (
   }
 };
 
+// ============ ZIP Export (one image per page) ============
+
+const encodeArtworkForZip = (
+  artwork: HTMLCanvasElement,
+  mimeType: string,
+  quality: number | undefined,
+  isJpg: boolean,
+) => {
+  if (!isJpg) return artwork.toDataURL(mimeType, quality);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = artwork.width;
+  canvas.height = artwork.height;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(artwork, 0, 0);
+
+  const dataUrl = canvas.toDataURL(mimeType, quality);
+  canvas.width = 0;
+  canvas.height = 0;
+  return dataUrl;
+};
+
+export const exportAsZip = async (
+  storybook: Storybook,
+  pageDetails: StorybookPageWithLayers[],
+  options: ExportOptions,
+  onProgress?: (page: number, total: number) => void,
+  runtime?: ExportRuntimeOptions,
+) => {
+  const { default: JSZip } = await import('jszip');
+  if (pageDetails.length === 0) throw new Error('绘本无页面');
+  throwIfAborted(runtime?.signal);
+
+  const isJpg = options.format === 'jpg';
+  const ext = isJpg ? 'jpg' : 'png';
+  const mimeType = isJpg ? 'image/jpeg' : 'image/png';
+  const quality = isJpg ? options.jpgQuality : undefined;
+
+  const zip = new JSZip();
+  const baseName = sanitizeFilename(storybook.title || 'storybook');
+  const padLen = String(pageDetails.length).length;
+
+  for (let i = 0; i < pageDetails.length; i++) {
+    throwIfAborted(runtime?.signal);
+    const artwork = await renderPageArtwork(pageDetails[i], storybook, runtime?.signal);
+
+    const dataUrl = encodeArtworkForZip(artwork, mimeType, quality, isJpg);
+    const base64 = dataUrl.split(',')[1];
+    const pageNum = String(i + 1).padStart(padLen, '0');
+    zip.file(`${baseName}/${baseName}_${pageNum}.${ext}`, base64, { base64: true });
+
+    artwork.width = 0;
+    artwork.height = 0;
+    onProgress?.(i + 1, pageDetails.length);
+  }
+
+  throwIfAborted(runtime?.signal);
+  const blob = await zip.generateAsync({ type: 'blob' }, () => {
+    throwIfAborted(runtime?.signal);
+  });
+  throwIfAborted(runtime?.signal);
+  const link = document.createElement('a');
+  link.download = `${baseName}.zip`;
+  link.href = URL.createObjectURL(blob);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
+};
+
 // ============ Main Export Function ============
 
 export const exportStorybook = async (
@@ -652,6 +727,10 @@ export const exportStorybook = async (
   if (options.format === 'pdf') {
     await exportAsPdf(storybook, pageDetails, options, (page, total) => {
       onProgress?.('导出 PDF...', 30 + (page / total) * 70);
+    }, runtime);
+  } else if (options.exportMode === 'zip') {
+    await exportAsZip(storybook, pageDetails, options, (page, total) => {
+      onProgress?.('导出压缩包...', 30 + (page / total) * 70);
     }, runtime);
   } else {
     await exportAsLongImage(storybook, pageDetails, options, (page, total) => {

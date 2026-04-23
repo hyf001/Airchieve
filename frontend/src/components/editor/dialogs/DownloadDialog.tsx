@@ -21,6 +21,7 @@ import {
   ExportOptions,
   DEFAULT_EXPORT_OPTIONS,
   ExportFormat,
+  ExportMode,
   PaperSize,
   PaperOrientation,
   FitMode,
@@ -62,8 +63,13 @@ const FIT_OPTIONS: { value: FitMode; label: string }[] = [
 
 const FORMAT_LABELS: Record<ExportFormat, string> = {
   pdf: 'PDF',
-  png: 'PNG 长图',
-  jpg: 'JPG 长图',
+  png: 'PNG',
+  jpg: 'JPG',
+};
+
+const MODE_LABELS: Record<ExportMode, string> = {
+  long: '长图',
+  zip: '压缩包',
 };
 
 const getPaperRatio = (options: ExportOptions, estimate: LongImageEstimate | null) => {
@@ -115,12 +121,15 @@ export const DownloadDialog: React.FC<DownloadDialogProps> = ({
 
   const isPdf = options.format === 'pdf';
   const isJpg = options.format === 'jpg';
+  const isImage = !isPdf;
+  const isZip = isImage && options.exportMode === 'zip';
   const previewPage = getCurrentPreviewPage(pages, previewIndex);
   const paperRatio = getPaperRatio(options, longImageEstimate);
 
   useEffect(() => {
     if (!open) return;
-    setOptions({ ...DEFAULT_EXPORT_OPTIONS });
+    const defaultOpts = { ...DEFAULT_EXPORT_OPTIONS };
+    setOptions(defaultOpts);
     setPreviewIndex(Math.min(Math.max(currentPageIndex, 0), Math.max(pages.length - 1, 0)));
   }, [open, currentPageIndex, pages.length]);
 
@@ -173,6 +182,24 @@ export const DownloadDialog: React.FC<DownloadDialogProps> = ({
                 </TabsList>
               </Tabs>
             </div>
+
+            {isImage && (
+              <div className="space-y-2">
+                <Label>导出方式</Label>
+                <Tabs
+                  value={options.exportMode}
+                  onValueChange={(value) => updateOption('exportMode', value as ExportMode)}
+                >
+                  <TabsList className="grid w-full grid-cols-2">
+                    {(Object.keys(MODE_LABELS) as ExportMode[]).map((mode) => (
+                      <TabsTrigger key={mode} value={mode} className="data-[state=active]:text-[#00CDD4]">
+                        {MODE_LABELS[mode]}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+              </div>
+            )}
 
             {isPdf && (
               <>
@@ -341,12 +368,25 @@ export const DownloadDialog: React.FC<DownloadDialogProps> = ({
                   <span>{longImageEstimate.pageWidth} x {longImageEstimate.pageHeight} px</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>长图尺寸</span>
-                  <span>{longImageEstimate.pageWidth} x {longImageEstimate.longHeight} px</span>
+                  <span>总页数</span>
+                  <span>{longImageEstimate.totalPages} 页</span>
                 </div>
-                {longImageEstimate.willSplit && (
-                  <div className="text-xs text-amber-600">
-                    长图高度超过限制，将自动分为 {longImageEstimate.parts} 个文件导出
+                {!isZip && (
+                  <>
+                    <div className="flex justify-between">
+                      <span>长图尺寸</span>
+                      <span>{longImageEstimate.pageWidth} x {longImageEstimate.longHeight} px</span>
+                    </div>
+                    {longImageEstimate.willSplit && (
+                      <div className="text-xs text-amber-600">
+                        长图高度超过限制，将自动分为 {longImageEstimate.parts} 个文件导出
+                      </div>
+                    )}
+                  </>
+                )}
+                {isZip && (
+                  <div className="text-xs text-slate-400">
+                    每页导出为独立图片文件，打包为 ZIP 压缩包
                   </div>
                 )}
               </div>
