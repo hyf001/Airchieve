@@ -18,6 +18,8 @@ class StorybookPagePreviewResponse(BaseModel):
     text: Optional[str] = Field(None, description="页面文本")
     image_url: Optional[str] = Field(None, description="图片URL")
     page_type: Optional[str] = Field(None, description="页面类型")
+    status: Optional[str] = Field(None, description="页面生成状态")
+    error_message: Optional[str] = Field(None, description="页面错误信息")
     storyboard: Optional[dict] = Field(None, description="分镜信息")
 
 
@@ -103,28 +105,8 @@ class StorybookStatusResponse(BaseModel):
     updated_at: Optional[str] = None
     total_pages: int = 0
     completed_pages: int = 0
-
-
-class GenerateCoverRequest(BaseModel):
-    """生成封面请求"""
-    selected_page_indices: Optional[list[int]] = Field(None, description="用户选择的参考页索引列表；不传则自动选首/中/尾")
-
-
-class GenerateCoverResponse(BaseModel):
-    """生成封面响应"""
-    storybook_id: int
-    status: str
-
-
-class GenerateBackCoverRequest(BaseModel):
-    """生成封底请求"""
-    image_data: str = Field(..., description="封底图片的 base64 数据")
-
-
-class GenerateBackCoverResponse(BaseModel):
-    """生成封底响应"""
-    storybook_id: int
-    status: str
+    generating_pages: int = 0
+    failed_pages: int = 0
 
 
 class CreateStoryRequest(BaseModel):
@@ -157,6 +139,7 @@ class CreateStorybookFromStoryRequest(BaseModel):
 
 class GenerateStoryboardRequest(BaseModel):
     """生成分镜请求"""
+    title: Optional[str] = Field(None, description="绘本标题，用于生成封面分镜")
     story_content: str = Field(..., min_length=1, description="故事内容（纯文本）")
     page_count: int = Field(10, ge=1, le=20, description="页数")
     cli_type: CliType = Field(CliType.GEMINI, description="CLI类型")
@@ -166,6 +149,7 @@ class StoryboardItemResponse(BaseModel):
     """分镜项响应"""
     text: str = Field(..., description="页面文本")
     storyboard: Optional[dict] = Field(None, description="分镜信息")
+    page_type: str = Field("content", description="页面类型：cover/content")
 
 
 class GenerateStoryboardResponse(BaseModel):

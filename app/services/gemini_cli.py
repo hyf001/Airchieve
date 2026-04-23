@@ -744,6 +744,7 @@ class GeminiCli(LLMClientBase):
         template: Optional[Template] = None,
         aspect_ratio: str = "16:9",
         image_size: str = "1k",
+        image_instruction: str = "",
     ) -> str:
         """
         生成单页图片，返回图片URL
@@ -758,6 +759,7 @@ class GeminiCli(LLMClientBase):
             template: 风格模板
             aspect_ratio: 图片比例
             image_size: 图片尺寸
+            image_instruction: 用户图片调整指令
 
         Returns:
             str: 生成的图片URL（base64 data URL）
@@ -814,6 +816,11 @@ class GeminiCli(LLMClientBase):
             f"- Clean background, no borders or frames\n"
             f"- This is page {page_index + 1} of {len(story_context)} total pages"
         )
+        if image_instruction:
+            single_image_prompt += (
+                f"\n\nUser image adjustment instruction:\n{image_instruction}\n"
+                "Apply this instruction while preserving narrative continuity and the final story text/storyboard."
+            )
 
         # 调用 Gemini API 生成单张图片
         parts = [types.Part(text=single_image_prompt)]
@@ -967,6 +974,7 @@ class GeminiCli(LLMClientBase):
         reference_images: List[str],
         aspect_ratio: str = "16:9",
         image_size: str = "1k",
+        image_instruction: str = "",
     ) -> str:
         """生成绘本封面图片，使用内页图作为风格参考"""
         client = _get_client()
@@ -997,6 +1005,11 @@ class GeminiCli(LLMClientBase):
             f"- The title 「{title}」 MUST be rendered as decorative artistic lettering integrated into the illustration\n"
             f"- Title text style: hand-lettered, calligraphic, or illustrated — consistent with the book's art style"
         )
+        if image_instruction:
+            prompt += (
+                f"\n\nUser cover adjustment instruction:\n{image_instruction}\n"
+                "Apply this instruction while keeping the cover cohesive with the reference page illustrations."
+            )
 
         parts = [types.Part(text=prompt)]
         parts.append(types.Part(
@@ -1051,4 +1064,135 @@ class GeminiCli(LLMClientBase):
             "封面生成未获取到图片内容",
             "封面生成失败，请稍后重试",
             "NO_IMAGE_RETURNED",
+        )
+
+    async def regenerate_page_text(
+        self,
+        current_text: str,
+        story_context: List[str],
+        page_index: int,
+        instruction: str = "",
+    ) -> str:
+        """Regenerate text for a single page"""
+        client = _get_client()
+        logger.info("Regenerating page %d text | instruction=%s", page_index + 1, instruction[:50])
+
+        full_context = "Complete Story Context:\n"
+        for idx, text in enumerate(story_context, 1):
+            marker = " <-- CURRENT PAGE" if idx == page_index + 1 else ""
+            full_context += f"Page {idx}: {text}{marker}\n"
+
+        system_instruction = (
+            "You are a professional children's picture book writer. "
+            "Your task is to rewrite the story text for a specific page based on user instructions.\n\n"
+            "Requirements:\n"
+            "- Maintain narrative continuity with the surrounding pages\n"
+            "- Keep the same language style and reading difficulty\n"
+            "- Follow the user's adjustment direction if provided\n"
+            "- Output ONLY the new page text, no explanations or formatting"
+        )
+
+        user_prompt = (
+            f"{full_context}\n\n"
+            f"Please rewrite the story text for Page {page_index + 1}.\n"
+        )
+        if instruction:
+            user_prompt += f"User adjustment instruction: {instruction}\n"
+        else:
+            user_prompt += "Rewrite this page's text while maintaining narrative continuity.\n"
+        user_prompt += "\nOutput only the new page text."
+
+        parts = [types.Part(text=user_prompt)]
+        response = await client.aio.models.generate_content(
+            model=settings.GEMINI_TEXT_MODEL,
+            contents=types.Content(parts=parts),
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                response_modalities=["TEXT"],
+            ),
+        )
+
+        if response.candidates and response.candidates[0].content:
+            for part in response.candidates[0].content.parts or []:
+                if part.text:
+                    new_text = part.text.strip()
+                    if new_text:
+                        logger.info("Page %d text regenerated | length=%d", page_index + 1, len(new_text))
+                        return new_text
+
+        raise GeminiTechnicalError(
+            "Failed to regenerate page text",
+            "Text generation failed, please retry",
+            "NO_TEXT_RETURNED",
+        )
+
+    async def regenerate_page_storyboard(
+        self,
+        page_text: str,
+        story_context: List[str],
+        page_index: int,
+        instruction: str = "",
+    ) -> Optional[Storyboard]:
+        """Regenerate storyboard for a single page"""
+        client = _get_client()
+        logger.info("Regenerating page %d storyboard | instruction=%s", page_index + 1, instruction[:50])
+
+        full_context = "Complete Story Context:\n"
+        for idx, text in enumerate(story_context, 1):
+            full_context += f"Page {idx}: {text}\n"
+
+        system_instruction = (
+            "You are a professional visual director for children's picture books. "
+            "Your task is to create a visual storyboard for a specific page.\n\n"
+            "Return a JSON object with the following structure:\n"
+            "```\n"
+            "{\n"
+            '  "scene": "Scene environment description",\n'
+            '  "characters": "Character actions, posture and expressions",\n'
+            '  "shot": "Shot type and composition",\n'
+            '  "color": "Color tone and mood",\n'
+            '  "lighting": "Lighting direction and quality"\n'
+            "}\n"
+            "```\n\n"
+            "Constraints:\n"
+            "- All storyboard fields must be in English\n"
+            "- 'characters' field: describe actions, posture, and expressions ONLY\n"
+            "- Maintain visual consistency with surrounding pages"
+        )
+
+        user_prompt = (
+            f"{full_context}\n\n"
+            f"Current page (Page {page_index + 1}) text: {page_text}\n\n"
+            f"Create a visual storyboard for this page.\n"
+        )
+        if instruction:
+            user_prompt += f"User adjustment instruction: {instruction}\n"
+        user_prompt += "\nReturn a JSON object with scene, characters, shot, color, lighting."
+
+        parts = [types.Part(text=user_prompt)]
+        response = await client.aio.models.generate_content(
+            model=settings.GEMINI_TEXT_MODEL,
+            contents=types.Content(parts=parts),
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                response_modalities=["TEXT"],
+                response_mime_type="application/json",
+            ),
+        )
+
+        if response.candidates and response.candidates[0].content:
+            for part in response.candidates[0].content.parts or []:
+                if part.text:
+                    try:
+                        data = json.loads(part.text)
+                        if isinstance(data, dict) and "scene" in data:
+                            logger.info("Page %d storyboard regenerated", page_index + 1)
+                            return data  # type: ignore[return-value]
+                    except (json.JSONDecodeError, KeyError) as e:
+                        logger.warning("Storyboard JSON parse failed: %s", e)
+
+        raise GeminiTechnicalError(
+            "Failed to regenerate storyboard",
+            "Storyboard generation failed, please retry",
+            "NO_STORYBOARD_RETURNED",
         )

@@ -47,10 +47,9 @@ export function useStorybookLoader({
   const handlePollResult = useCallback(async (result: StorybookStatusResult) => {
     updateStorybookInList(result.id, { status: result.status });
 
-    // 检测新增完成的页面
+    // 检测新增完成进度；生成顺序不等于页面顺序（封面最后生成），不要用计数推断页码。
     if (result.completed_pages > prevCompletedRef.current) {
-      toast({ title: `第 ${result.completed_pages} 页已生成 ✓` });
-      setCurrentPageIndex(result.completed_pages - 1);
+      toast({ title: `已生成 ${result.completed_pages}/${result.total_pages} 页` });
     }
     prevCompletedRef.current = result.completed_pages;
 

@@ -74,6 +74,7 @@ interface PageThumbnailProps {
 }
 
 const PageThumbnail: React.FC<PageThumbnailProps> = ({ page, index, isActive, onClick, isTerminated }) => {
+  const status = page.status || (page.image_url ? 'finished' : isTerminated ? 'pending' : 'generating');
   const pageTypeLabel =
     page.page_type === 'cover'
       ? '封面'
@@ -90,13 +91,20 @@ const PageThumbnail: React.FC<PageThumbnailProps> = ({ page, index, isActive, on
           : 'ring-transparent hover:ring-slate-300 hover:scale-[1.02]'
       }`}
     >
-      {page.image_url ? (
+      {page.image_url && status !== 'generating' ? (
         <img
           src={page.image_url}
           alt={pageTypeLabel}
           className="w-full h-full object-cover"
         />
-      ) : isTerminated ? (
+      ) : status === 'error' ? (
+        <div className="w-full h-full bg-red-50 flex flex-col items-center justify-center gap-2 px-2">
+          <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          <span className="text-red-500 text-[10px] leading-tight">生成失败</span>
+        </div>
+      ) : status === 'pending' || isTerminated ? (
         <div className="w-full h-full bg-slate-100 flex flex-col items-center justify-center gap-2">
           <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

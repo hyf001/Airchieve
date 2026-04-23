@@ -66,6 +66,7 @@ class LLMClientBase(ABC):
         template: Optional[Template] = None,
         aspect_ratio: str = "16:9",
         image_size: str = "1k",
+        image_instruction: str = "",
     ) -> str:
         """
         生成单页图片
@@ -80,6 +81,7 @@ class LLMClientBase(ABC):
             template: 风格模板
             aspect_ratio: 图片比例
             image_size: 图片尺寸
+            image_instruction: 用户图片调整指令
 
         Returns:
             str: 生成的图片URL（base64 data URL）
@@ -184,6 +186,7 @@ class LLMClientBase(ABC):
         reference_images: List[str],
         aspect_ratio: str = "16:9",
         image_size: str = "1k",
+        image_instruction: str = "",
     ) -> str:
         """
         生成绘本封面图片
@@ -194,8 +197,53 @@ class LLMClientBase(ABC):
             reference_images: 参考图片列表（从内页自动选取）
             aspect_ratio: 图片比例
             image_size: 图片尺寸
+            image_instruction: 用户图片调整指令
 
         Returns:
             str: 生成的封面图片 base64 data URL
+        """
+        pass
+
+    @abstractmethod
+    async def regenerate_page_text(
+        self,
+        current_text: str,
+        story_context: List[str],
+        page_index: int,
+        instruction: str = "",
+    ) -> str:
+        """
+        重新生成单页故事文本
+
+        Args:
+            current_text: 当前页面文本
+            story_context: 完整故事所有页面的文本列表
+            page_index: 当前页索引（从0开始）
+            instruction: 用户调整指令
+
+        Returns:
+            str: 重新生成的页面文本
+        """
+        pass
+
+    @abstractmethod
+    async def regenerate_page_storyboard(
+        self,
+        page_text: str,
+        story_context: List[str],
+        page_index: int,
+        instruction: str = "",
+    ) -> Optional["Storyboard"]:
+        """
+        重新生成单页分镜
+
+        Args:
+            page_text: 当前页面文本（可能已重新生成）
+            story_context: 完整故事所有页面的文本列表
+            page_index: 当前页索引（从0开始）
+            instruction: 用户调整指令
+
+        Returns:
+            Optional[Storyboard]: 重新生成的分镜描述
         """
         pass

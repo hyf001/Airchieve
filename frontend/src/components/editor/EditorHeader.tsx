@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { ChevronLeft, Plus, BookImage, Download, Gift, Save } from 'lucide-react';
+import { ChevronLeft, Plus, Download, Gift, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { STATUS_TEXT_MAP } from '@/constants/editor';
 
@@ -18,8 +18,6 @@ interface EditorHeaderProps {
   onBack: () => void;
   onCreateNew: () => void;
   onInsertPage: () => void;
-  onGenerateCover: () => void;
-  onGenerateBackCover: () => void;
   onExport: () => void;
   onSavePage?: () => void;
   isSavingPage?: boolean;
@@ -33,8 +31,6 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
   onBack,
   onCreateNew,
   onInsertPage,
-  onGenerateCover,
-  onGenerateBackCover,
   onExport,
   onSavePage,
   isSavingPage = false,
@@ -97,24 +93,6 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
             >
               <Plus size={16} />
               插入页
-            </Button>
-            <Button
-              onClick={onGenerateCover}
-              disabled={isCreating}
-              variant="outline"
-              className="hidden md:flex text-slate-700 border-slate-300 hover:border-[#00CDD4] hover:text-[#00CDD4] hover:bg-[#00CDD4]/5 disabled:opacity-40"
-            >
-              <BookImage size={16} />
-              生成封面
-            </Button>
-            <Button
-              onClick={onGenerateBackCover}
-              disabled={isCreating}
-              variant="outline"
-              className="hidden md:flex text-slate-700 border-slate-300 hover:border-[#00CDD4] hover:text-[#00CDD4] hover:bg-[#00CDD4]/5 disabled:opacity-40"
-            >
-              <BookImage size={16} />
-              生成封底
             </Button>
           </>
         )}

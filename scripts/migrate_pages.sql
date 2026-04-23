@@ -28,6 +28,45 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sqlalchemy import text as sa_text
 
 
+async def ensure_page_status_columns(conn) -> None:
+    """为既有 pages 表补充页面状态字段，历史数据默认 finished。"""
+    dialect = conn.dialect.name
+
+    if dialect == "sqlite":
+        result = await conn.execute(sa_text("PRAGMA table_info(pages)"))
+        columns = {row[1] for row in result.fetchall()}
+        if "status" not in columns:
+            await conn.execute(sa_text(
+                "ALTER TABLE pages ADD COLUMN status VARCHAR(32) NOT NULL DEFAULT 'finished'"
+            ))
+            print("  已新增 pages.status")
+        if "error_message" not in columns:
+            await conn.execute(sa_text(
+                "ALTER TABLE pages ADD COLUMN error_message VARCHAR(500)"
+            ))
+            print("  已新增 pages.error_message")
+        await conn.execute(sa_text(
+            "UPDATE pages SET status = 'finished', error_message = NULL WHERE status IS NULL OR status = ''"
+        ))
+        return
+
+    result = await conn.execute(sa_text("SHOW COLUMNS FROM pages"))
+    columns = {row[0] for row in result.fetchall()}
+    if "status" not in columns:
+        await conn.execute(sa_text(
+            "ALTER TABLE pages ADD COLUMN status VARCHAR(32) NOT NULL DEFAULT 'finished'"
+        ))
+        print("  已新增 pages.status")
+    if "error_message" not in columns:
+        await conn.execute(sa_text(
+            "ALTER TABLE pages ADD COLUMN error_message VARCHAR(500) NULL"
+        ))
+        print("  已新增 pages.error_message")
+    await conn.execute(sa_text(
+        "UPDATE pages SET status = 'finished', error_message = NULL WHERE status IS NULL OR status = ''"
+    ))
+
+
 async def run_migration(dry_run: bool = False, force: bool = False):
     """执行数据迁移"""
     from app.db.session import engine
@@ -47,6 +86,7 @@ async def run_migration(dry_run: bool = False, force: bool = False):
         ))
         table_exists = result.fetchone() is not None
         print(f"  pages 表{'已存在' if table_exists else '创建成功'}")
+        await ensure_page_status_columns(conn)
 
     # ── 阶段 2：扫描现有数据 ──
     print()
@@ -185,9 +225,9 @@ async def run_migration(dry_run: bool = False, force: bool = False):
 
                 await conn.execute(sa_text(
                     """INSERT INTO pages
-                       (storybook_id, page_index, image_url, text, page_type, storyboard, created_at, updated_at)
+                       (storybook_id, page_index, image_url, text, page_type, status, error_message, storyboard, created_at, updated_at)
                        VALUES
-                       (:storybook_id, :page_index, :image_url, :text, :page_type, :storyboard, :now, :now)
+                       (:storybook_id, :page_index, :image_url, :text, :page_type, 'finished', NULL, :storyboard, :now, :now)
                     """
                 ), {
                     "storybook_id": sb_id,

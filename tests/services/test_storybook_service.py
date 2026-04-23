@@ -4,19 +4,8 @@ storybook_service 的单元测试
 
 import pytest
 
-from app.models.enums import AgeGroup, CliType, Language, PageType, StoryType
-from app.models.page import Page
+from app.models.enums import AgeGroup, CliType, Language, StoryType
 from app.services import storybook_service
-
-
-def make_page(page_type: PageType, text: str) -> Page:
-    return Page(
-        storybook_id=1,
-        page_index=0,
-        text=text,
-        image_url="",
-        page_type=page_type,
-    )
 
 
 class FakeLLMClient:
@@ -33,43 +22,40 @@ class FakeLLMClient:
         return ["第1页", "第2页"], [{"scene": "夜晚"}, {"scene": "黎明"}]
 
 
-class TestPickReferencePages:
-    def test_returns_only_content_pages_when_three_or_fewer(self):
-        pages = [
-            make_page(PageType.COVER, "封面"),
-            make_page(PageType.CONTENT, "内页1"),
-            make_page(PageType.CONTENT, "内页2"),
-            make_page(PageType.BACK_COVER, "封底"),
-        ]
+class TestBuildCoverStoryboard:
+    def test_reuses_first_content_storyboard_style_fields(self):
+        result = storybook_service.build_cover_storyboard(
+            title="星星灯",
+            story_content="小熊在森林里找到一盏会发光的灯，并学会勇敢。",
+            content_storyboards=[
+                None,
+                {
+                    "scene": "森林小路",
+                    "characters": "小熊抱着星星灯",
+                    "shot": "中景",
+                    "color": "蓝紫色夜晚",
+                    "lighting": "星光柔和",
+                },
+            ],
+        )
 
-        result = storybook_service._pick_reference_pages(pages)
+        assert result["characters"] == "小熊抱着星星灯"
+        assert result["color"] == "蓝紫色夜晚"
+        assert result["lighting"] == "星光柔和"
+        assert "星星灯" in result["scene"]
+        assert "小熊在森林里找到一盏会发光的灯" in result["scene"]
+        assert "预留书名艺术字空间" in result["shot"]
 
-        assert [page.text for page in result] == ["内页1", "内页2"]
+    def test_uses_safe_defaults_when_content_storyboards_are_missing(self):
+        result = storybook_service.build_cover_storyboard(
+            title="月亮船",
+            story_content="孩子坐着月亮船去拜访云朵。",
+            content_storyboards=[None],
+        )
 
-    def test_returns_first_middle_and_last_content_page_when_more_than_three(self):
-        pages = [
-            make_page(PageType.COVER, "封面"),
-            make_page(PageType.CONTENT, "内页1"),
-            make_page(PageType.CONTENT, "内页2"),
-            make_page(PageType.CONTENT, "内页3"),
-            make_page(PageType.CONTENT, "内页4"),
-            make_page(PageType.CONTENT, "内页5"),
-            make_page(PageType.BACK_COVER, "封底"),
-        ]
-
-        result = storybook_service._pick_reference_pages(pages)
-
-        assert [page.text for page in result] == ["内页1", "内页3", "内页5"]
-
-    def test_falls_back_to_all_pages_when_no_content_pages_exist(self):
-        pages = [
-            make_page(PageType.COVER, "封面"),
-            make_page(PageType.BACK_COVER, "封底"),
-        ]
-
-        result = storybook_service._pick_reference_pages(pages)
-
-        assert [page.text for page in result] == ["封面", "封底"]
+        assert result["characters"] == "主角以温暖、清晰、有吸引力的姿态出现在画面中心"
+        assert result["color"] == "温暖明亮、适合儿童绘本的主色调"
+        assert result["lighting"] == "柔和、有童话感的光线，突出封面主体"
 
 
 class TestStoryGeneration:

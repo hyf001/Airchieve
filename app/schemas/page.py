@@ -48,6 +48,8 @@ class PageCreate(BaseModel):
     image_url: str = ""
     text: str = ""
     page_type: str = "content"
+    status: str = "pending"
+    error_message: Optional[str] = None
     storyboard: Optional[Storyboard] = None
 
 
@@ -66,6 +68,8 @@ class PageResponse(BaseModel):
     image_url: str
     text: str
     page_type: str
+    status: str
+    error_message: Optional[str] = None
     storyboard: Optional[Storyboard] = None
     created_at: datetime
     updated_at: datetime
@@ -156,6 +160,24 @@ class LayerResponse(BaseModel):
     content: Optional[LayerContent] = None
     created_at: datetime
     updated_at: datetime
+
+
+class RegeneratePageRequest(BaseModel):
+    """页面重新生成请求"""
+    regenerate_text: bool = False
+    text_instruction: str = ""
+    regenerate_storyboard: bool = False
+    storyboard_instruction: str = ""
+    regenerate_image: bool = True
+    image_instruction: str = ""
+    reference_page_ids: list[int] = []
+
+
+class RegeneratePageResponse(BaseModel):
+    """页面重新生成响应"""
+    storybook_id: int
+    page_id: int
+    status: str
 
 
 class LayerReorder(BaseModel):

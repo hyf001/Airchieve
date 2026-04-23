@@ -10,12 +10,17 @@ interface StorybookPreviewProps {
   storybook: StorybookListItem;
   onClick?: (id: number) => void;
   className?: string;
+  popupPosition?: 'center' | string;
+  popupMaxWidth?: string;
+  popupScale?: number;
 }
 
 const StorybookPreview: React.FC<StorybookPreviewProps> = ({
   storybook,
   onClick,
   className = '',
+  popupMaxWidth,
+  popupScale,
 }) => {
   const [open, setOpen] = useState(false);
   const [fullPages, setFullPages] = useState<StorybookPage[] | null>(null);
@@ -91,6 +96,12 @@ const StorybookPreview: React.FC<StorybookPreviewProps> = ({
               'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
               'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
             )}
+            style={{
+              maxWidth: popupMaxWidth,
+              transform: popupScale
+                ? `translate(-50%, -50%) scale(${popupScale})`
+                : undefined,
+            }}
           >
             {/* 标题栏 */}
             <DialogHeader className="px-6 pt-5 pb-4 border-b border-slate-100">

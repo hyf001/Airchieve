@@ -13,7 +13,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
 
 from app.db.base import Base
-from app.models.enums import PageType
+from app.models.enums import PageStatus, PageType
 
 if TYPE_CHECKING:
     from app.models.storybook import Storybook
@@ -107,6 +107,20 @@ class Page(Base):
         String(32),
         default=PageType.CONTENT,
         nullable=False,
+    )
+
+    # 页面生成状态：pending / generating / finished / error
+    status: Mapped[PageStatus] = mapped_column(
+        String(32),
+        default=PageStatus.PENDING,
+        nullable=False,
+        index=True,
+    )
+
+    # 页面级错误信息（status=error 时展示，可单页重试）
+    error_message: Mapped[Optional[str]] = mapped_column(
+        String(500),
+        nullable=True,
     )
 
     # 分镜信息（JSON，结构与 Storybook.Storyboard 一致）

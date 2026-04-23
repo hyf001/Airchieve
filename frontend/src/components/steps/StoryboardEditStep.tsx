@@ -75,6 +75,8 @@ const StoryboardEditStep: React.FC<StoryboardEditStepProps> = ({
     onNext(storyboards);
   };
 
+  const contentPageCount = storyboards.filter(item => item.page_type !== 'cover').length;
+
   return (
     <div className="w-full max-w-4xl mx-auto relative">
       {/* 标题栏 */}
@@ -102,7 +104,8 @@ const StoryboardEditStep: React.FC<StoryboardEditStepProps> = ({
               <h3 className="text-lg font-bold text-slate-800 mb-1">{storyTitle}</h3>
               <p className="text-slate-600 text-sm line-clamp-2">{storyContent}</p>
               <div className="mt-3 flex items-center gap-4 text-xs text-slate-500">
-                <span>共 {storyboards.length} 页</span>
+                <span>正文 {contentPageCount} 页</span>
+                {storyboards.some(item => item.page_type === 'cover') && <span>含封面分镜</span>}
               </div>
             </div>
 
@@ -143,7 +146,9 @@ const StoryboardEditStep: React.FC<StoryboardEditStepProps> = ({
                     // 预览模式
                     <div className="p-4">
                       <div className="flex items-center justify-between mb-3">
-                        <span className="text-xs font-semibold text-amber-600">第 {index + 1} 页</span>
+                        <span className="text-xs font-semibold text-amber-600">
+                          {item.page_type === 'cover' ? '封面' : `第 ${storyboards.slice(0, index + 1).filter(p => p.page_type !== 'cover').length} 页`}
+                        </span>
                         <div className="flex items-center gap-2">
                           <Button
                             onClick={() => handleEdit(index)}
@@ -153,14 +158,16 @@ const StoryboardEditStep: React.FC<StoryboardEditStepProps> = ({
                           >
                             编辑
                           </Button>
-                          <Button
-                            onClick={() => handleDeleteClick(index)}
-                            variant="ghost"
-                            size="sm"
-                            className="text-xs text-red-600 hover:text-red-700"
-                          >
-                            删除
-                          </Button>
+                          {item.page_type !== 'cover' && (
+                            <Button
+                              onClick={() => handleDeleteClick(index)}
+                              variant="ghost"
+                              size="sm"
+                              className="text-xs text-red-600 hover:text-red-700"
+                            >
+                              删除
+                            </Button>
+                          )}
                         </div>
                       </div>
                       <p className="text-sm text-slate-700 line-clamp-4 mb-3">{item.text}</p>
@@ -236,7 +243,7 @@ const StoryboardEditStep: React.FC<StoryboardEditStepProps> = ({
       <ConfirmDialog
         open={deleteDialogOpen}
         title="确认删除"
-        description={`确定要删除第 ${deleteIndex !== null ? deleteIndex + 1 : 0} 页吗？此操作无法撤销。`}
+        description={`确定要删除${deleteIndex !== null && storyboards[deleteIndex]?.page_type === 'cover' ? '封面' : `第 ${deleteIndex !== null ? deleteIndex + 1 : 0} 页`}吗？此操作无法撤销。`}
         confirmText="删除"
         cancelText="取消"
         variant="destructive"

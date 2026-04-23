@@ -163,6 +163,7 @@ const HomeView: React.FC<HomeViewProps> = ({
 
     try {
       const { storyboards: newStoryboards } = await generateStoryboard({
+        title,
         story_content: content,
         page_count: pageCount,
         cli_type: creationParams.cli_type,
@@ -210,7 +211,7 @@ const HomeView: React.FC<HomeViewProps> = ({
         text: item.text,
         image_url: '',
         storyboard: item.storyboard,
-        page_type: 'content' as const,
+        page_type: item.page_type || 'content',
       }));
 
       const res = await createStorybookFromStory({

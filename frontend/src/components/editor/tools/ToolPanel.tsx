@@ -6,7 +6,7 @@ import React, { useEffect } from 'react';
 import { getToolConfig } from './ToolRegistry';
 import { OptionalToolId, ToolComponentProps, ToolId } from '@/types/tool';
 import { ToolSelector } from './ToolSelector';
-import { StorybookLayer } from '@/services/storybookService';
+import { StorybookLayer, PageType } from '@/services/storybookService';
 import { TextLayerViewModel } from './text-edit/types';
 
 interface ToolPanelProps {
@@ -28,6 +28,10 @@ interface ToolPanelProps {
   onTextIsDraggingChange?: (isDragging: boolean) => void;
   onTextIsResizingChange?: (isResizing: boolean) => void;
   onLayerPersisted?: () => void;
+  // AI 调整页面工具相关 props
+  pageType?: PageType;
+  pages?: Array<{ id: number; text?: string; image_url?: string; page_type?: string }>;
+  onPageRegenerated?: (storybookId: number) => void;
 }
 
 /**
@@ -51,6 +55,9 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
   onTextIsDraggingChange,
   onTextIsResizingChange,
   onLayerPersisted,
+  pageType,
+  pages = [],
+  onPageRegenerated,
 }) => {
 
   const toolConfig = getToolConfig(activeTool as any);
@@ -100,6 +107,17 @@ export const ToolPanel: React.FC<ToolPanelProps> = ({
         ...baseProps,
         onApply: onPageEdited,
         containerRef,
+      };
+    }
+
+    // RegenerateTool 特殊处理
+    if (activeTool === 'regenerate') {
+      return {
+        storybookId,
+        pageId,
+        pageType,
+        pages,
+        onPageRegenerated,
       };
     }
 
@@ -158,6 +176,10 @@ interface ToolPanelWithSelectorProps {
   onTextIsDraggingChange?: (isDragging: boolean) => void;
   onTextIsResizingChange?: (isResizing: boolean) => void;
   onLayerPersisted?: () => void;
+  // AI 调整页面工具相关 props
+  pageType?: PageType;
+  pages?: Array<{ id: number; text?: string; image_url?: string; page_type?: string }>;
+  onPageRegenerated?: (storybookId: number) => void;
 }
 
 export const ToolPanelWithSelector: React.FC<ToolPanelWithSelectorProps> = ({
@@ -180,6 +202,9 @@ export const ToolPanelWithSelector: React.FC<ToolPanelWithSelectorProps> = ({
   onTextIsDraggingChange,
   onTextIsResizingChange,
   onLayerPersisted,
+  pageType,
+  pages = [],
+  onPageRegenerated,
 }) => {
   return (
     <div className="w-80 shrink-0 border-l border-slate-200 bg-white flex flex-col overflow-hidden">
@@ -213,6 +238,9 @@ export const ToolPanelWithSelector: React.FC<ToolPanelWithSelectorProps> = ({
         onTextIsDraggingChange={onTextIsDraggingChange}
         onTextIsResizingChange={onTextIsResizingChange}
         onLayerPersisted={onLayerPersisted}
+        pageType={pageType}
+        pages={pages}
+        onPageRegenerated={onPageRegenerated}
       />
     </div>
   );

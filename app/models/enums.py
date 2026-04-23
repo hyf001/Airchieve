@@ -45,6 +45,14 @@ class PageType(str, Enum):
     CONTENT = "content"   # 内页（默认）
 
 
+class PageStatus(str, Enum):
+    """页面生成状态"""
+    PENDING = "pending"       # 已创建占位，尚未开始生成
+    GENERATING = "generating" # 正在生成或重新生成
+    FINISHED = "finished"     # 页面底图已就绪
+    ERROR = "error"           # 页面生成失败，可单页重试
+
+
 class LayerType(str, Enum):
     """图层类型"""
     TEXT = "text"              # 文字图层

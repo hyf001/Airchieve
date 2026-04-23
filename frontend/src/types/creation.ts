@@ -43,6 +43,7 @@ export interface CreationParams {
  */
 export interface StoryboardItem {
   text: string;
+  page_type?: 'cover' | 'content';
   storyboard: {
     scene: string;
     characters: string;

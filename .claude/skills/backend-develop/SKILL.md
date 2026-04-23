@@ -12,12 +12,28 @@ app/
 ├── main.py                 # FastAPI 应用入口、异常处理器
 ├── api/v1/                 # API 路由层（薄包装）
 │   ├── router.py           # 路由聚合
-│   ├── deps.py             # 依赖注入（认证）
-│   └── *_api.py            # 各模块端点
+│   ├── deps.py             # 依赖注入（认证��
+│   ├── storybook_api.py    # 绘本 API
+│   ├── page_api.py         # 页面与图层 API
+│   ├── user_api.py         # 用户 API
+│   └── *_api.py            # 其他模块端点
 ├── services/               # 业务逻辑层（核心）
+│   ├── storybook_service.py  # 绘本创建、封面生成、页面重新生成
+│   ├── page_service.py       # 页面 CRUD 操作
+│   ├── layer_service.py      # 图层 CRUD 操作
+│   ├── llm_cli.py            # LLM 客户端基类（LLMClientBase）
+│   ├── gemini_cli.py         # Gemini 实现（英文 prompt）
+│   └── doubao_cli.py         # 豆包实现（中文 prompt）
 ├── models/                 # ORM 模型
-│   ├── enums.py            # 枚举定义
+│   ├── enums.py            # 枚举定义（PageType, CliType, StoryType 等）
+│   ├── storybook.py        # 绘本模型
+│   ├── page.py             # 页面模型（独立表，含分镜 JSON）
+│   ├── layer.py            # 图层模型
 │   └── base.py             # SQLAlchemy 基类
+├── schemas/                # Pydantic 请求/响应模型
+│   ├── page.py             # 页面相关 schema
+│   ├── storybook.py        # 绘本相关 schema
+│   └── media.py            # 媒体相关 schema
 ├── core/                   # 配置与工具
 │   ├── config.py           # pydantic-settings
 │   ├── security.py         # JWT、密码
@@ -171,6 +187,57 @@ from app.core.config import settings
 api_key = settings.API_KEY
 ```
 
+## 页面类型系统
+
+Page 有三种类型（`PageType` 枚举）：
+
+```python
+class PageType(str, Enum):
+    COVER = "cover"          # 封面（page_index = 0）
+    CONTENT = "content"      # 正文页（page_index 1..N）
+    BACK_COVER = "back_cover" # 封底（page_index N+1，固定底图）
+```
+
+**封底规则：** 使用 `get_back_cover_image_url(aspect_ratio)` 获取固定 OSS 图片 URL，不可 AI 重新生成。
+
+**封面参考页选择：** 使用 `pick_cover_reference_pages(pages)` 从正文页选取首/中/尾作为参考图。
+
+**页面重新生成执行顺序：** text → storyboard → image，不清空已有图层。
+
+## 积分系统
+
+```python
+from app.services.points_service import (
+    check_creation_points,    # 检查积分是否足够（不扣减）
+    consume_for_creation,     # 创建绘本扣减积分
+    consume_for_page_edit,    # 页面编辑扣减积分
+)
+
+# 创建绘本积分 = 正文页数 + 1（封面）
+check_creation_points(user_id, content_count + 1)
+```
+
+## LLM 客户端
+
+```python
+from app.services.llm_cli import LLMClientBase
+
+# 获取客户端实例
+client = LLMClientBase.get_client(cli_type)  # CliType.GEMINI 或 CliType.DOUBAO
+
+# 核心方法
+await client.generate_page(...)              # 生成单页图片
+await client.edit_image(...)                 # AI 改图
+await client.create_story(...)               # 创建纯文本故事
+await client.create_storyboard_from_story(...)  # 基于故事创建分镜
+await client.generate_cover(...)             # 生成封面图片
+await client.regenerate_page_text(...)       # 重新生成页面文本
+await client.regenerate_page_storyboard(...) # 重新生成分镜
+
+# 语言注意：
+# - Gemini 使用英文 prompt
+# - 豆包使用中文 prompt
+```
 
 ## 核心原则
 
@@ -183,7 +250,13 @@ api_key = settings.API_KEY
 ## 参考文件
 
 - [app/api/v1/storybook_api.py](app/api/v1/storybook_api.py) - API 层示例
+- [app/api/v1/page_api.py](app/api/v1/page_api.py) - 页面 API（含重新生成端点）
 - [app/services/storybook_service.py](app/services/storybook_service.py) - Service 层示例
+- [app/services/llm_cli.py](app/services/llm_cli.py) - LLM 客户端基类
+- [app/services/gemini_cli.py](app/services/gemini_cli.py) - Gemini 实现
+- [app/services/doubao_cli.py](app/services/doubao_cli.py) - 豆包实现
 - [app/models/storybook.py](app/models/storybook.py) - 模型示例
+- [app/models/enums.py](app/models/enums.py) - 枚举定义
+- [app/schemas/page.py](app/schemas/page.py) - Schema 示例
 - [app/db/session.py](app/db/session.py) - 会话管理
 - [app/core/config.py](app/core/config.py) - 配置管理

@@ -4,11 +4,13 @@ Page & Layer API
 """
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.db.session import get_db
+from app.models.user import User
 from app.schemas.page import (
     PageResponse,
     PageDetailResponse,
@@ -18,8 +20,11 @@ from app.schemas.page import (
     LayerCreate,
     LayerUpdate,
     LayerReorder,
+    RegeneratePageRequest,
+    RegeneratePageResponse,
 )
 from app.services import page_service, layer_service
+from app.services.points_service import InsufficientPointsError
 
 router = APIRouter(prefix="/pages", tags=["pages"])
 
@@ -73,6 +78,62 @@ async def delete_page(page_id: int, db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail="页面不存在",
         )
+
+
+@router.post("/{page_id}/regenerate", response_model=RegeneratePageResponse)
+async def regenerate_page(
+    page_id: int,
+    req: RegeneratePageRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    页面重新生成（异步，轮询模式）。
+
+    按 text -> storyboard -> image 顺序执行。
+    封底页不支持重新生成。
+    不清空已有图层。
+    """
+    try:
+        storybook_id, page_id = await page_service.regenerate_page_async(
+            page_id=page_id,
+            user_id=current_user.id,
+            regenerate_text=req.regenerate_text,
+            text_instruction=req.text_instruction,
+            regenerate_storyboard=req.regenerate_storyboard,
+            storyboard_instruction=req.storyboard_instruction,
+            regenerate_image=req.regenerate_image,
+            image_instruction=req.image_instruction,
+            reference_page_ids=req.reference_page_ids,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except InsufficientPointsError as e:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={"code": "INSUFFICIENT_POINTS", "message": str(e)},
+        )
+
+    background_tasks.add_task(
+        page_service.run_regenerate_page_background,
+        page_id,
+        current_user.id,
+        req.regenerate_text,
+        req.text_instruction,
+        req.regenerate_storyboard,
+        req.storyboard_instruction,
+        req.regenerate_image,
+        req.image_instruction,
+        req.reference_page_ids,
+    )
+
+    return RegeneratePageResponse(
+        storybook_id=storybook_id,
+        page_id=page_id,
+        status="updating",
+    )
 
 
 # ---------------------------------------------------------------------------

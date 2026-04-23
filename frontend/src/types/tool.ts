@@ -4,6 +4,7 @@
 
 export type ToolId =
   | 'ai-edit'       // AI改图
+  | 'regenerate'    // AI调整当前页
   | 'text'          // 文字工具
   | 'adjust'        // 调整工具
   | 'color'         // 调色工具
@@ -139,7 +140,7 @@ export interface FilterPreset {
 /**
  * 编辑模式类型
  */
-export type EditorMode = 'read' | 'edit' | 'reorder' | 'regen' | 'cover' | 'backcover';
+export type EditorMode = 'read' | 'edit' | 'reorder' | 'regen';
 
 /**
  * 编辑器状态类型

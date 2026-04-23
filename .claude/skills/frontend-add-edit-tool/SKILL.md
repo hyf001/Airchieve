@@ -590,6 +590,39 @@ bg-white / bg-slate-50
 </div>
 ```
 
+## 简化模式（仅 Panel 工具）
+
+不是所有工具都需要完整的 4 文件结构和 Overlay。对于纯面板工具（如 `regenerate`），只需一个 `index.tsx` 文件：
+
+```typescript
+// tools/your-tool/index.tsx
+import React, { useState, useCallback } from 'react';
+
+interface YourPanelProps {
+  storybookId: string | number;
+  pageId?: number;
+  onPageEdited?: (result: any) => void;
+}
+
+const YourPanel: React.FC<YourPanelProps> = ({ storybookId, pageId, onPageEdited }) => {
+  return (
+    <div className="h-full flex flex-col">
+      {/* 面板内容 */}
+    </div>
+  );
+};
+
+export const YourTool = {
+  Panel: YourPanel,
+};
+
+export default YourTool;
+```
+
+**判断依据：**
+- 需要在画布图片上交互（拖拽、绘制、点击定位）→ 使用完整 4 文件模式 + Overlay
+- 只在右侧面板中操作（表单、按钮、API 调用）→ 使用简化模式，只需 index.tsx
+
 ## 注意事项
 
 ### Canvas 处理

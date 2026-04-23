@@ -14,10 +14,6 @@ from app.schemas.storybook import (
     CreateStoryRequest,
     CreateStoryResponse,
     EditImageRequest,
-    GenerateBackCoverRequest,
-    GenerateBackCoverResponse,
-    GenerateCoverRequest,
-    GenerateCoverResponse,
     GenerateStoryboardRequest,
     GenerateStoryboardResponse,
     InsertPageAsyncResponse,
@@ -31,8 +27,8 @@ from app.schemas.storybook import (
     UpdatePublicStatusRequest,
 )
 from app.models.user import User
-from app.models.enums import PageType
 from app.services.storybook_service import (
+    build_cover_storyboard,
     get_storybook,
     get_storybook_status,
     list_storybooks as list_storybooks_service,
@@ -40,15 +36,12 @@ from app.services.storybook_service import (
     insert_pages_async,
     run_insert_pages_background,
     terminate_storybook,
-    generate_cover_async,
-    run_generate_cover_background,
-    generate_back_cover_async,
     create_story_only,
     create_storybook_from_story_async,
     run_create_storybook_from_story_background,
     create_storyboard_only,
 )
-from app.services.points_service import InsufficientPointsError, check_creation_points
+from app.services.points_service import InsufficientPointsError
 
 router = APIRouter(prefix="/storybooks", tags=["storybooks"])
 
@@ -131,10 +124,20 @@ async def generate_storyboard_endpoint(
         return GenerateStoryboardResponse(
             storyboards=[
                 StoryboardItemResponse(
-                    text=text,
-                    storyboard=dict(sb) if sb else None
-                )
-                for text, sb in zip(story_texts, storyboards)
+                    text=req.title or "封面",
+                    storyboard=dict(
+                        build_cover_storyboard(req.title or "封面", req.story_content, storyboards)
+                    ),
+                    page_type="cover",
+                ),
+                *[
+                    StoryboardItemResponse(
+                        text=text,
+                        storyboard=dict(sb) if sb else None,
+                        page_type="content",
+                    )
+                    for text, sb in zip(story_texts, storyboards)
+                ],
             ]
         )
     except ValueError as e:
@@ -174,6 +177,11 @@ async def create_storybook_from_story_endpoint(
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail={"code": INSUFFICIENT_POINTS_CODE, "message": str(e)},
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
         )
 
     background_tasks.add_task(
@@ -372,76 +380,3 @@ async def terminate_storybook_endpoint(
         success=success,
         message="已中止" if success else "中止失败或绘本不在生成中"
     )
-
-
-@router.post("/{storybook_id}/cover/generate", status_code=status.HTTP_202_ACCEPTED, response_model=GenerateCoverResponse)
-async def generate_cover_endpoint(
-    storybook_id: int,
-    req: GenerateCoverRequest,
-    background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user),
-):
-    """
-    手动触发封面生成（异步，轮询模式）。
-    自动从现有内页选取参考图（>3页取首/中/尾，否则全选），生成后插入/替换 pages[0]。
-    客户端轮询 GET /{id} 的 status 字段：updating → finished / error
-    """
-    storybook = await get_storybook(storybook_id)
-    if not storybook:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="绘本不存在")
-    if not storybook.pages:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="绘本暂无页面，无法生成封面")
-    if storybook.status in ("creating", "updating"):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="绘本正在生成中，请稍后再试")
-    if any(p.page_type == PageType.COVER for p in storybook.pages):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="封面已存在，不能重复生成")
-
-    try:
-        await check_creation_points(current_user.id)
-    except InsufficientPointsError as e:
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail={"code": INSUFFICIENT_POINTS_CODE, "message": str(e)},
-        )
-
-    background_tasks.add_task(
-        run_generate_cover_background,
-        storybook_id,
-        current_user.id,
-        req.selected_page_indices,
-    )
-
-    return GenerateCoverResponse(storybook_id=storybook_id, status="updating")
-
-
-@router.post("/{storybook_id}/backcover/generate", status_code=status.HTTP_200_OK, response_model=GenerateBackCoverResponse)
-async def generate_back_cover_endpoint(
-    storybook_id: int,
-    req: GenerateBackCoverRequest,
-    current_user: User = Depends(get_current_user),
-):
-    """
-    生成封底（同步）。
-    接收前端生成的封底图片（base64），添加到绘本最后一页。
-    若已有封底则返回错误。
-    """
-    storybook = await get_storybook(storybook_id)
-    if not storybook:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="绘本不存在")
-    if not storybook.pages:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="绘本暂无页面，无法生成封底")
-    if storybook.status in ("creating", "updating"):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="绘本正在生成中，请稍后再试")
-    if any(p.page_type == PageType.BACK_COVER for p in storybook.pages):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="封底已存在，不能重复生成")
-
-    try:
-        await generate_back_cover_async(storybook_id, req.image_data)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"生成封底失败: {str(e)}")
-
-    # 获取更新后的绘本
-    updated_storybook = await get_storybook(storybook_id)
-    return GenerateBackCoverResponse(storybook_id=storybook_id, status=updated_storybook.status)

@@ -554,6 +554,7 @@ class DoubaoCli(LLMClientBase):
         template: Optional[Template] = None,
         aspect_ratio: str = "16:9",
         image_size: str = "1k",
+        image_instruction: str = "",
     ) -> str:
         """生成单页图片，返回 base64 data URL"""
         logger.info("生成第 %d 页图片 | text=%s ref=%s prev=%s",
@@ -562,6 +563,11 @@ class DoubaoCli(LLMClientBase):
                     bool(previous_page_image))
 
         prompt = _build_image_prompt(story_text, storyboard, story_context, page_index, template)
+        if image_instruction:
+            prompt += (
+                f"\n\n【用户图片调整指令】{image_instruction}\n"
+                "请在保持最终故事文本、分镜和前后页视觉连贯的前提下执行该调整。"
+            )
         size = _resolve_image_size(aspect_ratio, image_size)
 
         # 收集参考图片并按顺序说明用途
@@ -662,6 +668,7 @@ class DoubaoCli(LLMClientBase):
         reference_images: List[str],
         aspect_ratio: str = "16:9",
         image_size: str = "1k",
+        image_instruction: str = "",
     ) -> str:
         """生成绘本封面图片，使用内页图作为风格参考"""
         logger.info("生成封面 | title=%s ref_count=%d", title, len(reference_images))
@@ -675,6 +682,11 @@ class DoubaoCli(LLMClientBase):
             f"- 温暖、吸引人的氛围，适合儿童绘本封面\n"
             f"- 图片中除书名外不要出现其他文字或字母"
         )
+        if image_instruction:
+            prompt += (
+                f"\n\n【用户封面调整指令】{image_instruction}\n"
+                "请在保持封面与内页风格一致的前提下执行该调整。"
+            )
         size = _resolve_image_size(aspect_ratio, image_size)
 
         # 构建请求参数
@@ -693,9 +705,131 @@ class DoubaoCli(LLMClientBase):
                 f"\n\n【风格参考】已提供{len(reference_images)}张绘本内页插画作为参考图，"
                 "请提取并保持相同的艺术风格、色调和角色外观，确保封面与内页风格一致。"
             )
+            generate_kwargs["prompt"] = prompt
             generate_kwargs["image"] = reference_images
             logger.info("封面添加内页参考图 | count=%d", len(reference_images))
 
         data_url = await _async_image_generate(**generate_kwargs)
         logger.info("封面生成成功")
         return data_url
+
+    async def regenerate_page_text(
+        self,
+        current_text: str,
+        story_context: List[str],
+        page_index: int,
+        instruction: str = "",
+    ) -> str:
+        """重新生成单页故事文本"""
+        if not settings.DOUBAO_TEXT_MODEL:
+            raise DoubaoTechnicalError(
+                "DOUBAO_TEXT_MODEL 未配置",
+                "豆包文本模型未配置，请联系管理员",
+                "TEXT_MODEL_NOT_CONFIGURED",
+            )
+
+        logger.info("重新生成第 %d 页文本 | instruction=%s", page_index + 1, instruction[:50])
+
+        full_context = "完整故事上下文：\n"
+        for idx, text in enumerate(story_context, 1):
+            marker = " <-- 当前页" if idx == page_index + 1 else ""
+            full_context += f"第{idx}页：{text}{marker}\n"
+
+        system_prompt = (
+            "你是一名专业的儿童绘本作家。你的任务是根据用户指令重新撰写指定页的故事文本。\n"
+            "要求：\n"
+            "- 保持与前后文的叙事连贯性\n"
+            "- 保持相同的语言风格和难度\n"
+            "- 如果用户提供了调整指令，按照指令方向修改\n"
+            "- 只输出该页的新文本，不要输出其他内容"
+        )
+
+        user_prompt = f"{full_context}\n\n当前页（第{page_index + 1}页）原文：{current_text}\n\n请重新撰写这一页的故事文本。\n"
+        if instruction:
+            user_prompt += f"用户调整指令：{instruction}\n"
+        else:
+            user_prompt += "请基于上下文重新撰写该页文本，保持叙事连贯。\n"
+
+        result = await _async_chat_create(
+            model=settings.DOUBAO_TEXT_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+
+        new_text = result.strip()
+        if new_text:
+            logger.info("第 %d 页文本重新生成完成 | length=%d", page_index + 1, len(new_text))
+            return new_text
+
+        raise DoubaoTechnicalError(
+            "重新生成页面文本失败",
+            "文本生成失败，请重试",
+            "NO_TEXT_RETURNED",
+        )
+
+    async def regenerate_page_storyboard(
+        self,
+        page_text: str,
+        story_context: List[str],
+        page_index: int,
+        instruction: str = "",
+    ) -> Optional[Storyboard]:
+        """重新生成单页分镜"""
+        if not settings.DOUBAO_TEXT_MODEL:
+            raise DoubaoTechnicalError(
+                "DOUBAO_TEXT_MODEL 未配置",
+                "豆包文本模型未配置，请联系管理员",
+                "TEXT_MODEL_NOT_CONFIGURED",
+            )
+
+        logger.info("重新生成第 %d 页分镜 | instruction=%s", page_index + 1, instruction[:50])
+
+        full_context = "完整故事上下文：\n"
+        for idx, text in enumerate(story_context, 1):
+            full_context += f"第{idx}页：{text}\n"
+
+        system_prompt = (
+            "你是一名专业的儿童绘本视觉导演。你的任务是为指定页创建视觉分镜描述。\n\n"
+            "返回以下 JSON 结构：\n"
+            "```\n"
+            "{\n"
+            '  "scene": "场景环境描述",\n'
+            '  "characters": "角色动作、姿态和表情",\n'
+            '  "shot": "镜头类型和构图",\n'
+            '  "color": "色调和氛围",\n'
+            '  "lighting": "光影方向和质感"\n'
+            "}\n"
+            "```\n\n"
+            "约束：\n"
+            "- 分镜字段必须使用中文\n"
+            "- 'characters'字段：仅描述角色的动作、姿态和表情\n"
+            "- 与前后页保持视觉连贯性"
+        )
+
+        user_prompt = f"{full_context}\n\n当前页（第{page_index + 1}页）文本：{page_text}\n\n请为这一页创建视觉分镜描述。\n"
+        if instruction:
+            user_prompt += f"用户调整指令：{instruction}\n"
+
+        raw_text = await _async_chat_create(
+            model=settings.DOUBAO_TEXT_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+
+        try:
+            data = _parse_json_response(raw_text)
+            if isinstance(data, dict) and "scene" in data:
+                logger.info("第 %d 页分镜重新生成完成", page_index + 1)
+                return data  # type: ignore[return-value]
+        except (ValueError, json.JSONDecodeError) as e:
+            logger.warning("分镜 JSON 解析失败: %s", e)
+
+        raise DoubaoTechnicalError(
+            "重新生成分镜失败",
+            "分镜生成失败，请重试",
+            "NO_STORYBOARD_RETURNED",
+        )

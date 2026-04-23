@@ -143,7 +143,13 @@ const CreateStorybookStep: React.FC<CreateStorybookStepProps> = ({
               <h3 className="text-lg font-bold text-slate-800 mb-2">{storyTitle}</h3>
               <p className="text-slate-600 text-sm line-clamp-2">{storyContent}</p>
               <div className="mt-3 flex items-center gap-4 text-sm text-slate-500">
-                <span>共 {storyboards.length} 页</span>
+                <span>正文 {storyboards.filter(item => item.page_type !== 'cover').length} 页</span>
+                {storyboards.some(item => item.page_type === 'cover') && (
+                  <>
+                    <span>·</span>
+                    <span>含封面</span>
+                  </>
+                )}
                 {selectedTemplate && (
                   <>
                     <span>·</span>

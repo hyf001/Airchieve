@@ -65,6 +65,11 @@ class Settings(BaseSettings):
     OSS_BUCKET_NAME: str = ""
     OSS_BASE_URL: str = ""        # 自定义域名，e.g. https://cdn.example.com（可选）
 
+    # Back Cover OSS Images（按图片比例配置固定封底图）
+    BACK_COVER_IMAGE_1_1: str = ""
+    BACK_COVER_IMAGE_4_3: str = ""
+    BACK_COVER_IMAGE_16_9: str = ""
+
     # WeChat Mini Program（小程序登录）
     WECHAT_MINI_APP_ID:     str = ""   # 小程序 AppID
     WECHAT_MINI_APP_SECRET: str = ""   # 小程序 AppSecret

@@ -8,7 +8,6 @@ import {
   updateStorybookPublicStatus,
   terminateStorybook,
   insertPages,
-  generateCover,
   savePage,
   InsufficientPointsError,
   getPageDetail,
@@ -33,8 +32,6 @@ import {
   DownloadDialog,
   TerminateConfirmDialog,
   InsertPageDialog,
-  GenerateCoverDialog,
-  BackCoverDialog,
 } from '../components/editor/dialogs';
 
 // 导入 Hooks
@@ -247,27 +244,6 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
     }
   };
 
-  const handleGenerateCover = async (selectedPages: number[]) => {
-    if (!editorState.currentStorybook) return;
-
-    try {
-      await generateCover(editorState.currentStorybook.id, selectedPages);
-      editorState.setCurrentStorybook({ ...editorState.currentStorybook, status: 'updating' });
-      startPolling(editorState.currentStorybook.id);
-      toast({ title: '封面生成中', description: '请稍候，生成完成后将自动刷新' });
-    } catch (err) {
-      if (err instanceof InsufficientPointsError) {
-        toast({ variant: 'destructive', title: '积分不足', description: err.message });
-      } else {
-        toast({
-          variant: 'destructive',
-          title: '生成失败',
-          description: err instanceof Error ? err.message : undefined,
-        });
-      }
-    }
-  };
-
   // ========== 页面切换 ==========
   const prevPageIndexRef = useRef<number>(-1);
 
@@ -383,8 +359,6 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
           onBack={onBack}
           onCreateNew={onCreateNew}
           onInsertPage={() => editorState.setDialogState('insertPage', true)}
-          onGenerateCover={() => editorState.setDialogState('cover', true)}
-          onGenerateBackCover={() => editorState.setDialogState('backCover', true)}
           onExport={() => editorState.setDialogState('export', true)}
           onSavePage={handleSavePage}
           isSavingPage={isSavingPage}
@@ -483,6 +457,11 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
                 onTextIsDraggingChange={setTextIsDragging}
                 onTextIsResizingChange={setTextIsResizing}
                 onLayerPersisted={refreshCurrentPage}
+                pageType={editorState.pages[editorState.currentPageIndex]?.page_type as any}
+                pages={editorState.pages}
+                onPageRegenerated={(storybookId: number) => {
+                  startPolling(storybookId);
+                }}
               />
             </>
           )}
@@ -518,24 +497,6 @@ const EditorView: React.FC<EditorViewProps> = ({ storybookId, onBack, onCreateNe
         onOpenChange={(open) => editorState.setDialogState('insertPage', open)}
         storybook={editorState.currentStorybook}
         onInsert={handleInsertPages}
-      />
-
-      <GenerateCoverDialog
-        open={editorState.dialogs.cover}
-        onOpenChange={(open) => editorState.setDialogState('cover', open)}
-        storybook={editorState.currentStorybook}
-        onGenerate={handleGenerateCover}
-      />
-
-      <BackCoverDialog
-        open={editorState.dialogs.backCover}
-        onOpenChange={(open) => editorState.setDialogState('backCover', open)}
-        storybook={editorState.currentStorybook}
-        onBackCoverCreated={async () => {
-          if (editorState.currentStorybook) {
-            await loadStorybook(editorState.currentStorybook.id);
-          }
-        }}
       />
     </>
   );

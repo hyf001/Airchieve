@@ -10,6 +10,7 @@ const API_BASE = '/api/v1/storybooks';
 // ============ Types ============
 
 export interface GenerateStoryboardRequest {
+  title?: string;
   story_content: string;
   page_count: number;
   cli_type: CliType;

@@ -24,6 +24,7 @@ const handleWriteError = async (res: Response, fallback: string): Promise<never>
 
 // ============ Types ============
 export type StorybookStatus = "init" | "creating" | "updating" | "finished" | "error" | "terminated";
+export type PageStatus = "pending" | "generating" | "finished" | "error";
 
 export type CliType = "gemini" | "doubao";
 export type AspectRatio = "1:1" | "16:9" | "4:3";
@@ -41,6 +42,15 @@ export interface StorybookPage {
     color: string;
     lighting: string;
   } | null;
+  page_type?: PageType;
+  status?: PageStatus;
+  error_message?: string | null;
+}
+
+export interface StorybookPageCreate {
+  text: string;
+  image_url?: string;
+  storyboard?: StorybookPage['storyboard'];
   page_type?: PageType;
 }
 
@@ -190,7 +200,7 @@ export interface CreateStorybookFromStoryRequest {
   aspect_ratio?: AspectRatio;
   image_size?: ImageSize;
   images?: string[];
-  pages: StorybookPage[];
+  pages: StorybookPageCreate[];
 }
 
 // ============ API Functions ============
@@ -317,6 +327,8 @@ export interface StorybookStatusResult {
   updated_at?: string | null;
   total_pages: number;
   completed_pages: number;
+  generating_pages: number;
+  failed_pages: number;
 }
 
 export const getStorybookStatus = async (storybookId: number): Promise<StorybookStatusResult> => {
@@ -479,39 +491,41 @@ export const terminateStorybook = async (storybookId: number): Promise<{ success
 };
 
 /**
- * 手动触发封面生成（异步，轮询绘本 status: updating → finished/error）
+ * 页面重新生成请求
  */
-export const generateCover = async (
-  storybookId: number,
-  selectedPageIndices: number[],
-): Promise<{ storybook_id: number; status: string }> => {
-  const res = await fetch(`${API_BASE}/${storybookId}/cover/generate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-    body: JSON.stringify({ selected_page_indices: selectedPageIndices }),
-  });
-  if (!res.ok) {
-    await handleWriteError(res, "封面生成失败");
-  }
-  return res.json() as Promise<{ storybook_id: number; status: string }>;
-};
+export interface RegeneratePageRequest {
+  regenerate_text: boolean;
+  text_instruction: string;
+  regenerate_storyboard: boolean;
+  storyboard_instruction: string;
+  regenerate_image: boolean;
+  image_instruction: string;
+  reference_page_ids: number[];
+}
+
+export interface RegeneratePageResponse {
+  storybook_id: number;
+  page_id: number;
+  status: string;
+}
 
 /**
- * 生成封底（同步，直接添加到绘本最后一页）
+ * 页面重新生成（异步，轮询绘本 status: updating → finished/error）
+ * 按 text -> storyboard -> image 顺序执行，不清空已有图层。
  */
-export const generateBackCover = async (
-  storybookId: number,
-  imageData: string,
-): Promise<{ storybook_id: number; status: string }> => {
-  const res = await fetch(`${API_BASE}/${storybookId}/backcover/generate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-    body: JSON.stringify({ image_data: imageData }),
+export const regeneratePage = async (
+  pageId: number,
+  req: RegeneratePageRequest,
+): Promise<RegeneratePageResponse> => {
+  const res = await fetch(`${PAGE_API_BASE}/${pageId}/regenerate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify(req),
   });
   if (!res.ok) {
-    await handleWriteError(res, "封底生成失败");
+    await handleWriteError(res, '页面重新生成失败');
   }
-  return res.json() as Promise<{ storybook_id: number; status: string }>;
+  return res.json() as Promise<RegeneratePageResponse>;
 };
 
 /**
