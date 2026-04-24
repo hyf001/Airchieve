@@ -368,8 +368,6 @@ async def get_storybook(storybook_id: int) -> Optional[Storybook]:
 
 async def get_storybook_status(storybook_id: int) -> Optional[dict]:
     """查询绘本状态和页面进度，包含页面简要状态列表"""
-    from sqlalchemy import func as sa_func
-
     async with async_session_maker() as session:
         result = await session.execute(
             select(
@@ -382,34 +380,6 @@ async def get_storybook_status(storybook_id: int) -> Optional[dict]:
         row = result.one_or_none()
         if row is None:
             return None
-
-        generatable_page_filter = (
-            Page.storybook_id == storybook_id,
-            Page.page_type.in_([PageType.COVER.value, PageType.CONTENT.value]),
-        )
-
-        # 轻量 COUNT 查询页面进度；封底是固定底图，不计入 AI 生成进度
-        total = (await session.execute(
-            select(sa_func.count()).select_from(Page).where(*generatable_page_filter)
-        )).scalar_one()
-        completed = (await session.execute(
-            select(sa_func.count()).select_from(Page).where(
-                *generatable_page_filter,
-                Page.status == PageStatus.FINISHED.value,
-            )
-        )).scalar_one()
-        generating = (await session.execute(
-            select(sa_func.count()).select_from(Page).where(
-                *generatable_page_filter,
-                Page.status == PageStatus.GENERATING.value,
-            )
-        )).scalar_one()
-        failed = (await session.execute(
-            select(sa_func.count()).select_from(Page).where(
-                *generatable_page_filter,
-                Page.status == PageStatus.ERROR.value,
-            )
-        )).scalar_one()
 
         # 查询所有页面的简要状态（按 page_index 排序）
         pages_result = await session.execute(
@@ -434,15 +404,19 @@ async def get_storybook_status(storybook_id: int) -> Optional[dict]:
             for p in pages_result.all()
         ]
 
+        # 从已查询的 pages 列表计算进度，封底是固定底图不计入
+        generatable_types = {PageType.COVER.value, PageType.CONTENT.value}
+        generatable_pages = [p for p in pages if p["page_type"] in generatable_types]
+
         return {
             "id": row.id,
             "status": row.status,
             "error_message": row.error_message,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-            "total_pages": total,
-            "completed_pages": completed,
-            "generating_pages": generating,
-            "failed_pages": failed,
+            "total_pages": len(generatable_pages),
+            "completed_pages": sum(1 for p in generatable_pages if p["status"] == PageStatus.FINISHED.value),
+            "generating_pages": sum(1 for p in generatable_pages if p["status"] == PageStatus.GENERATING.value),
+            "failed_pages": sum(1 for p in generatable_pages if p["status"] == PageStatus.ERROR.value),
             "pages": pages,
         }
 
