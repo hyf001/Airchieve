@@ -20,6 +20,12 @@ from app.models.payment import (
 # 业务域
 from app.models.storybook import Storybook, StorybookStatus
 from app.models.template import Template
+from app.models.image_style import (
+    ImageStyle,
+    ImageStyleReferenceImage,
+    ImageStyleVersion,
+    ImageStyleVersionStatus,
+)
 # 页面与图层
 from app.models.page import Page, Storyboard, JsonText
 from app.models.layer import Layer
@@ -38,6 +44,8 @@ __all__ = [
     "Storybook", "StorybookStatus",
     # template
     "Template",
+    # image style
+    "ImageStyle", "ImageStyleVersion", "ImageStyleReferenceImage", "ImageStyleVersionStatus",
     # page & layer
     "Page", "Layer", "LayerType", "Storyboard", "JsonText",
 ]

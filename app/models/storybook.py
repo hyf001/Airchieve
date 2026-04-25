@@ -41,6 +41,8 @@ class Storybook(Base):
     # 用户输入和模版
     instruction: Mapped[str | None] = mapped_column(Text, nullable=True)  # 用户问句/指令
     template_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 模版ID
+    image_style_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 图片风格ID（预留）
+    image_style_version_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 图片风格版本ID（预留）
     is_public: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)  # 是否公开
 
     # CLI 配置

@@ -37,6 +37,8 @@ class StorybookResponse(BaseModel):
     error_message: Optional[str] = None
     instruction: Optional[str] = None
     template_id: Optional[int] = None
+    image_style_id: Optional[int] = None
+    image_style_version_id: Optional[int] = None
     cli_type: CliType
     aspect_ratio: AspectRatio
     image_size: ImageSize
@@ -57,6 +59,8 @@ class StorybookListResponse(BaseModel):
     cli_type: Optional[CliType]
     aspect_ratio: Optional[AspectRatio]
     image_size: Optional[ImageSize]
+    image_style_id: Optional[int] = None
+    image_style_version_id: Optional[int] = None
 
 
 class EditImageRequest(BaseModel):
@@ -141,6 +145,8 @@ class CreateStorybookFromStoryRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200, description="绘本标题")
     description: str = Field(..., min_length=1, max_length=1000, description="绘本描述/用户原始输入")
     template_id: Optional[int] = Field(None, description="模版ID")
+    image_style_id: Optional[int] = Field(None, description="图片风格ID（预留）")
+    image_style_version_id: Optional[int] = Field(None, description="图片风格版本ID（预留）")
     images: Optional[list[str]] = Field(None, description="参考图片列表（base64）")
     cli_type: CliType = Field(CliType.GEMINI, description="CLI类型")
     aspect_ratio: AspectRatio = Field(AspectRatio.RATIO_16_9, description="图片比例")

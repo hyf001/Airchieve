@@ -169,6 +169,8 @@ async def create_storybook_from_story_endpoint(
             user_id=current_user.id,
             pages=req.pages,
             template_id=req.template_id,
+            image_style_id=req.image_style_id,
+            image_style_version_id=req.image_style_version_id,
             cli_type=req.cli_type,
             aspect_ratio=req.aspect_ratio,
             image_size=req.image_size,
@@ -232,6 +234,8 @@ async def list_storybooks(
             "cli_type": book.cli_type,
             "aspect_ratio": book.aspect_ratio,
             "image_size": book.image_size,
+            "image_style_id": book.image_style_id,
+            "image_style_version_id": book.image_style_version_id,
         })
 
     return response_data

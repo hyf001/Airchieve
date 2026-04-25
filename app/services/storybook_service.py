@@ -567,6 +567,8 @@ async def create_storybook_from_story_async(
     user_id: int,
     pages: List[StorybookPage],
     template_id: Optional[int] = None,
+    image_style_id: Optional[int] = None,
+    image_style_version_id: Optional[int] = None,
     cli_type: CliType = CliType.GEMINI,
     aspect_ratio: AspectRatio = AspectRatio.RATIO_16_9,
     image_size: ImageSize = ImageSize.SIZE_1K,
@@ -587,6 +589,8 @@ async def create_storybook_from_story_async(
         user_id: 用户ID
         pages: 页面列表（包含文本和分镜，可含封面页）
         template_id: 模板ID（可选）
+        image_style_id: 图片风格ID（预留）
+        image_style_version_id: 图片风格版本ID（预留）
         cli_type: CLI类型
         aspect_ratio: 图片比例
         image_size: 图片尺寸
@@ -620,6 +624,8 @@ async def create_storybook_from_story_async(
             creator=str(user_id),
             instruction=description,
             template_id=template_id,
+            image_style_id=image_style_id,
+            image_style_version_id=image_style_version_id,
             cli_type=cli_type,
             aspect_ratio=aspect_ratio,
             image_size=image_size,

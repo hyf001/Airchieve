@@ -74,6 +74,7 @@ description: 用于 AIrchieve 项目的代码审查技能。当用户要求 revi
 - 是否把本应有结构的数据写成 `unknown`
 - 是否把本应区分类型的数据写成万能 `dict` / `Record<string, unknown>` / `Record<string, any>`
 - Python 里是否出现了过宽的 `Any`、`Optional[Any]`
+- 是否大量手拼 `dict` 来表达有稳定字段的业务对象、请求/响应、服务层入参或返回值；这类结构应优先使用 Pydantic schema、dataclass、TypedDict、ORM model 或明确的领域类
 - JSON / content / payload 类型是否本可按 `layer_type`、`kind`、`type` 等字段收窄却没有收窄
 - 泛型、联合类型、TypedDict、Pydantic schema、TS interface 是否可以进一步表达真实约束
 
@@ -81,6 +82,7 @@ description: 用于 AIrchieve 项目的代码审查技能。当用户要求 revi
 
 - 掩盖字段拼写错误
 - 让调用方无法获得正确提示
+- 让字段契约散落在多个手写 `dict` 中，导致响应、service 入参和测试断言容易漂移
 - 让运行时非法数据混入核心流程
 - 让后续重构和 review 难以判断真实结构
 
@@ -245,6 +247,7 @@ review 时要主动检查新代码是否应该复用这些现成能力。
 6. 特别检查类型是否过宽：
    - TypeScript 中的 `any`、过宽 `unknown`、`Record<string, any>`、无必要的 `as any`
    - Python 中的 `Any`、`Optional[Any]`、过宽 `dict`
+   - Python 中用手写 `dict` 代替稳定结构的 schema / dataclass / TypedDict / ORM model，尤其是 API response、service 参数、跨模块返回值
    - 本应按判别字段收窄的联合类型、content 类型、payload 类型
 7. 只输出真正成立的问题。
 
@@ -265,7 +268,7 @@ review 时要主动检查新代码是否应该复用这些现成能力。
 - 为什么不符合当前项目
 - 如果适用，指出应该复用的现有模块
 - 如果属于分层问题，尽量指出应该迁移到哪个目录或模块，例如 `app/schemas/storybook.py`
-- 如果属于类型问题，尽量指出可以收窄成什么，例如 union、TypedDict、Pydantic schema、具体 interface
+- 如果属于类型问题，尽量指出可以收窄成什么，例如 union、TypedDict、Pydantic schema、dataclass、ORM model、领域类、具体 interface
 
 推荐格式：
 
