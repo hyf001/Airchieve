@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import asc, desc, func, select
+from sqlalchemy.orm import selectinload
 
 from app.db.session import async_session_maker
 from app.models.image_style import ImageStyle, ImageStyleReferenceImage, ImageStyleVersion
@@ -22,6 +23,10 @@ class ImageStyleVersionNotFoundError(Exception):
 
 class ImageStyleReferenceImageNotFoundError(Exception):
     """图片风格参考图不存在"""
+
+
+class ImageStyleUnavailableError(Exception):
+    """图片风格当前不可用"""
 
 
 class IncompleteImageStyleVersionError(Exception):
@@ -108,6 +113,49 @@ async def get_image_style(style_id: int) -> tuple[ImageStyle, ImageStyleVersion]
         if item is None:
             raise ImageStyleNotFoundError("画风不存在")
         return item
+
+
+async def validate_style_available(style_id: int) -> tuple[ImageStyle, ImageStyleVersion]:
+    """校验图片风格可用于绘本生成，并返回当前已发布版本。"""
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(ImageStyle, ImageStyleVersion)
+            .join(ImageStyleVersion, ImageStyle.current_version_id == ImageStyleVersion.id)
+            .options(selectinload(ImageStyleVersion.reference_images))
+            .where(ImageStyle.id == style_id)
+            .where(ImageStyle.is_active.is_(True))
+            .where(ImageStyleVersion.status == "published")
+        )
+        item = result.one_or_none()
+        if item is None:
+            raise ImageStyleUnavailableError("该画风已停用，请重新选择画风")
+
+        _style, version = item
+        try:
+            validate_style_version_complete(version)
+        except IncompleteImageStyleVersionError as exc:
+            raise ImageStyleUnavailableError("画风配置不完整，请联系管理员检查画风配置") from exc
+        return item
+
+
+async def get_style_version_for_generation(version_id: int) -> ImageStyleVersion:
+    """读取绘本已锁定的画风版本，包含参考图。"""
+    async with async_session_maker() as session:
+        version = (
+            await session.execute(
+                select(ImageStyleVersion)
+                .options(selectinload(ImageStyleVersion.reference_images))
+                .where(ImageStyleVersion.id == version_id)
+                .where(ImageStyleVersion.status == "published")
+            )
+        ).scalar_one_or_none()
+        if version is None:
+            raise ImageStyleVersionNotFoundError("画风版本不存在")
+        try:
+            validate_style_version_complete(version)
+        except IncompleteImageStyleVersionError as exc:
+            raise ImageStyleUnavailableError("画风参考图不可用，请联系管理员检查画风配置") from exc
+        return version
 
 
 async def get_image_style_for_admin(style_id: int) -> ImageStyle:

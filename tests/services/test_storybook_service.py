@@ -90,17 +90,25 @@ class TestStoryGeneration:
     @pytest.mark.asyncio
     async def test_create_storyboard_only_passes_expected_arguments_to_llm(self, monkeypatch):
         fake_client = FakeLLMClient()
+        fake_style = type("Style", (), {"name": "水彩童话"})()
+        fake_version = type("Version", (), {"style_summary": "柔和水彩"})()
 
         monkeypatch.setattr(
             storybook_service.LLMClientBase,
             "get_client",
             lambda cli_type: fake_client,
         )
+        monkeypatch.setattr(
+            storybook_service,
+            "validate_style_available",
+            lambda style_id: _async_return((fake_style, fake_version)),
+        )
 
         story_texts, storyboards = await storybook_service.create_storyboard_only(
             story_content="一只小熊在森林里寻找回家的路。",
             page_count=8,
             cli_type=CliType.GEMINI,
+            image_style_id=3,
         )
 
         assert story_texts == ["第1页", "第2页"]
@@ -108,4 +116,11 @@ class TestStoryGeneration:
         assert fake_client.create_storyboard_calls == [{
             "story_content": "一只小熊在森林里寻找回家的路。",
             "page_count": 8,
+            "style_name": "水彩童话",
+            "style_summary": "柔和水彩",
+            "storyboard_complexity": "保持适中画面层次，分镜复杂度服务于故事，不额外增加与故事无关的视觉元素。",
         }]
+
+
+async def _async_return(value):
+    return value

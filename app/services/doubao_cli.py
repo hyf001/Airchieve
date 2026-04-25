@@ -16,6 +16,7 @@ from app.core.utils.logger import get_logger
 from app.services.llm_cli import LLMClientBase, LLMError
 from app.models.page import Storyboard, Page
 from app.models.template import Template
+from app.models.image_style import ImageStyleVersion
 from app.models.enums import PageType, StoryType, Language, AgeGroup
 
 logger = get_logger(__name__)
@@ -65,6 +66,7 @@ def _build_image_prompt(
     story_context: List[str],
     page_index: int,
     template: Optional[Template] = None,
+    image_style_version: Optional[ImageStyleVersion] = None,
 ) -> str:
     """构建图片生成的 prompt"""
     full_story_context = "完整故事上下文：\n"
@@ -89,6 +91,13 @@ def _build_image_prompt(
         style_prefix = f"艺术风格：{template.name}。"
         if template.description:
             style_prefix += f"{template.description}。"
+    if image_style_version:
+        if image_style_version.style_description:
+            style_prefix += f"锁定画风描述：{image_style_version.style_description}。"
+        if image_style_version.generation_prompt:
+            style_prefix += f"画风生成提示词：{image_style_version.generation_prompt}。"
+        if image_style_version.negative_prompt:
+            style_prefix += f"负面提示词：{image_style_version.negative_prompt}。"
 
     prompt = (
         f"{style_prefix}"
@@ -102,6 +111,16 @@ def _build_image_prompt(
         f"- 这是共{len(story_context)}页中的第{page_index + 1}页"
     )
     return prompt
+
+
+def _style_reference_urls(image_style_version: Optional[ImageStyleVersion]) -> List[str]:
+    if not image_style_version:
+        return []
+    return [
+        image.url
+        for image in image_style_version.reference_images
+        if image.url
+    ]
 
 
 async def _async_image_generate(**kwargs) -> str:
@@ -297,9 +316,14 @@ def _build_story_system_prompt(
     )
 
 
-def _build_storyboard_system_prompt(page_count: int) -> str:
+def _build_storyboard_system_prompt(
+    page_count: int,
+    style_name: Optional[str] = None,
+    style_summary: Optional[str] = None,
+    storyboard_complexity: Optional[str] = None,
+) -> str:
     """构建分镜生成的 system prompt"""
-    return (
+    prompt = (
         "## 角色\n"
         "你是一名专业的儿童绘本视觉导演，擅长将故事内容忠实拆分为逐页的视觉分镜。\n\n"
         "## 任务\n"
@@ -331,6 +355,15 @@ def _build_storyboard_system_prompt(page_count: int) -> str:
         "- 各页之间保持视觉连贯性\n"
         "- 'characters'字段：仅描述角色的动作、姿态和表情"
     )
+    if style_name or style_summary:
+        prompt += (
+            "\n\n## 画风弱参考\n"
+            "以下画风信息只用于影响画面表达复杂度，不得改变故事内容、人物关系或事件顺序。\n"
+            f"- 画风名称：{style_name or ''}\n"
+            f"- 画风摘要：{style_summary or ''}\n"
+            f"- 分镜复杂度建议：{storyboard_complexity or ''}"
+        )
+    return prompt
 
 
 def _build_insertion_system_prompt(count: int, template: Optional[Template] = None) -> str:
@@ -421,6 +454,9 @@ class DoubaoCli(LLMClientBase):
         self,
         story_content: str,
         page_count: int = 10,
+        style_name: Optional[str] = None,
+        style_summary: Optional[str] = None,
+        storyboard_complexity: Optional[str] = None,
     ) -> Tuple[List[str], List[Optional[Storyboard]]]:
         """基于故事内容创建分镜描述"""
         if not settings.DOUBAO_TEXT_MODEL:
@@ -432,9 +468,15 @@ class DoubaoCli(LLMClientBase):
 
         logger.info("开始生成分镜 | page_count=%d story_length=%d", page_count, len(story_content))
 
-        system_prompt = _build_storyboard_system_prompt(page_count)
+        system_prompt = _build_storyboard_system_prompt(
+            page_count,
+            style_name=style_name,
+            style_summary=style_summary,
+            storyboard_complexity=storyboard_complexity,
+        )
         user_prompt = (
             f"故事内容：\n{story_content}\n\n"
+            f"所选画风摘要：{style_summary or '无'}\n\n"
             f"任务：将这个故事拆分为{page_count}页，并为每一页创建视觉分镜描述。\n"
             f"返回包含{page_count}个页面对象的 JSON，外层用 pages 字段包裹。"
         )
@@ -549,9 +591,10 @@ class DoubaoCli(LLMClientBase):
         storyboard: Optional[Storyboard],
         story_context: List[str],
         page_index: int,
-        reference_images: Optional[List[str]] = None,
+        character_reference_images: Optional[List[str]] = None,
         previous_page_image: Optional[str] = None,
         template: Optional[Template] = None,
+        image_style_version: Optional[ImageStyleVersion] = None,
         aspect_ratio: str = "16:9",
         image_size: str = "1k",
         image_instruction: str = "",
@@ -559,10 +602,17 @@ class DoubaoCli(LLMClientBase):
         """生成单页图片，返回 base64 data URL"""
         logger.info("生成第 %d 页图片 | text=%s ref=%s prev=%s",
                     page_index + 1, story_text[:50],
-                    len(reference_images) if reference_images else 0,
+                    len(character_reference_images) if character_reference_images else 0,
                     bool(previous_page_image))
 
-        prompt = _build_image_prompt(story_text, storyboard, story_context, page_index, template)
+        prompt = _build_image_prompt(
+            story_text,
+            storyboard,
+            story_context,
+            page_index,
+            template,
+            image_style_version,
+        )
         if image_instruction:
             prompt += (
                 f"\n\n【用户图片调整指令】{image_instruction}\n"
@@ -580,16 +630,27 @@ class DoubaoCli(LLMClientBase):
             )
             logger.info("第 %d 页添加上一页图片作为连续性参考", page_index + 1)
 
-        if reference_images:
-            input_images.extend(reference_images)
-            start = len(input_images) - len(reference_images) + 1
+        if character_reference_images:
+            input_images.extend(character_reference_images)
+            start = len(input_images) - len(character_reference_images) + 1
             end = len(input_images)
             ref_desc_parts.append(
                 f"第{start}到第{end}张图片是角色参考照片，"
                 "请提取人物的身份特征（面部轮廓、发型、distinguishing marks），"
                 "在绘本插画的风格中还原这些角色，保持人物可辨识性。"
             )
-            logger.info("第 %d 页添加用户角色参考图 | count=%d", page_index + 1, len(reference_images))
+            logger.info("第 %d 页添加用户角色参考图 | count=%d", page_index + 1, len(character_reference_images))
+
+        style_reference_images = _style_reference_urls(image_style_version)
+        if style_reference_images:
+            input_images.extend(style_reference_images)
+            start = len(input_images) - len(style_reference_images) + 1
+            end = len(input_images)
+            ref_desc_parts.append(
+                f"第{start}到第{end}张图片是锁定画风参考图，"
+                "只学习整体视觉风格、媒介质感、色彩、线条和氛围，不复制其中的人物、文字、构图、场景或具体物体。"
+            )
+            logger.info("第 %d 页添加画风参考图 | count=%d", page_index + 1, len(style_reference_images))
 
         if ref_desc_parts:
             prompt += "\n\n【参考图片说明】" + " ".join(ref_desc_parts)
@@ -669,6 +730,7 @@ class DoubaoCli(LLMClientBase):
         aspect_ratio: str = "16:9",
         image_size: str = "1k",
         image_instruction: str = "",
+        image_style_version: Optional[ImageStyleVersion] = None,
     ) -> str:
         """生成绘本封面图片，使用内页图作为风格参考"""
         logger.info("生成封面 | title=%s ref_count=%d", title, len(reference_images))
@@ -682,6 +744,13 @@ class DoubaoCli(LLMClientBase):
             f"- 温暖、吸引人的氛围，适合儿童绘本封面\n"
             f"- 图片中除书名外不要出现其他文字或字母"
         )
+        if image_style_version:
+            if image_style_version.style_description:
+                prompt += f"\n- 锁定画风描述：{image_style_version.style_description}"
+            if image_style_version.generation_prompt:
+                prompt += f"\n- 画风生成提示词：{image_style_version.generation_prompt}"
+            if image_style_version.negative_prompt:
+                prompt += f"\n- 负面提示词：{image_style_version.negative_prompt}"
         if image_instruction:
             prompt += (
                 f"\n\n【用户封面调整指令】{image_instruction}\n"
@@ -700,14 +769,27 @@ class DoubaoCli(LLMClientBase):
         }
 
         # 使用内页图作为风格参考
+        input_images: List[str] = []
         if reference_images:
             prompt += (
                 f"\n\n【风格参考】已提供{len(reference_images)}张绘本内页插画作为参考图，"
                 "请提取并保持相同的艺术风格、色调和角色外观，确保封面与内页风格一致。"
             )
-            generate_kwargs["prompt"] = prompt
-            generate_kwargs["image"] = reference_images
+            input_images.extend(reference_images)
             logger.info("封面添加内页参考图 | count=%d", len(reference_images))
+
+        style_reference_images = _style_reference_urls(image_style_version)
+        if style_reference_images:
+            prompt += (
+                f"\n\n【锁定画风参考】已提供{len(style_reference_images)}张画风参考图，"
+                "只学习整体视觉风格、媒介质感、色彩、线条和氛围，不复制具体人物、文字、构图或场景。"
+            )
+            input_images.extend(style_reference_images)
+            logger.info("封面添加画风参考图 | count=%d", len(style_reference_images))
+
+        if input_images:
+            generate_kwargs["prompt"] = prompt
+            generate_kwargs["image"] = input_images
 
         data_url = await _async_image_generate(**generate_kwargs)
         logger.info("封面生成成功")

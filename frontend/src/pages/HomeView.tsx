@@ -4,9 +4,9 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { Sparkles, ChevronLeft, BookOpen, LogOut, Coins, Crown, User, Shield } from 'lucide-react';
-import { listTemplates, TemplateListItem } from '../services/templateService';
 import { createStory, createStorybookFromStory, InsufficientPointsError, listStorybooks, StorybookListItem } from '../services/storybookService';
 import { generateStoryboard } from '../services/storyboardService';
+import { listImageStyles, ImageStyleListItem } from '../services/imageStyleService';
 import StorybookPreview from '../components/StorybookPreview';
 import LoadingSpinner from '../components/LoadingSpinner';
 import InstructionInputStep from '../components/steps/InstructionInputStep';
@@ -63,8 +63,9 @@ const HomeView: React.FC<HomeViewProps> = ({
   const [storyboards, setStoryboards] = useState<StoryboardItem[]>([]);
   const [creationParams, setCreationParams] = useState<CreationParams>(defaultCreationParams);
 
-  // 模板和公开作品列表
-  const [templates, setTemplates] = useState<TemplateListItem[]>([]);
+  // 画风和公开作品列表
+  const [imageStyles, setImageStyles] = useState<ImageStyleListItem[]>([]);
+  const [selectedImageStyle, setSelectedImageStyle] = useState<ImageStyleListItem | null>(null);
   const [publicStorybooks, setPublicStorybooks] = useState<StorybookListItem[]>([]);
   const [loadingPublicBooks, setLoadingPublicBooks] = useState(true);
 
@@ -74,17 +75,18 @@ const HomeView: React.FC<HomeViewProps> = ({
   // 步骤挂载计数器，用于强制重新挂载组件
   const [stepMountKey, setStepMountKey] = useState(0);
 
-  // 加载模板列表
+  // 加载画风列表
   useEffect(() => {
-    const fetchTemplates = async () => {
+    const fetchImageStyles = async () => {
       try {
-        const data = await listTemplates({ is_active: true, limit: 50 });
-        setTemplates(data);
+        const data = await listImageStyles({ is_active: true, limit: 50 });
+        setImageStyles(data);
+        setSelectedImageStyle((current) => current ?? data[0] ?? null);
       } catch (err) {
-        console.error('Failed to load templates:', err);
+        console.error('Failed to load image styles:', err);
       }
     };
-    fetchTemplates();
+    fetchImageStyles();
   }, []);
 
   // 加载公开作品
@@ -159,6 +161,10 @@ const HomeView: React.FC<HomeViewProps> = ({
 
   // 步骤2：确认故事并生��分镜
   const handleStoryConfirm = useCallback(async (title: string, content: string, pageCount: number) => {
+    if (!selectedImageStyle) {
+      toast({ variant: 'destructive', title: '请选择画风' });
+      return;
+    }
     setIsCreating(true);
 
     try {
@@ -167,6 +173,7 @@ const HomeView: React.FC<HomeViewProps> = ({
         story_content: content,
         page_count: pageCount,
         cli_type: creationParams.cli_type,
+        image_style_id: selectedImageStyle.id,
       });
 
       setStoryTitle(title);
@@ -183,7 +190,7 @@ const HomeView: React.FC<HomeViewProps> = ({
     } finally {
       setIsCreating(false);
     }
-  }, [creationParams, toast]);
+  }, [creationParams, selectedImageStyle, toast]);
 
   // 步骤3：确认分镜
   const handleStoryboardConfirm = useCallback((updatedStoryboards: StoryboardItem[]) => {
@@ -194,7 +201,7 @@ const HomeView: React.FC<HomeViewProps> = ({
 
   // 步骤4：创建绘本
   const handleCreateStorybook = useCallback(async (
-    templateId: number | null,
+    imageStyleId: number,
     images: string[],
     params: CreationParams
   ) => {
@@ -217,7 +224,7 @@ const HomeView: React.FC<HomeViewProps> = ({
       const res = await createStorybookFromStory({
         title: storyTitle,
         description: originalInstruction.slice(0, 200),
-        template_id: templateId || undefined,
+        image_style_id: imageStyleId,
         images: images.length > 0 ? images : undefined,
         cli_type: params.cli_type,
         aspect_ratio: params.aspect_ratio,
@@ -358,6 +365,9 @@ const HomeView: React.FC<HomeViewProps> = ({
               key={stepMountKey}
               initialTitle={storyTitle}
               initialContent={storyContent}
+              imageStyles={imageStyles}
+              selectedImageStyle={selectedImageStyle}
+              onImageStyleChange={setSelectedImageStyle}
               onNext={handleStoryConfirm}
               onBack={handleBack}
             />
@@ -380,7 +390,8 @@ const HomeView: React.FC<HomeViewProps> = ({
               storyTitle={storyTitle}
               storyContent={storyContent}
               storyboards={storyboards}
-              templates={templates}
+              imageStyles={imageStyles}
+              initialImageStyle={selectedImageStyle}
               cli_type={creationParams.cli_type}
               onCreate={handleCreateStorybook}
               onBack={handleBack}

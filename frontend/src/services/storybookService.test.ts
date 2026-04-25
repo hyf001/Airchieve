@@ -97,6 +97,7 @@ describe('storybookService', () => {
       await createStorybookFromStory({
         title: '星星灯',
         description: '一只小熊寻找星星灯',
+        image_style_id: 1,
         pages: [
           {
             text: '封面',
@@ -122,6 +123,7 @@ describe('storybookService', () => {
       expect(lastJsonBody()).toEqual({
         title: '星星灯',
         description: '一只小熊寻找星星灯',
+        image_style_id: 1,
         images: [],
         cli_type: 'gemini',
         aspect_ratio: '16:9',

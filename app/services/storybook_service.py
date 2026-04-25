@@ -19,6 +19,10 @@ from app.models.template import Template
 from app.models.enums import CliType, AspectRatio, ImageSize, PageStatus, PageType, StoryType, Language, AgeGroup
 from app.services.llm_cli import LLMClientBase, LLMError
 from app.services import page_service
+from app.services.image_style_service import (
+    get_style_version_for_generation,
+    validate_style_available,
+)
 from app.services.points_service import (
     check_creation_points,
     consume_for_creation,
@@ -58,6 +62,17 @@ def build_cover_storyboard(
             else "柔和、有童话感的光线，突出封面主体"
         ),
     }
+
+
+def _build_storyboard_complexity_hint(style_summary: Optional[str]) -> str:
+    """根据画风摘要给分镜阶段一个轻量复杂度建议。"""
+    if not style_summary:
+        return "按儿童绘本常规复杂度安排镜头，保持画面清晰易读。"
+    summary = style_summary.lower()
+    simple_keywords = ["极简", "简笔", "涂鸦", "低龄", "扁平", "simple", "minimal", "doodle"]
+    if any(keyword in summary for keyword in simple_keywords):
+        return "画风偏极简或低龄，分镜应减少复杂镜头、强光影和拥挤构图，优先清楚的主体动作。"
+    return "保持适中画面层次，分镜复杂度服务于故事，不额外增加与故事无关的视觉元素。"
 
 
 async def _is_terminated(storybook_id: int) -> bool:
@@ -210,6 +225,7 @@ async def run_insert_pages_background(
                     select(Template).where(Template.id == storybook.template_id)
                 )
                 template = template_result.scalar_one_or_none()
+            image_style_version_id = storybook.image_style_version_id
 
             # 获取绘本的cli_type、aspect_ratio和image_size
             cli_type = storybook.cli_type if hasattr(storybook, 'cli_type') else CliType.GEMINI
@@ -217,6 +233,11 @@ async def run_insert_pages_background(
             image_size = storybook.image_size if hasattr(storybook, 'image_size') else "1k"
 
         llm_client = LLMClientBase.get_client(cli_type)
+        image_style_version = (
+            await get_style_version_for_generation(image_style_version_id)
+            if image_style_version_id
+            else None
+        )
 
         # 第一步：生成插入页的故事和分镜
         story_texts, storyboards = await llm_client.create_insertion_story_and_storyboard(
@@ -271,9 +292,10 @@ async def run_insert_pages_background(
                 storyboard=storyboard,
                 story_context=all_story_texts,
                 page_index=insert_position + i,
-                reference_images=reference_images,
+                character_reference_images=reference_images,
                 previous_page_image=image_urls[-1] if image_urls else None,
                 template=template,
+                image_style_version=image_style_version,
                 aspect_ratio=aspect_ratio,
                 image_size=image_size,
             )
@@ -535,6 +557,7 @@ async def create_storyboard_only(
     story_content: str,
     page_count: int = 10,
     cli_type: CliType = CliType.GEMINI,
+    image_style_id: int | None = None,
 ) -> Tuple[List[str], List[Optional[Storyboard]]]:
     """
     仅生成分镜，不保存数据库
@@ -543,16 +566,24 @@ async def create_storyboard_only(
         story_content: 故事内容
         page_count: 页数
         cli_type: CLI类型
+        image_style_id: 图片风格ID
 
     Returns:
         Tuple[List[str], List[Optional[Storyboard]]]: (每页文字列表, 分镜列表)
     """
     logger.info("开始生成分镜 | page_count=%d content_length=%d", page_count, len(story_content))
 
+    if image_style_id is None:
+        raise ValueError("请选择画风")
+    style, style_version = await validate_style_available(image_style_id)
+
     llm_client = LLMClientBase.get_client(cli_type)
     story_texts, storyboards = await llm_client.create_storyboard_from_story(
         story_content=story_content,
         page_count=page_count,
+        style_name=style.name,
+        style_summary=style_version.style_summary,
+        storyboard_complexity=_build_storyboard_complexity_hint(style_version.style_summary),
     )
 
     logger.info("分镜生成完成 | count=%d", len(story_texts))
@@ -566,13 +597,11 @@ async def create_storybook_from_story_async(
     description: str,
     user_id: int,
     pages: List[StorybookPage],
-    template_id: Optional[int] = None,
-    image_style_id: Optional[int] = None,
-    image_style_version_id: Optional[int] = None,
+    image_style_id: int | None = None,
     cli_type: CliType = CliType.GEMINI,
     aspect_ratio: AspectRatio = AspectRatio.RATIO_16_9,
     image_size: ImageSize = ImageSize.SIZE_1K,
-) -> tuple[int, str, Optional[Template]]:
+) -> tuple[int, str, int]:
     """
     基于已有的故事和分镜创建绘本（同步阶段）
 
@@ -588,15 +617,13 @@ async def create_storybook_from_story_async(
         description: 绘本描述/用户原始输入
         user_id: 用户ID
         pages: 页面列表（包含文本和分镜，可含封面页）
-        template_id: 模板ID（可选）
-        image_style_id: 图片风格ID（预留）
-        image_style_version_id: 图片风格版本ID（预留）
+        image_style_id: 图片风格ID
         cli_type: CLI类型
         aspect_ratio: 图片比例
         image_size: 图片尺寸
 
     Returns:
-        tuple[int, str, Optional[Template]]: (绘本ID, 标题, 模板)
+        tuple[int, str, int]: (绘本ID, 标题, 锁定的画风版本ID)
     """
     # 分离封面页和正文页
     cover_pages = [p for p in pages if p.page_type == PageType.COVER.value]
@@ -605,13 +632,9 @@ async def create_storybook_from_story_async(
     # 积分检查：正文页数 + 1（封面）
     await check_creation_points(user_id)
 
-    template: Optional[Template] = None
-    if template_id:
-        async with async_session_maker() as session:
-            result = await session.execute(
-                select(Template).where(Template.id == template_id)
-            )
-            template = result.scalar_one_or_none()
+    if image_style_id is None:
+        raise ValueError("请选择画风")
+    _style, style_version = await validate_style_available(image_style_id)
 
     # 获取封底图片 URL
     back_cover_url = page_service.get_back_cover_image_url(aspect_ratio.value)
@@ -623,9 +646,9 @@ async def create_storybook_from_story_async(
             description=description,
             creator=str(user_id),
             instruction=description,
-            template_id=template_id,
+            template_id=None,
             image_style_id=image_style_id,
-            image_style_version_id=image_style_version_id,
+            image_style_version_id=style_version.id,
             cli_type=cli_type,
             aspect_ratio=aspect_ratio,
             image_size=image_size,
@@ -700,13 +723,12 @@ async def create_storybook_from_story_async(
 
     total_pages = 1 + len(content_pages) + 1  # cover + content + back_cover
     logger.info("绘本记录和分镜已保存 | storybook_id=%s pages=%d", storybook_id, total_pages)
-    return storybook_id, title, template
+    return storybook_id, title, style_version.id
 
 
 async def run_create_storybook_from_story_background(
     storybook_id: int,
     user_id: int,
-    template: Optional[Template],
     aspect_ratio: str = "16:9",
     image_size: str = "1k",
     cli_type: CliType = CliType.GEMINI,
@@ -757,6 +779,11 @@ async def run_create_storybook_from_story_background(
 
     try:
         llm_client = LLMClientBase.get_client(cli_type)
+        if not storybook.image_style_version_id:
+            raise ValueError("绘本未锁定画风版本")
+        image_style_version = await get_style_version_for_generation(
+            storybook.image_style_version_id
+        )
 
         # 正文文本上下文（用于生成和封面）
         story_texts = [p.text for p in content_pages]
@@ -784,9 +811,9 @@ async def run_create_storybook_from_story_background(
                 storyboard=page.storyboard,
                 story_context=story_texts,
                 page_index=i,
-                reference_images=images,
+                character_reference_images=images,
                 previous_page_image=content_pages[i - 1].image_url if i > 0 and content_pages[i - 1].image_url else None,
-                template=template,
+                image_style_version=image_style_version,
                 aspect_ratio=aspect_ratio,
                 image_size=image_size,
             )
@@ -836,6 +863,7 @@ async def run_create_storybook_from_story_background(
                 reference_images=reference_image_urls,
                 aspect_ratio=aspect_ratio,
                 image_size=image_size,
+                image_style_version=image_style_version,
             )
 
             cover_page.image_url = cover_image_url

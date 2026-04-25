@@ -3,7 +3,7 @@
  */
 
 import { CliType, AspectRatio, ImageSize } from '../services/storybookService';
-import { TemplateListItem } from '../services/templateService';
+import { ImageStyleListItem } from '../services/imageStyleService';
 
 /**
  * AI 模型标签映射
@@ -63,7 +63,7 @@ export interface CreationState {
   storyTitle: string;
   storyContent: string;
   storyboards: StoryboardItem[];
-  selectedTemplate: TemplateListItem | null;
+  selectedImageStyle: ImageStyleListItem | null;
   uploadedImages: string[];
   creationParams: CreationParams;     // 步骤 4 的参数
 }

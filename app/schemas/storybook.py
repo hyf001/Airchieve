@@ -39,6 +39,8 @@ class StorybookResponse(BaseModel):
     template_id: Optional[int] = None
     image_style_id: Optional[int] = None
     image_style_version_id: Optional[int] = None
+    image_style_name: Optional[str] = None
+    image_style_cover_image: Optional[str] = None
     cli_type: CliType
     aspect_ratio: AspectRatio
     image_size: ImageSize
@@ -61,6 +63,8 @@ class StorybookListResponse(BaseModel):
     image_size: Optional[ImageSize]
     image_style_id: Optional[int] = None
     image_style_version_id: Optional[int] = None
+    image_style_name: Optional[str] = None
+    image_style_cover_image: Optional[str] = None
 
 
 class EditImageRequest(BaseModel):
@@ -94,6 +98,7 @@ class StorybookCreateResponse(BaseModel):
     id: int
     title: str
     status: str
+    image_style_version_id: Optional[int] = None
 
 
 class TerminateResponse(BaseModel):
@@ -144,9 +149,8 @@ class CreateStorybookFromStoryRequest(BaseModel):
     """基于故事创建绘本请求"""
     title: str = Field(..., min_length=1, max_length=200, description="绘本标题")
     description: str = Field(..., min_length=1, max_length=1000, description="绘本描述/用户原始输入")
-    template_id: Optional[int] = Field(None, description="模版ID")
-    image_style_id: Optional[int] = Field(None, description="图片风格ID（预留）")
-    image_style_version_id: Optional[int] = Field(None, description="图片风格版本ID（预留）")
+    template_id: Optional[int] = Field(None, description="已废弃：旧模板ID")
+    image_style_id: Optional[int] = Field(None, description="图片风格ID")
     images: Optional[list[str]] = Field(None, description="参考图片列表（base64）")
     cli_type: CliType = Field(CliType.GEMINI, description="CLI类型")
     aspect_ratio: AspectRatio = Field(AspectRatio.RATIO_16_9, description="图片比例")
@@ -160,6 +164,7 @@ class GenerateStoryboardRequest(BaseModel):
     story_content: str = Field(..., min_length=1, description="故事内容（纯文本）")
     page_count: int = Field(10, ge=1, le=20, description="页数")
     cli_type: CliType = Field(CliType.GEMINI, description="CLI类型")
+    image_style_id: int = Field(..., description="图片风格ID")
 
 
 class StoryboardItemResponse(BaseModel):

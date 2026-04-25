@@ -15,6 +15,7 @@ from app.core.utils.logger import get_logger
 from app.services.llm_cli import LLMClientBase, LLMError
 from app.models.page import Storyboard, Page
 from app.models.template import Template
+from app.models.image_style import ImageStyleVersion
 from app.models.enums import PageType, StoryType, Language, AgeGroup
 
 logger = get_logger(__name__)
@@ -138,6 +139,16 @@ def _build_image_parts(images: List[str]) -> List[types.Part]:
             )
     logger.info("构建图片 parts 完成 | total_count=%s", len(parts))
     return parts
+
+
+def _style_reference_urls(image_style_version: Optional[ImageStyleVersion]) -> List[str]:
+    if not image_style_version:
+        return []
+    return [
+        image.url
+        for image in image_style_version.reference_images
+        if image.url
+    ]
 
 
 def _inline_data_to_data_url(inline_data: types.Blob) -> str:
@@ -475,6 +486,9 @@ class GeminiCli(LLMClientBase):
         self,
         story_content: str,
         page_count: int = 10,
+        style_name: Optional[str] = None,
+        style_summary: Optional[str] = None,
+        storyboard_complexity: Optional[str] = None,
     ) -> Tuple[List[str], List[Optional[Storyboard]]]:
         """
         基于故事内容创建分镜描述
@@ -521,10 +535,20 @@ class GeminiCli(LLMClientBase):
             "- 'characters' field: Describe actions, posture, and expressions ONLY — do not describe physical appearance"
         )
         system_instruction = system_instruction.replace("{page_count}", str(page_count))
+        if style_name or style_summary:
+            system_instruction += (
+                "\n\n## Visual Style Guidance\n"
+                "Use the selected art style only as weak visual guidance for storyboard complexity. "
+                "Do not change the story content, character relationships, or narrative events.\n"
+                f"- Style name: {style_name or ''}\n"
+                f"- Style summary: {style_summary or ''}\n"
+                f"- Storyboard complexity advice: {storyboard_complexity or ''}\n"
+            )
 
         # User Prompt
         user_prompt = (
             f"STORY CONTENT:\n{story_content}\n\n"
+            f"SELECTED ART STYLE SUMMARY:\n{style_summary or 'None'}\n\n"
             f"TASK: Break this story into {page_count} pages and create a visual storyboard for each page.\n\n"
             f"Return a JSON array with {page_count} objects, each containing:\n"
             f"- 'text': The story text for this page\n"
@@ -739,9 +763,10 @@ class GeminiCli(LLMClientBase):
         storyboard: Optional[Storyboard],
         story_context: List[str],
         page_index: int,
-        reference_images: Optional[List[str]] = None,
+        character_reference_images: Optional[List[str]] = None,
         previous_page_image: Optional[str] = None,
         template: Optional[Template] = None,
+        image_style_version: Optional[ImageStyleVersion] = None,
         aspect_ratio: str = "16:9",
         image_size: str = "1k",
         image_instruction: str = "",
@@ -754,9 +779,10 @@ class GeminiCli(LLMClientBase):
             storyboard: 当前页的分镜描述
             story_context: 完整故事的所有文本（用于上下文理解）
             page_index: 当前页索引（从0开始）
-            reference_images: 用户提供的参考图片
+            character_reference_images: 用户提供的角色参考图片
             previous_page_image: 上一页生成的图片URL
             template: 风格模板
+            image_style_version: 绘本锁定的画风版本
             aspect_ratio: 图片比例
             image_size: 图片尺寸
             image_instruction: 用户图片调整指令
@@ -784,6 +810,11 @@ class GeminiCli(LLMClientBase):
             image_system_instruction += f"\n\nART STYLE: {template.name}"
             if template.description:
                 image_system_instruction += f"\n{template.description}"
+        if image_style_version:
+            if image_style_version.style_description:
+                image_system_instruction += f"\n\nLOCKED STYLE DESCRIPTION:\n{image_style_version.style_description}"
+            if image_style_version.negative_prompt:
+                image_system_instruction += f"\n\nNEGATIVE PROMPT:\n{image_style_version.negative_prompt}"
 
         # 构建完整故事上下文
         full_story_context = "Complete Story Context:\n"
@@ -816,6 +847,11 @@ class GeminiCli(LLMClientBase):
             f"- Clean background, no borders or frames\n"
             f"- This is page {page_index + 1} of {len(story_context)} total pages"
         )
+        if image_style_version and image_style_version.generation_prompt:
+            single_image_prompt += (
+                "\n\nLocked style generation prompt:\n"
+                f"{image_style_version.generation_prompt}"
+            )
         if image_instruction:
             single_image_prompt += (
                 f"\n\nUser image adjustment instruction:\n{image_instruction}\n"
@@ -826,15 +862,15 @@ class GeminiCli(LLMClientBase):
         parts = [types.Part(text=single_image_prompt)]
 
         # 用户提供的参考图片（风格/角色指引）
-        if reference_images:
+        if character_reference_images:
             parts.append(types.Part(
-                text=f"The following {len(reference_images)} image(s) are CHARACTER REFERENCE PHOTOS. "
+                text=f"The following {len(character_reference_images)} image(s) are CHARACTER REFERENCE PHOTOS. "
                 f"Extract this person's identity features (facial structure, hair, distinguishing marks) "
                 f"and render them in the story's illustration art style. "
                 f"Preserve their recognizability — do not replicate the photographic style or color grading."
             ))
-            parts.extend(_build_image_parts(reference_images))
-            logger.info("第 %d 页添加用户角色参考图 | count=%d", page_index + 1, len(reference_images))
+            parts.extend(_build_image_parts(character_reference_images))
+            logger.info("第 %d 页添加用户角色参考图 | count=%d", page_index + 1, len(character_reference_images))
 
         # 上一页生成的图片（叙事连续性）
         if previous_page_image:
@@ -845,6 +881,18 @@ class GeminiCli(LLMClientBase):
             ))
             parts.extend(_build_image_parts([previous_page_image]))
             logger.info("第 %d 页添加上一页图片作为连续性参考 | previous_page=%d", page_index + 1, page_index)
+
+        style_reference_images = _style_reference_urls(image_style_version)
+        if style_reference_images:
+            parts.append(types.Part(
+                text=(
+                    f"The following {len(style_reference_images)} image(s) are LOCKED ART STYLE REFERENCES. "
+                    "Learn only the overall visual style, medium, palette, texture, line quality, and mood. "
+                    "Do not copy specific characters, text, composition, scene, or objects from these images."
+                )
+            ))
+            parts.extend(_build_image_parts(style_reference_images))
+            logger.info("第 %d 页添加画风参考图 | count=%d", page_index + 1, len(style_reference_images))
 
         image_response = await client.aio.models.generate_content(
             model=settings.GEMINI_MODEL,
@@ -975,6 +1023,7 @@ class GeminiCli(LLMClientBase):
         aspect_ratio: str = "16:9",
         image_size: str = "1k",
         image_instruction: str = "",
+        image_style_version: Optional[ImageStyleVersion] = None,
     ) -> str:
         """生成绘本封面图片，使用内页图作为风格参考"""
         client = _get_client()
@@ -992,6 +1041,11 @@ class GeminiCli(LLMClientBase):
             "The title text should be integrated naturally into the illustration, not pasted on top. "
             "Output a full-bleed illustration."
         )
+        if image_style_version:
+            if image_style_version.style_description:
+                system_instruction += f"\n\nLOCKED STYLE DESCRIPTION:\n{image_style_version.style_description}"
+            if image_style_version.negative_prompt:
+                system_instruction += f"\n\nNEGATIVE PROMPT:\n{image_style_version.negative_prompt}"
 
         prompt = (
             f"Create a cover illustration for the children's picture book.\n\n"
@@ -1005,6 +1059,11 @@ class GeminiCli(LLMClientBase):
             f"- The title 「{title}」 MUST be rendered as decorative artistic lettering integrated into the illustration\n"
             f"- Title text style: hand-lettered, calligraphic, or illustrated — consistent with the book's art style"
         )
+        if image_style_version and image_style_version.generation_prompt:
+            prompt += (
+                "\n\nLocked style generation prompt:\n"
+                f"{image_style_version.generation_prompt}"
+            )
         if image_instruction:
             prompt += (
                 f"\n\nUser cover adjustment instruction:\n{image_instruction}\n"
@@ -1012,13 +1071,25 @@ class GeminiCli(LLMClientBase):
             )
 
         parts = [types.Part(text=prompt)]
-        parts.append(types.Part(
-            text=(
-                f"The following {len(reference_images)} image(s) are REFERENCE PAGE ILLUSTRATIONS from this book. "
-                "Extract and maintain the exact art style, color palette, character appearance, and visual atmosphere."
-            )
-        ))
-        parts.extend(_build_image_parts(reference_images))
+        if reference_images:
+            parts.append(types.Part(
+                text=(
+                    f"The following {len(reference_images)} image(s) are REFERENCE PAGE ILLUSTRATIONS from this book. "
+                    "Extract and maintain the exact character appearance and visual continuity."
+                )
+            ))
+            parts.extend(_build_image_parts(reference_images))
+
+        style_reference_images = _style_reference_urls(image_style_version)
+        if style_reference_images:
+            parts.append(types.Part(
+                text=(
+                    f"The following {len(style_reference_images)} image(s) are LOCKED ART STYLE REFERENCES. "
+                    "Learn only the overall visual style, medium, palette, texture, line quality, and mood. "
+                    "Do not copy specific characters, text, composition, scene, or objects from these images."
+                )
+            ))
+            parts.extend(_build_image_parts(style_reference_images))
 
         response = await client.aio.models.generate_content(
             model=settings.GEMINI_MODEL,

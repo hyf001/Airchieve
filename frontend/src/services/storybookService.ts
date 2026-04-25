@@ -133,6 +133,10 @@ export interface Storybook {
   error_message?: string | null;
   instruction?: string | null;
   template_id?: number | null;
+  image_style_id?: number | null;
+  image_style_version_id?: number | null;
+  image_style_name?: string | null;
+  image_style_cover_image?: string | null;
   cli_type?: CliType;
   aspect_ratio?: AspectRatio;
   image_size?: ImageSize;
@@ -151,6 +155,10 @@ export interface StorybookListItem {
   cli_type?: CliType;
   aspect_ratio?: AspectRatio;
   image_size?: ImageSize;
+  image_style_id?: number | null;
+  image_style_version_id?: number | null;
+  image_style_name?: string | null;
+  image_style_cover_image?: string | null;
 }
 
 export interface CreateStorybookRequest {
@@ -167,6 +175,7 @@ export interface StorybookCreateResponse {
   id: number;
   title: string;
   status: StorybookStatus;
+  image_style_version_id?: number | null;
 }
 
 export interface EditPageAsyncResponse {
@@ -196,7 +205,7 @@ export interface CreateStoryResponse {
 export interface CreateStorybookFromStoryRequest {
   title: string;
   description: string;
-  template_id?: number;
+  image_style_id: number;
   cli_type?: CliType;
   aspect_ratio?: AspectRatio;
   image_size?: ImageSize;
@@ -242,7 +251,7 @@ export const createStorybookFromStory = async (
     body: JSON.stringify({
       title: req.title,
       description: req.description,
-      template_id: req.template_id,
+      image_style_id: req.image_style_id,
       images: req.images || [],
       cli_type: req.cli_type || 'gemini',
       aspect_ratio: req.aspect_ratio || '16:9',

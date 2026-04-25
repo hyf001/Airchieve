@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple, AsyncGenerator
 from app.models.page import Storyboard, Page
 from app.models.template import Template
+from app.models.image_style import ImageStyleVersion
 from app.models.enums import CliType, StoryType, Language, AgeGroup
 
 
@@ -61,9 +62,10 @@ class LLMClientBase(ABC):
         storyboard: Optional[Storyboard],
         story_context: List[str],
         page_index: int,
-        reference_images: Optional[List[str]] = None,
+        character_reference_images: Optional[List[str]] = None,
         previous_page_image: Optional[str] = None,
         template: Optional[Template] = None,
+        image_style_version: Optional[ImageStyleVersion] = None,
         aspect_ratio: str = "16:9",
         image_size: str = "1k",
         image_instruction: str = "",
@@ -76,9 +78,10 @@ class LLMClientBase(ABC):
             storyboard: 当前页的分镜描述
             story_context: 完整故事的所有文本
             page_index: 当前页索引
-            reference_images: 用户提供的参考图片
+            character_reference_images: 用户提供的角色参考图片
             previous_page_image: 上一页生成的图片URL
             template: 风格模板
+            image_style_version: 绘本锁定的画风版本
             aspect_ratio: 图片比例
             image_size: 图片尺寸
             image_instruction: 用户图片调整指令
@@ -141,6 +144,9 @@ class LLMClientBase(ABC):
         self,
         story_content: str,
         page_count: int = 10,
+        style_name: Optional[str] = None,
+        style_summary: Optional[str] = None,
+        storyboard_complexity: Optional[str] = None,
     ) -> Tuple[List[str], List[Optional[Storyboard]]]:
         """
         基于故事内容创建分镜描述
@@ -148,6 +154,9 @@ class LLMClientBase(ABC):
         Args:
             story_content: 故事内容（纯文本）
             page_count: 需要拆分的页数
+            style_name: 画风名称
+            style_summary: 画风摘要
+            storyboard_complexity: 分镜复杂度建议
 
         Returns:
             Tuple[List[str], List[Optional[Storyboard]]]: (每页故事文本列表, 分镜列表)
@@ -187,6 +196,7 @@ class LLMClientBase(ABC):
         aspect_ratio: str = "16:9",
         image_size: str = "1k",
         image_instruction: str = "",
+        image_style_version: Optional[ImageStyleVersion] = None,
     ) -> str:
         """
         生成绘本封面图片

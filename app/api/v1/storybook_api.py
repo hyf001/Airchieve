@@ -42,6 +42,7 @@ from app.services.storybook_service import (
     create_storyboard_only,
 )
 from app.services.points_service import InsufficientPointsError
+from app.services.image_style_service import ImageStyleUnavailableError
 
 router = APIRouter(prefix="/storybooks", tags=["storybooks"])
 
@@ -119,6 +120,7 @@ async def generate_storyboard_endpoint(
             story_content=req.story_content,
             page_count=req.page_count,
             cli_type=req.cli_type,
+            image_style_id=req.image_style_id,
         )
 
         return GenerateStoryboardResponse(
@@ -140,9 +142,9 @@ async def generate_storyboard_endpoint(
                 ],
             ]
         )
-    except ValueError as e:
+    except (ValueError, ImageStyleUnavailableError) as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
 
@@ -163,14 +165,14 @@ async def create_storybook_from_story_endpoint(
     init → creating → finished / error
     """
     try:
-        storybook_id, title, template = await create_storybook_from_story_async(
+        if req.template_id is not None:
+            raise ValueError("当前生成流程已改为使用画风，请选择画风")
+        storybook_id, title, image_style_version_id = await create_storybook_from_story_async(
             title=req.title,
             description=req.description,
             user_id=current_user.id,
             pages=req.pages,
-            template_id=req.template_id,
             image_style_id=req.image_style_id,
-            image_style_version_id=req.image_style_version_id,
             cli_type=req.cli_type,
             aspect_ratio=req.aspect_ratio,
             image_size=req.image_size,
@@ -180,7 +182,7 @@ async def create_storybook_from_story_endpoint(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail={"code": INSUFFICIENT_POINTS_CODE, "message": str(e)},
         )
-    except ValueError as e:
+    except (ValueError, ImageStyleUnavailableError) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
@@ -190,14 +192,18 @@ async def create_storybook_from_story_endpoint(
         run_create_storybook_from_story_background,
         storybook_id,
         current_user.id,
-        template,
         req.aspect_ratio.value,
         req.image_size.value,
         req.cli_type,
         req.images,
     )
 
-    return StorybookCreateResponse(id=storybook_id, title=title, status="init")
+    return StorybookCreateResponse(
+        id=storybook_id,
+        title=title,
+        status="init",
+        image_style_version_id=image_style_version_id,
+    )
 
 
 @router.get("", response_model=List[StorybookListResponse])

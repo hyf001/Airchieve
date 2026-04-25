@@ -5,10 +5,9 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { Wand2, Image as ImageIcon, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { TemplateListItem } from '../../services/templateService';
+import { ImageStyleListItem } from '../../services/imageStyleService';
 import { StoryboardItem, CreationParams } from '../../types/creation';
 import { CliType, AspectRatio, ImageSize } from '../../services/storybookService';
-import StorybookPreview from '../StorybookPreview';
 import {
   Select,
   SelectContent,
@@ -21,10 +20,11 @@ interface CreateStorybookStepProps {
   storyTitle: string;
   storyContent: string;
   storyboards: StoryboardItem[];
-  templates: TemplateListItem[];
+  imageStyles: ImageStyleListItem[];
+  initialImageStyle: ImageStyleListItem | null;
   cli_type: CliType;
   onCreate: (
-    templateId: number | null,
+    imageStyleId: number,
     images: string[],
     params: CreationParams
   ) => void;
@@ -41,12 +41,13 @@ const CreateStorybookStep: React.FC<CreateStorybookStepProps> = ({
   storyTitle,
   storyContent,
   storyboards,
-  templates,
+  imageStyles,
+  initialImageStyle,
   cli_type,
   onCreate,
   onBack,
 }) => {
-  const [selectedTemplate, setSelectedTemplate] = useState<TemplateListItem | null>(null);
+  const selectedImageStyle = initialImageStyle;
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [params, setParams] = useState<CreationParams>({ ...defaultParams, cli_type });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -106,15 +107,16 @@ const CreateStorybookStep: React.FC<CreateStorybookStepProps> = ({
 
     setIsSubmitting(true);
     try {
+      if (!selectedImageStyle) return;
       await onCreate(
-        selectedTemplate?.id || null,
+        selectedImageStyle.id,
         uploadedImages,
         params
       );
     } finally {
       setIsSubmitting(false);
     }
-  }, [selectedTemplate, uploadedImages, params, onCreate, isSubmitting]);
+  }, [selectedImageStyle, uploadedImages, params, onCreate, isSubmitting]);
 
   return (
     <div className="w-full max-w-4xl mx-auto relative">
@@ -150,10 +152,10 @@ const CreateStorybookStep: React.FC<CreateStorybookStepProps> = ({
                     <span>含封面</span>
                   </>
                 )}
-                {selectedTemplate && (
+                {selectedImageStyle && (
                   <>
                     <span>·</span>
-                    <span>模板: {selectedTemplate.name}</span>
+                    <span>画风: {selectedImageStyle.name}</span>
                   </>
                 )}
                 {uploadedImages.length > 0 && (
@@ -213,67 +215,41 @@ const CreateStorybookStep: React.FC<CreateStorybookStepProps> = ({
               </div>
             </div>
 
-            {/* 下方：模板选择 */}
+            {/* 下方：画风选择 */}
             <div className="rounded-xl p-4 bg-white/60 border border-slate-300/50">
               <h3 className="text-base font-semibold text-slate-800 mb-3 flex items-center gap-2">
                 <Wand2 className="w-4 h-4 text-purple-600" />
-                选择艺术风格（可选）
+                选择画风
               </h3>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {/* 不使用模板 */}
-                <Button
-                  onClick={() => setSelectedTemplate(null)}
-                  variant="outline"
-                  className={`p-3 h-auto flex-col items-start ${
-                    !selectedTemplate
-                      ? 'border-2 border-amber-500 bg-amber-50 shadow-md'
-                      : 'border-slate-300/50 hover:border-slate-400'
-                  }`}
-                >
-                  <div className="font-medium text-slate-800 text-sm">不使用模板</div>
-                </Button>
-                {/* 模板列表 */}
-                {templates.map((template) => {
-                  const previewStorybook =
-                    template.storybook_id && template.cover_image
-                      ? {
-                          id: template.storybook_id,
-                          title: template.name,
-                          description: template.description,
-                          creator: template.creator,
-                          status: 'finished' as const,
-                          is_public: false,
-                          created_at: template.created_at,
-                          pages: [
-                            { image_url: template.cover_image, text: '', page_type: 'cover' as const },
-                          ],
-                        }
-                      : null;
-
-                  return (
-                    <Button
-                      key={template.id}
-                      onClick={() => setSelectedTemplate(template)}
-                      variant="outline"
-                      className={`p-2 h-auto flex-col items-start ${
-                        selectedTemplate?.id === template.id
-                          ? 'border-2 border-amber-500 bg-amber-50 shadow-md'
-                          : 'border-slate-300/50 hover:border-slate-400'
-                      }`}
-                    >
-                      {previewStorybook ? (
-                        <div className="mb-1.5 rounded-lg overflow-hidden w-full [&>div]:!aspect-[3/2]">
-                          <StorybookPreview storybook={previewStorybook as any} />
-                        </div>
-                      ) : (
-                        <div className="h-12 bg-slate-200 rounded-lg flex items-center justify-center mb-1.5 w-full">
-                          <span className="text-2xl">📚</span>
-                        </div>
-                      )}
-                      <div className="font-medium text-slate-800 text-sm truncate w-full">{template.name}</div>
-                    </Button>
-                  );
-                })}
+                {imageStyles.map((style) => (
+                  <Button
+                    key={style.id}
+                    disabled={isSubmitting || style.id !== selectedImageStyle?.id}
+                    variant="outline"
+                    className={`p-2 h-auto flex-col items-start ${
+                      selectedImageStyle?.id === style.id
+                        ? 'border-2 border-amber-500 bg-amber-50 shadow-md'
+                        : 'border-slate-300/50 hover:border-slate-400'
+                    }`}
+                  >
+                    {style.cover_image ? (
+                      <img
+                        src={style.cover_image}
+                        alt={style.name}
+                        className="mb-1.5 w-full aspect-[3/2] object-cover rounded-lg"
+                      />
+                    ) : (
+                      <div className="h-12 bg-slate-200 rounded-lg flex items-center justify-center mb-1.5 w-full">
+                        <ImageIcon className="w-6 h-6 text-slate-400" />
+                      </div>
+                    )}
+                    <div className="font-medium text-slate-800 text-sm truncate w-full">{style.name}</div>
+                    {style.description && (
+                      <div className="text-xs text-slate-500 line-clamp-2 text-left mt-1">{style.description}</div>
+                    )}
+                  </Button>
+                ))}
               </div>
             </div>
           </div>
@@ -329,7 +305,7 @@ const CreateStorybookStep: React.FC<CreateStorybookStepProps> = ({
             {/* 开始创作按钮 */}
             <Button
               onClick={handleCreate}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !selectedImageStyle}
               variant="gradient-rose"
               className="shrink-0 shadow-lg hover:shadow-purple-400/60 hover:scale-105 active:scale-95 transition-all"
             >

@@ -6,6 +6,7 @@ import React, { useState, useCallback } from 'react';
 import { FileText } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
+import { ImageStyleListItem } from '../../services/imageStyleService';
 import {
   Select,
   SelectContent,
@@ -18,6 +19,9 @@ interface StoryPreviewStepProps {
   initialTitle: string;
   initialContent: string;
   initialPageCount?: number;
+  imageStyles: ImageStyleListItem[];
+  selectedImageStyle: ImageStyleListItem | null;
+  onImageStyleChange: (style: ImageStyleListItem) => void;
   onNext: (title: string, content: string, pageCount: number) => void;
   onBack: () => void;
 }
@@ -26,6 +30,9 @@ const StoryPreviewStep: React.FC<StoryPreviewStepProps> = ({
   initialTitle,
   initialContent,
   initialPageCount = 10,
+  imageStyles,
+  selectedImageStyle,
+  onImageStyleChange,
   onNext,
   onBack,
 }) => {
@@ -36,6 +43,7 @@ const StoryPreviewStep: React.FC<StoryPreviewStepProps> = ({
 
   const handleNext = useCallback(async () => {
     if (!title.trim() || !content.trim() || isSubmitting) return;
+    if (!selectedImageStyle) return;
 
     setIsSubmitting(true);
     try {
@@ -43,7 +51,7 @@ const StoryPreviewStep: React.FC<StoryPreviewStepProps> = ({
     } finally {
       setIsSubmitting(false);
     }
-  }, [title, content, pageCount, isSubmitting, onNext]);
+  }, [title, content, pageCount, selectedImageStyle, isSubmitting, onNext]);
 
   return (
     <div className="w-full max-w-4xl mx-auto relative">
@@ -78,6 +86,29 @@ const StoryPreviewStep: React.FC<StoryPreviewStepProps> = ({
                 disabled={isSubmitting}
                 className="w-full px-3 py-2 bg-white/60 border border-slate-300/50 rounded-lg text-slate-800 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-transparent transition-all"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">图片画风</label>
+              <Select
+                value={selectedImageStyle ? String(selectedImageStyle.id) : ''}
+                onValueChange={(value) => {
+                  const style = imageStyles.find((item) => item.id === Number(value));
+                  if (style) onImageStyleChange(style);
+                }}
+                disabled={isSubmitting || imageStyles.length === 0}
+              >
+                <SelectTrigger className="bg-white/60 border-slate-300/50 text-slate-800 focus:ring-amber-500/50">
+                  <SelectValue placeholder={imageStyles.length ? '请选择画风' : '暂无可用画风'} />
+                </SelectTrigger>
+                <SelectContent className="bg-white/95 border-slate-300/50">
+                  {imageStyles.map((style) => (
+                    <SelectItem key={style.id} value={String(style.id)}>
+                      {style.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* 故事内容输入 */}
@@ -135,7 +166,7 @@ const StoryPreviewStep: React.FC<StoryPreviewStepProps> = ({
             {/* 生成分镜按钮 */}
             <Button
               onClick={handleNext}
-              disabled={!title.trim() || !content.trim() || isSubmitting}
+              disabled={!title.trim() || !content.trim() || !selectedImageStyle || isSubmitting}
               variant="gradient-rose"
               className="shrink-0 shadow-lg hover:shadow-purple-400/60 hover:scale-105 active:scale-95 transition-all"
             >

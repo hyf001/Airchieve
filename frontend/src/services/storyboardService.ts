@@ -14,6 +14,7 @@ export interface GenerateStoryboardRequest {
   story_content: string;
   page_count: number;
   cli_type: CliType;
+  image_style_id: number;
 }
 
 export interface GenerateStoryboardResponse {

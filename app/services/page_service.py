@@ -17,6 +17,7 @@ from app.models.storybook import Storybook
 from app.models.template import Template
 from app.schemas.page import BaseImageUpdate, PageCreate, TextUpdate
 from app.services.llm_cli import LLMClientBase, LLMError
+from app.services.image_style_service import get_style_version_for_generation
 from app.services.points_service import (
     check_creation_points,
     consume_for_page_edit,
@@ -343,6 +344,7 @@ async def run_regenerate_page_background(
                     select(Template).where(Template.id == storybook.template_id)
                 )
                 template = template_result.scalar_one_or_none()
+            image_style_version_id = storybook.image_style_version_id
             all_pages = list(storybook.pages)
             await session.commit()
 
@@ -353,6 +355,11 @@ async def run_regenerate_page_background(
         story_texts = [p.text for p in content_pages]
         page_type = _page_type_value(page.page_type)
         llm_client = LLMClientBase.get_client(cli_type)
+        image_style_version = (
+            await get_style_version_for_generation(image_style_version_id)
+            if image_style_version_id
+            else None
+        )
 
         if regenerate_text:
             logger.info("重新生成页面文本 | page_id=%s", page_id)
@@ -440,6 +447,7 @@ async def run_regenerate_page_background(
                     aspect_ratio=aspect_ratio,
                     image_size=image_size,
                     image_instruction=image_instruction,
+                    image_style_version=image_style_version,
                 )
             else:
                 page_idx = _find_content_page_index(content_pages, page_id)
@@ -454,9 +462,10 @@ async def run_regenerate_page_background(
                     storyboard=page.storyboard,
                     story_context=story_texts,
                     page_index=page_idx,
-                    reference_images=selected_reference_urls or None,
+                    character_reference_images=selected_reference_urls or None,
                     previous_page_image=previous_page_image,
                     template=template,
+                    image_style_version=image_style_version,
                     aspect_ratio=aspect_ratio,
                     image_size=image_size,
                     image_instruction=image_instruction,
