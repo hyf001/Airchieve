@@ -3,10 +3,11 @@
  * 用户可以查看和编辑 AI 生成的故事内容，设置页面数量
  */
 import React, { useState, useCallback } from 'react';
-import { FileText } from 'lucide-react';
+import { Check, FileText, Image as ImageIcon } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { ImageStyleListItem } from '../../services/imageStyleService';
+import { toApiUrl } from '@/services/storybookService';
 import {
   Select,
   SelectContent,
@@ -34,12 +35,14 @@ const StoryPreviewStep: React.FC<StoryPreviewStepProps> = ({
   selectedImageStyle,
   onImageStyleChange,
   onNext,
-  onBack,
 }) => {
   const [title, setTitle] = useState(initialTitle);
   const [content, setContent] = useState(initialContent);
   const [pageCount, setPageCount] = useState(initialPageCount);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const titleMissing = title.trim().length === 0;
+  const contentMissing = content.trim().length === 0;
+  const styleMissing = !selectedImageStyle;
 
   const handleNext = useCallback(async () => {
     if (!title.trim() || !content.trim() || isSubmitting) return;
@@ -77,8 +80,11 @@ const StoryPreviewStep: React.FC<StoryPreviewStepProps> = ({
           <div className="px-5 pt-4 pb-3 space-y-4">
             {/* 故事标题输入 */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">故事标题</label>
-              <input
+	              <div className="mb-2 flex items-center justify-between">
+	                <label className="block text-sm font-medium text-slate-700">故事标题</label>
+	                {titleMissing && <span className="text-xs text-amber-600">请输入标题</span>}
+	              </div>
+	              <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -89,33 +95,71 @@ const StoryPreviewStep: React.FC<StoryPreviewStepProps> = ({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">图片画风</label>
-              <Select
-                value={selectedImageStyle ? String(selectedImageStyle.id) : ''}
-                onValueChange={(value) => {
-                  const style = imageStyles.find((item) => item.id === Number(value));
-                  if (style) onImageStyleChange(style);
-                }}
-                disabled={isSubmitting || imageStyles.length === 0}
-              >
-                <SelectTrigger className="bg-white/60 border-slate-300/50 text-slate-800 focus:ring-amber-500/50">
-                  <SelectValue placeholder={imageStyles.length ? '请选择画风' : '暂无可用画风'} />
-                </SelectTrigger>
-                <SelectContent className="bg-white/95 border-slate-300/50">
-                  {imageStyles.map((style) => (
-                    <SelectItem key={style.id} value={String(style.id)}>
-                      {style.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-slate-700">图片画风</label>
+                {styleMissing && imageStyles.length > 0 && (
+                  <span className="text-xs text-amber-600">请选择一个画风</span>
+                )}
+              </div>
+              {imageStyles.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-300/70 bg-white/50 px-4 py-6 text-center text-sm text-slate-500">
+                  暂无可用画风
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {imageStyles.map((style) => {
+                    const isSelected = selectedImageStyle?.id === style.id;
+                    return (
+                      <button
+                        key={style.id}
+                        type="button"
+                        onClick={() => onImageStyleChange(style)}
+                        disabled={isSubmitting}
+                        className={`group relative overflow-hidden rounded-xl border bg-white/70 text-left shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-amber-500/50 disabled:cursor-not-allowed disabled:opacity-70 ${
+                          isSelected
+                            ? 'border-amber-500 ring-2 ring-amber-400/40'
+                            : 'border-slate-300/60 hover:border-amber-300 hover:shadow-md'
+                        }`}
+                        aria-pressed={isSelected}
+                      >
+                        <div className="aspect-[4/3] bg-slate-100">
+                          {style.cover_image ? (
+                            <img
+                              src={toApiUrl(style.cover_image)}
+                              alt={style.name}
+                              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-slate-400">
+                              <ImageIcon className="h-8 w-8" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="space-y-1 px-3 py-2">
+                          <div className="truncate text-sm font-semibold text-slate-800">{style.name}</div>
+                          <div className="min-h-[2rem] text-xs leading-4 text-slate-500 line-clamp-2">
+                            {style.description || '暂无描述'}
+                          </div>
+                        </div>
+                        {isSelected && (
+                          <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-white shadow-md">
+                            <Check className="h-4 w-4" />
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* 故事内容输入 */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-slate-700">故事内容</label>
-                <span className="text-xs text-slate-500">{content.length} 字</span>
+	                <label className="block text-sm font-medium text-slate-700">故事内容</label>
+	                <span className={`text-xs ${contentMissing ? 'text-amber-600' : 'text-slate-500'}`}>
+	                  {contentMissing ? '请输入故事内容' : `${content.length} 字`}
+	                </span>
               </div>
               <Textarea
                 value={content}
@@ -129,19 +173,9 @@ const StoryPreviewStep: React.FC<StoryPreviewStepProps> = ({
           </div>
 
           {/* 底部操作栏 */}
-          <div className="flex items-center gap-2 px-4 py-3 flex-nowrap border-t border-white/50 bg-white/20">
-            {/* 上一步按钮 */}
-            <Button
-              onClick={onBack}
-              disabled={isSubmitting}
-              variant="outline"
-              className="shrink-0"
-            >
-              上一步
-            </Button>
-
+          <div className="flex flex-col gap-3 px-4 py-3 border-t border-white/50 bg-white/20 sm:flex-row sm:items-center">
             {/* 页面数量参数 */}
-            <div className="flex-1 flex items-center justify-center gap-3">
+            <div className="flex flex-wrap items-center gap-3 sm:flex-1 sm:justify-start">
               <span className="text-sm text-slate-600">页面数量</span>
               <Select
                 value={String(pageCount)}
@@ -166,9 +200,9 @@ const StoryPreviewStep: React.FC<StoryPreviewStepProps> = ({
             {/* 生成分镜按钮 */}
             <Button
               onClick={handleNext}
-              disabled={!title.trim() || !content.trim() || !selectedImageStyle || isSubmitting}
+              disabled={titleMissing || contentMissing || styleMissing || isSubmitting}
               variant="gradient-rose"
-              className="shrink-0 shadow-lg hover:shadow-purple-400/60 hover:scale-105 active:scale-95 transition-all"
+              className="w-full shrink-0 shadow-lg transition-all hover:scale-105 hover:shadow-purple-400/60 active:scale-95 sm:w-auto"
             >
               {isSubmitting ? (
                 <>

@@ -39,6 +39,8 @@ const InstructionInputStep: React.FC<InstructionInputStepProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const currentInput = inputMode === 'ai' ? prompt : storyText;
+  const isInputEmpty = currentInput.trim().length === 0;
+  const inputLimit = inputMode === 'ai' ? 500 : 10000;
 
   const handleSubmit = useCallback(async () => {
     const text = inputMode === 'ai' ? prompt : storyText;
@@ -115,11 +117,8 @@ const InstructionInputStep: React.FC<InstructionInputStepProps> = ({
                   className="resize-none bg-transparent border-0 shadow-none focus-visible:ring-0 text-[15px] leading-relaxed text-slate-800 placeholder:text-slate-500 placeholder:font-medium p-0"
                   placeholder="描述您的故事创意... 比如：一只名叫 Nutty 的小松鼠在一棵老橡树中发现了一扇神秘的门..."
                   value={prompt}
-                  onChange={(e) => {
-                    if (e.target.value.length <= 500) {
-                      setPrompt(e.target.value);
-                    }
-                  }}
+                  maxLength={500}
+                  onChange={(e) => setPrompt(e.target.value)}
                   disabled={isSubmitting}
                 />
                 <div className="text-right text-xs text-slate-800 mt-1">{prompt.length}/500</div>
@@ -131,11 +130,8 @@ const InstructionInputStep: React.FC<InstructionInputStepProps> = ({
                   className="resize-y bg-transparent border border-slate-200 rounded-lg focus-visible:ring-1 focus-visible:ring-amber-400 text-[15px] leading-relaxed text-slate-800 placeholder:text-slate-400 placeholder:font-medium p-3"
                   placeholder="请输入您现有的故事内容..."
                   value={storyText}
-                  onChange={(e) => {
-                    if (e.target.value.length <= 10000) {
-                      setStoryText(e.target.value);
-                    }
-                  }}
+                  maxLength={10000}
+                  onChange={(e) => setStoryText(e.target.value)}
                   disabled={isSubmitting}
                 />
                 <div className="text-right text-xs text-slate-800 mt-1">{storyText.length}/10000</div>
@@ -144,82 +140,82 @@ const InstructionInputStep: React.FC<InstructionInputStepProps> = ({
           </div>
 
           {/* 底部操作栏 */}
-          <div className="flex items-center gap-2 px-4 py-3 flex-nowrap border-t border-white/50 bg-white/20">
+          <div className="flex flex-col gap-3 px-4 py-3 border-t border-white/50 bg-white/20 sm:flex-row sm:items-center">
             {/* 故事参数选择器（仅 AI 模式显示） */}
             {inputMode === 'ai' && (
-            <div className="flex items-center gap-2 shrink-0">
-              {/* 字数 */}
-              <Select
-                value={String(storyParams.word_count)}
-                onValueChange={(v) => handleParamChange('word_count', Number(v))}
-              >
-                <SelectTrigger className="h-8 w-[100px] text-xs bg-white/60 border-white/70 text-slate-700 shadow-sm focus:ring-[#00CDD4]/30">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-slate-500">字数</span>
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0">
+                {/* 字数 */}
+                <Select
+                  value={String(storyParams.word_count)}
+                  onValueChange={(v) => handleParamChange('word_count', Number(v))}
+                >
+                  <SelectTrigger className="h-8 w-[100px] flex-1 text-xs bg-white/60 border-white/70 text-slate-700 shadow-sm focus:ring-[#00CDD4]/30 sm:flex-none">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-slate-500">字数</span>
+                      <SelectValue />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent className="bg-white/95 border-white/70">
+                    <SelectItem value="300">300字</SelectItem>
+                    <SelectItem value="500">500字</SelectItem>
+                    <SelectItem value="800">800字</SelectItem>
+                    <SelectItem value="1000">1000字</SelectItem>
+                    <SelectItem value="1500">1500字</SelectItem>
+                    <SelectItem value="2000">2000字</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* 故事类型 */}
+                <Select
+                  value={storyParams.story_type}
+                  onValueChange={(v) => handleParamChange('story_type', v as StoryParams['story_type'])}
+                >
+                  <SelectTrigger className="h-8 w-[110px] flex-1 text-xs bg-white/60 border-white/70 text-slate-700 shadow-sm focus:ring-[#00CDD4]/30 sm:flex-none">
+                    <SelectValue placeholder="类型" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white/95 border-white/70">
+                    {Object.entries(STORY_TYPE_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* 语言 */}
+                <Select
+                  value={storyParams.language}
+                  onValueChange={(v) => handleParamChange('language', v as StoryParams['language'])}
+                >
+                  <SelectTrigger className="h-8 w-[80px] flex-1 text-xs bg-white/60 border-white/70 text-slate-700 shadow-sm focus:ring-[#00CDD4]/30 sm:flex-none">
                     <SelectValue />
-                  </div>
-                </SelectTrigger>
-                <SelectContent className="bg-white/95 border-white/70">
-                  <SelectItem value="300">300字</SelectItem>
-                  <SelectItem value="500">500字</SelectItem>
-                  <SelectItem value="800">800字</SelectItem>
-                  <SelectItem value="1000">1000字</SelectItem>
-                  <SelectItem value="1500">1500字</SelectItem>
-                  <SelectItem value="2000">2000字</SelectItem>
-                </SelectContent>
-              </Select>
+                  </SelectTrigger>
+                  <SelectContent className="bg-white/95 border-white/70">
+                    {Object.entries(LANGUAGE_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-              {/* 故事类型 */}
-              <Select
-                value={storyParams.story_type}
-                onValueChange={(v) => handleParamChange('story_type', v as StoryParams['story_type'])}
-              >
-                <SelectTrigger className="h-8 w-[110px] text-xs bg-white/60 border-white/70 text-slate-700 shadow-sm focus:ring-[#00CDD4]/30">
-                  <SelectValue placeholder="类型" />
-                </SelectTrigger>
-                <SelectContent className="bg-white/95 border-white/70">
-                  {Object.entries(STORY_TYPE_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* 语言 */}
-              <Select
-                value={storyParams.language}
-                onValueChange={(v) => handleParamChange('language', v as StoryParams['language'])}
-              >
-                <SelectTrigger className="h-8 w-[80px] text-xs bg-white/60 border-white/70 text-slate-700 shadow-sm focus:ring-[#00CDD4]/30">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-white/95 border-white/70">
-                  {Object.entries(LANGUAGE_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* 年龄组 */}
-              <Select
-                value={storyParams.age_group}
-                onValueChange={(v) => handleParamChange('age_group', v as StoryParams['age_group'])}
-              >
-                <SelectTrigger className="h-8 w-[90px] text-xs bg-white/60 border-white/70 text-slate-700 shadow-sm focus:ring-[#00CDD4]/30">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-white/95 border-white/70">
-                  {Object.entries(AGE_GROUP_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                {/* 年龄组 */}
+                <Select
+                  value={storyParams.age_group}
+                  onValueChange={(v) => handleParamChange('age_group', v as StoryParams['age_group'])}
+                >
+                  <SelectTrigger className="h-8 w-[90px] flex-1 text-xs bg-white/60 border-white/70 text-slate-700 shadow-sm focus:ring-[#00CDD4]/30 sm:flex-none">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white/95 border-white/70">
+                    {Object.entries(AGE_GROUP_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             )}
 
             {/* AI 模型（两种模式都显示） */}
@@ -227,7 +223,7 @@ const InstructionInputStep: React.FC<InstructionInputStepProps> = ({
               value={cli_type}
               onValueChange={(v) => onCliTypeChange(v as CliType)}
             >
-              <SelectTrigger className="h-8 w-[90px] text-xs bg-white/60 border-white/70 text-slate-700 shadow-sm focus:ring-[#00CDD4]/30">
+              <SelectTrigger className="h-8 w-full text-xs bg-white/60 border-white/70 text-slate-700 shadow-sm focus:ring-[#00CDD4]/30 sm:w-[90px]">
                 <div className="flex items-center gap-1.5">
                   <span className="text-[10px] text-slate-500">模型</span>
                   <SelectValue />
@@ -243,27 +239,34 @@ const InstructionInputStep: React.FC<InstructionInputStepProps> = ({
             </Select>
 
             {/* 占位，将按钮推到右侧 */}
-            <div className="flex-1" />
+            <div className="hidden flex-1 sm:block" />
 
             {/* 创建按钮 */}
-            <Button
-              disabled={isSubmitting}
-              onClick={handleSubmit}
-              variant="gradient-rose"
-              className="shrink-0 px-8 h-10 rounded-full shadow-lg hover:shadow-purple-400/60 hover:scale-105 active:scale-95 transition-all"
-            >
-              {isSubmitting ? (
-                <>
-                  <span className="animate-spin">⏳</span>
-                  <span>{inputMode === 'ai' ? '正在创建故事...' : '正在生成分镜...'}</span>
-                </>
-              ) : (
-                <>
-                  <Wand2 size={16} strokeWidth={2} />
-                  <span>{inputMode === 'ai' ? '创建故事' : '下一步'}</span>
-                </>
+            <div className="flex w-full flex-col items-stretch gap-1 sm:w-auto">
+              {isInputEmpty && (
+                <span className="text-xs text-amber-700 sm:text-right">
+                  {inputMode === 'ai' ? '请输入故事创意' : '请输入现有故事内容'}
+                </span>
               )}
-            </Button>
+              <Button
+                disabled={isSubmitting || isInputEmpty || currentInput.length > inputLimit}
+                onClick={handleSubmit}
+                variant="gradient-rose"
+                className="h-10 w-full shrink-0 rounded-full px-8 shadow-lg transition-all hover:scale-105 hover:shadow-purple-400/60 active:scale-95 sm:w-auto"
+              >
+                {isSubmitting ? (
+                  <>
+                    <span className="animate-spin">⏳</span>
+                    <span>{inputMode === 'ai' ? '正在创建故事...' : '正在生成分镜...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Wand2 size={16} strokeWidth={2} />
+                    <span>{inputMode === 'ai' ? '创建故事' : '下一步'}</span>
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </div>

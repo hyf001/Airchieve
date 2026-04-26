@@ -22,6 +22,7 @@ from app.models.storybook import Storybook, StorybookStatus
 from app.models.template import Template
 from app.models.image_style import (
     ImageStyle,
+    ImageStyleAsset,
     ImageStyleReferenceImage,
     ImageStyleVersion,
     ImageStyleVersionStatus,
@@ -45,7 +46,7 @@ __all__ = [
     # template
     "Template",
     # image style
-    "ImageStyle", "ImageStyleVersion", "ImageStyleReferenceImage", "ImageStyleVersionStatus",
+    "ImageStyle", "ImageStyleAsset", "ImageStyleVersion", "ImageStyleReferenceImage", "ImageStyleVersionStatus",
     # page & layer
     "Page", "Layer", "LayerType", "Storyboard", "JsonText",
 ]

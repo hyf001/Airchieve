@@ -3,7 +3,7 @@
  * 支持向导式创建流程：输入指令 → 预览故事 → 编辑分镜 → 创建绘本
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import { Sparkles, ChevronLeft, BookOpen, LogOut, Coins, Crown, User, Shield } from 'lucide-react';
+import { Sparkles, ChevronLeft, BookOpen, LogOut, Coins, Crown, User, Shield, Palette } from 'lucide-react';
 import { createStory, createStorybookFromStory, InsufficientPointsError, listStorybooks, StorybookListItem } from '../services/storybookService';
 import { generateStoryboard } from '../services/storyboardService';
 import { listImageStyles, ImageStyleListItem } from '../services/imageStyleService';
@@ -24,6 +24,7 @@ interface HomeViewProps {
   onShowMyTemplates?: () => void;
   onShowProfile?: () => void;
   onShowAdmin?: () => void;
+  onShowImageStyles?: () => void;
 }
 
 const MEMBERSHIP_LABEL: Record<string, string> = {
@@ -50,6 +51,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   onShowMyTemplates,
   onShowProfile,
   onShowAdmin,
+  onShowImageStyles,
 }) => {
   const { user, logout, openLoginModal } = useAuth();
   const { toast } = useToast();
@@ -390,7 +392,6 @@ const HomeView: React.FC<HomeViewProps> = ({
               storyTitle={storyTitle}
               storyContent={storyContent}
               storyboards={storyboards}
-              imageStyles={imageStyles}
               initialImageStyle={selectedImageStyle}
               cli_type={creationParams.cli_type}
               onCreate={handleCreateStorybook}
@@ -398,8 +399,9 @@ const HomeView: React.FC<HomeViewProps> = ({
             />
           )}
 
-          {/* 大家的创作 - 所有步骤都显示 */}
-          <section className="mt-16 rounded-[2.5rem] py-14 px-8 text-center glass-card">
+	          {/* 大家的创作 - 仅首页展示，避免打断创建流程 */}
+	          {step === 'input' && (
+	          <section className="mt-16 rounded-[2.5rem] py-14 px-8 text-center glass-card">
             <h2 className="text-3xl font-bold font-lexend mb-3 text-slate-100">
               大家的创作
             </h2>
@@ -427,7 +429,8 @@ const HomeView: React.FC<HomeViewProps> = ({
                 ))}
               </div>
             )}
-          </section>
+	          </section>
+	          )}
         </div>
       </main>
 
@@ -483,12 +486,20 @@ const HomeView: React.FC<HomeViewProps> = ({
                 <User size={16} className="text-teal-400" /> 个人主页
               </DropdownMenuItem>
               {user?.role === 'admin' && (
-                <DropdownMenuItem
-                  onClick={() => onShowAdmin?.()}
-                  className="gap-2 focus:bg-slate-700/50 focus:text-slate-100"
-                >
-                  <Shield size={16} className="text-rose-400" /> 用户管理
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem
+                    onClick={() => onShowAdmin?.()}
+                    className="gap-2 focus:bg-slate-700/50 focus:text-slate-100"
+                  >
+                    <Shield size={16} className="text-rose-400" /> 用户管理
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => onShowImageStyles?.()}
+                    className="gap-2 focus:bg-slate-700/50 focus:text-slate-100"
+                  >
+                    <Palette size={16} className="text-violet-400" /> 图片风格管理
+                  </DropdownMenuItem>
+                </>
               )}
               <DropdownMenuItem
                 onClick={() => onShowMyWorks?.()}

@@ -13,6 +13,7 @@ from app.db.base import Base
 
 __all__ = [
     "ImageStyle",
+    "ImageStyleAsset",
     "ImageStyleVersion",
     "ImageStyleReferenceImage",
     "ImageStyleVersionStatus",
@@ -54,6 +55,50 @@ class ImageStyle(Base):
         back_populates="image_style",
         cascade="all, delete-orphan",
         lazy="selectin",
+    )
+
+
+class ImageStyleAsset(Base):
+    """图片风格素材库资产表"""
+    __tablename__ = "image_style_assets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    object_key: Mapped[str] = mapped_column(String(1024), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    tags: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    style_type: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    color_tags: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    texture_tags: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    scene_tags: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    subject_tags: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    composition_tags: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    age_group_tags: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+
+    content_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+
+    creator: Mapped[str] = mapped_column(String(128), nullable=False)
+    modifier: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    reference_images: Mapped[list["ImageStyleReferenceImage"]] = relationship(
+        "ImageStyleReferenceImage",
+        back_populates="asset",
+        lazy="noload",
     )
 
 
@@ -101,7 +146,11 @@ class ImageStyleReferenceImage(Base):
         ForeignKey("image_style_versions.id"), nullable=False, index=True
     )
 
-    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    asset_id: Mapped[int | None] = mapped_column(
+        ForeignKey("image_style_assets.id"), nullable=True, index=True
+    )
+    url_snapshot: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    legacy_url: Mapped[str | None] = mapped_column("url", String(2048), nullable=True)
     is_cover: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -119,3 +168,15 @@ class ImageStyleReferenceImage(Base):
     version: Mapped[ImageStyleVersion] = relationship(
         "ImageStyleVersion", back_populates="reference_images"
     )
+    asset: Mapped[ImageStyleAsset | None] = relationship(
+        "ImageStyleAsset", back_populates="reference_images"
+    )
+
+    @property
+    def url(self) -> str:
+        """统一给旧生成链路和响应层使用的参考图 URL。"""
+        if self.url_snapshot:
+            return self.url_snapshot
+        if self.asset is not None:
+            return self.asset.url
+        return self.legacy_url or ""

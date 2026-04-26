@@ -4,6 +4,7 @@ import LoginModal from './components/LoginModal';
 import HomeView from './pages/HomeView';
 import EditorView from './pages/EditorView';
 import TemplatesView from './pages/TemplatesView';
+import ImageStylesView from './pages/ImageStylesView';
 import UserProfileView from './pages/UserProfileView';
 import UserManagementView from './pages/UserManagementView';
 import LoadingSpinner from './components/LoadingSpinner';
@@ -20,6 +21,7 @@ const InnerApp: React.FC = () => {
   const [showMyTemplates, setShowMyTemplates] = useState(false);
   const [showProfile,     setShowProfile]     = useState(false);
   const [showAdmin,       setShowAdmin]       = useState(false);
+  const [showImageStyles, setShowImageStyles] = useState(false);
 
   const handleBack = () => {
     setCurrentStorybookId(undefined);
@@ -27,9 +29,10 @@ const InnerApp: React.FC = () => {
     setShowMyTemplates(false);
     setShowProfile(false);
     setShowAdmin(false);
+    setShowImageStyles(false);
   };
 
-  const isHomeView = !currentStorybookId && !showMyWorks && !showMyTemplates && !showProfile && !showAdmin;
+  const isHomeView = !currentStorybookId && !showMyWorks && !showMyTemplates && !showProfile && !showAdmin && !showImageStyles;
 
   if (isLoading) {
     return (
@@ -48,7 +51,9 @@ const InnerApp: React.FC = () => {
         />
       )}
 
-      {showAdmin ? (
+      {showImageStyles ? (
+        <ImageStylesView onBack={handleBack} />
+      ) : showAdmin ? (
         <UserManagementView onBack={handleBack} />
       ) : showProfile ? (
         <UserProfileView onBack={handleBack} />
@@ -82,6 +87,14 @@ const InnerApp: React.FC = () => {
             setCurrentStorybookId(undefined);
             setShowMyWorks(false);
             setShowMyTemplates(false);
+            setShowImageStyles(false);
+          }}
+          onShowImageStyles={() => {
+            setShowImageStyles(true);
+            setCurrentStorybookId(undefined);
+            setShowMyWorks(false);
+            setShowMyTemplates(false);
+            setShowAdmin(false);
           }}
         />
       ) : (

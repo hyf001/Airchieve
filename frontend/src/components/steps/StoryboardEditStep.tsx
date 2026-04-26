@@ -3,7 +3,7 @@
  * 显示分镜列表，支持编辑每页的分镜描述
  */
 import React, { useState } from 'react';
-import { Edit3 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Edit3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { StoryboardItem } from '../../types/creation';
@@ -21,13 +21,17 @@ const StoryboardEditStep: React.FC<StoryboardEditStepProps> = ({
   storyContent,
   initialStoryboards,
   onNext,
-  onBack,
 }) => {
   const [storyboards, setStoryboards] = useState<StoryboardItem[]>(initialStoryboards);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editText, setEditText] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
+
+  const getPageLabel = (items: StoryboardItem[], index: number) =>
+    items[index]?.page_type === 'cover'
+      ? '封面'
+      : `第 ${items.slice(0, index + 1).filter((p) => p.page_type !== 'cover').length} 页`;
 
   const handleEdit = (index: number) => {
     setEditingIndex(index);
@@ -46,6 +50,33 @@ const StoryboardEditStep: React.FC<StoryboardEditStepProps> = ({
       )
     );
     setEditingIndex(null);
+  };
+
+  const commitEditingStoryboards = () => {
+    if (editingIndex === null) return storyboards;
+
+    const nextStoryboards = storyboards.map((item, i) =>
+      i === editingIndex
+        ? {
+            ...item,
+            text: editText,
+          }
+        : item
+    );
+    setStoryboards(nextStoryboards);
+    setEditingIndex(null);
+    return nextStoryboards;
+  };
+
+  const handleMove = (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= storyboards.length) return;
+
+    setStoryboards((prev) => {
+      const next = [...prev];
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      return next;
+    });
   };
 
   const handleCancel = () => {
@@ -72,7 +103,7 @@ const StoryboardEditStep: React.FC<StoryboardEditStepProps> = ({
   };
 
   const handleNext = () => {
-    onNext(storyboards);
+    onNext(commitEditingStoryboards());
   };
 
   const contentPageCount = storyboards.filter(item => item.page_type !== 'cover').length;
@@ -145,15 +176,35 @@ const StoryboardEditStep: React.FC<StoryboardEditStepProps> = ({
                   ) : (
                     // 预览模式
                     <div className="p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-xs font-semibold text-amber-600">
-                          {item.page_type === 'cover' ? '封面' : `第 ${storyboards.slice(0, index).filter(p => p.page_type !== 'cover').length} 页`}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            onClick={() => handleEdit(index)}
-                            variant="ghost"
-                            size="sm"
+	                      <div className="flex items-center justify-between mb-3">
+	                        <span className="text-xs font-semibold text-amber-600">
+	                          {getPageLabel(storyboards, index)}
+	                        </span>
+	                        <div className="flex items-center gap-2">
+	                          <Button
+	                            onClick={() => handleMove(index, -1)}
+	                            disabled={index === 0 || editingIndex !== null}
+	                            variant="ghost"
+	                            size="sm"
+	                            className="h-7 px-2 text-slate-700 hover:text-slate-900"
+	                            aria-label="上移"
+	                          >
+	                            <ArrowUp className="h-3.5 w-3.5" />
+	                          </Button>
+	                          <Button
+	                            onClick={() => handleMove(index, 1)}
+	                            disabled={index === storyboards.length - 1 || editingIndex !== null}
+	                            variant="ghost"
+	                            size="sm"
+	                            className="h-7 px-2 text-slate-700 hover:text-slate-900"
+	                            aria-label="下移"
+	                          >
+	                            <ArrowDown className="h-3.5 w-3.5" />
+	                          </Button>
+	                          <Button
+	                            onClick={() => handleEdit(index)}
+	                            variant="ghost"
+	                            size="sm"
                             className="text-xs text-slate-800 hover:text-slate-900"
                           >
                             编辑
@@ -212,26 +263,20 @@ const StoryboardEditStep: React.FC<StoryboardEditStepProps> = ({
             </div>
           </div>
 
-          {/* 底��操作栏 */}
-          <div className="flex items-center gap-2 px-4 py-3 flex-nowrap border-t border-white/50 bg-white/20">
-            {/* 上一步按钮 */}
-            <Button
-              onClick={onBack}
-              variant="outline"
-              className="shrink-0"
-            >
-              上一步
-            </Button>
+	          {/* 底部操作栏 */}
+	          <div className="flex flex-col gap-2 px-4 py-3 border-t border-white/50 bg-white/20 sm:flex-row sm:items-center sm:justify-end">
+	            {editingIndex !== null && (
+	              <span className="text-xs text-slate-600 sm:mr-auto">
+	                当前编辑内容会在确认时自动保存
+	              </span>
+	            )}
 
-            {/* 占位 */}
-            <div className="flex-1" />
-
-            {/* 确认分镜按钮 */}
-            <Button
-              onClick={handleNext}
-              variant="gradient-rose"
-              className="shrink-0 shadow-lg hover:shadow-purple-400/60 hover:scale-105 active:scale-95 transition-all"
-            >
+	            {/* 确认分镜按钮 */}
+	            <Button
+	              onClick={handleNext}
+	              variant="gradient-rose"
+	              className="w-full shrink-0 shadow-lg transition-all hover:scale-105 hover:shadow-purple-400/60 active:scale-95 sm:w-auto"
+	            >
               <Edit3 size={16} strokeWidth={2} />
               <span>确认分镜</span>
             </Button>
@@ -242,8 +287,8 @@ const StoryboardEditStep: React.FC<StoryboardEditStepProps> = ({
       {/* 删除确认对话框 */}
       <ConfirmDialog
         open={deleteDialogOpen}
-        title="确认删除"
-        description={`确定要删除${deleteIndex !== null && storyboards[deleteIndex]?.page_type === 'cover' ? '封面' : `第 ${deleteIndex !== null ? deleteIndex + 1 : 0} 页`}吗？此操作无法撤销。`}
+	        title="确认删除"
+	        description={`确定要删除${deleteIndex !== null ? getPageLabel(storyboards, deleteIndex) : '这一页'}吗？此操作无法撤销。`}
         confirmText="删除"
         cancelText="取消"
         variant="destructive"

@@ -3,11 +3,12 @@
  * 选择艺术风格、设置绘本参数、上传参考图片
  */
 import React, { useState, useRef, useCallback } from 'react';
-import { Wand2, Image as ImageIcon, Upload } from 'lucide-react';
+import { Loader2, Wand2, Image as ImageIcon, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ImageStyleListItem } from '../../services/imageStyleService';
 import { StoryboardItem, CreationParams } from '../../types/creation';
 import { CliType, AspectRatio, ImageSize } from '../../services/storybookService';
+import { toApiUrl } from '@/services/storybookService';
 import {
   Select,
   SelectContent,
@@ -20,7 +21,6 @@ interface CreateStorybookStepProps {
   storyTitle: string;
   storyContent: string;
   storyboards: StoryboardItem[];
-  imageStyles: ImageStyleListItem[];
   initialImageStyle: ImageStyleListItem | null;
   cli_type: CliType;
   onCreate: (
@@ -36,26 +36,45 @@ const defaultParams: CreationParams = {
   image_size: '1k',
   cli_type: 'gemini',
 };
+const MAX_REFERENCE_IMAGES = 6;
 
 const CreateStorybookStep: React.FC<CreateStorybookStepProps> = ({
   storyTitle,
   storyContent,
   storyboards,
-  imageStyles,
   initialImageStyle,
   cli_type,
   onCreate,
-  onBack,
 }) => {
   const selectedImageStyle = initialImageStyle;
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+  const [uploadingCount, setUploadingCount] = useState(0);
+  const [uploadError, setUploadError] = useState('');
   const [params, setParams] = useState<CreationParams>({ ...defaultParams, cli_type });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
+    setUploadError('');
+
+    const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/'));
+    if (imageFiles.length !== files.length) {
+      setUploadError('仅支持上传图片文件。');
+    }
+
+    const availableSlots = MAX_REFERENCE_IMAGES - uploadedImages.length;
+    if (availableSlots <= 0) {
+      setUploadError(`最多上传 ${MAX_REFERENCE_IMAGES} 张参考图片。`);
+      e.target.value = '';
+      return;
+    }
+
+    const selectedFiles = imageFiles.slice(0, availableSlots);
+    if (imageFiles.length > availableSlots) {
+      setUploadError(`最多上传 ${MAX_REFERENCE_IMAGES} 张参考图片，已保留前 ${availableSlots} 张。`);
+    }
 
     const compressImage = (file: File): Promise<string> => {
       const MAX_SIZE = 2 * 1024 * 1024;
@@ -90,13 +109,17 @@ const CreateStorybookStep: React.FC<CreateStorybookStepProps> = ({
       });
     };
 
-    Array.from(files).forEach((file) => {
-      compressImage(file).then((base64) => {
-        setUploadedImages((prev) => [...prev, base64]);
-      });
-    });
-    e.target.value = '';
-  }, []);
+    setUploadingCount(selectedFiles.length);
+    try {
+      const images = await Promise.all(selectedFiles.map((file) => compressImage(file)));
+      setUploadedImages((prev) => [...prev, ...images]);
+    } catch {
+      setUploadError('图片处理失败，请换一张图片重试。');
+    } finally {
+      setUploadingCount(0);
+      e.target.value = '';
+    }
+  }, [uploadedImages.length]);
 
   const handleRemoveImage = useCallback((index: number) => {
     setUploadedImages((prev) => prev.filter((_, i) => i !== index));
@@ -173,101 +196,101 @@ const CreateStorybookStep: React.FC<CreateStorybookStepProps> = ({
                 <ImageIcon className="w-4 h-4 text-purple-600" />
                 参考图片（可选）
               </h3>
-              <div className="flex items-start gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
                 <input
                   type="file"
                   ref={fileInputRef}
                   accept="image/*"
                   multiple
-                  onChange={handleImageUpload}
-                  className="hidden"
-                />
-                <Button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  variant="outline"
-                  className="shrink-0 h-auto flex-col w-24 py-4 border-2 border-dashed"
-                >
-                  <Upload className="w-6 h-6 text-slate-400 mb-2" />
-                  <span className="text-slate-500 text-sm">上传图片</span>
-                </Button>
-                {uploadedImages.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {uploadedImages.map((image, index) => (
-                      <div key={index} className="relative group">
-                        <img
-                          src={image}
-                          alt={`参考图片 ${index + 1}`}
-                          className="w-20 h-20 object-cover rounded-lg"
-                        />
-                        <Button
-                          onClick={() => handleRemoveImage(index)}
-                          size="icon"
-                          variant="destructive"
-                          className="absolute top-1 right-1 h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition text-xs"
-                        >
-                          ×
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+	                  onChange={handleImageUpload}
+	                  className="hidden"
+	                />
+	                <Button
+	                  type="button"
+	                  onClick={() => fileInputRef.current?.click()}
+	                  disabled={isSubmitting || uploadingCount > 0 || uploadedImages.length >= MAX_REFERENCE_IMAGES}
+	                  variant="outline"
+	                  className="h-auto w-full shrink-0 flex-col border-2 border-dashed py-4 sm:w-24"
+	                >
+	                  {uploadingCount > 0 ? (
+	                    <Loader2 className="mb-2 h-6 w-6 animate-spin text-slate-400" />
+	                  ) : (
+	                    <Upload className="mb-2 h-6 w-6 text-slate-400" />
+	                  )}
+	                  <span className="text-sm text-slate-500">{uploadingCount > 0 ? '处理中' : '上传图片'}</span>
+	                </Button>
+	                <div className="min-w-0 flex-1 space-y-2">
+	                  <div className="text-xs text-slate-500">
+	                    支持最多 {MAX_REFERENCE_IMAGES} 张图片，较大的图片会自动压缩。
+	                  </div>
+	                  {uploadError && <div className="text-xs text-amber-700">{uploadError}</div>}
+	                  {uploadedImages.length > 0 && (
+	                    <div className="flex flex-wrap gap-2">
+	                      {uploadedImages.map((image, index) => (
+	                        <div key={index} className="relative group">
+	                          <img
+	                            src={image}
+	                            alt={`参考图片 ${index + 1}`}
+	                            className="w-20 h-20 object-cover rounded-lg"
+	                          />
+	                          <Button
+	                            onClick={() => handleRemoveImage(index)}
+	                            size="icon"
+	                            variant="destructive"
+	                            className="absolute right-1 top-1 h-6 w-6 p-0 text-xs opacity-100 transition sm:h-5 sm:w-5 sm:opacity-0 sm:group-hover:opacity-100"
+	                            aria-label={`删除参考图片 ${index + 1}`}
+	                          >
+	                            <X className="h-3 w-3" />
+	                          </Button>
+	                        </div>
+	                      ))}
+	                    </div>
+	                  )}
+	                </div>
               </div>
             </div>
 
-            {/* 下方：画风选择 */}
+            {/* 下方：已选画风 */}
             <div className="rounded-xl p-4 bg-white/60 border border-slate-300/50">
               <h3 className="text-base font-semibold text-slate-800 mb-3 flex items-center gap-2">
                 <Wand2 className="w-4 h-4 text-purple-600" />
-                选择画风
+                已选画风
               </h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {imageStyles.map((style) => (
-                  <Button
-                    key={style.id}
-                    disabled={isSubmitting || style.id !== selectedImageStyle?.id}
-                    variant="outline"
-                    className={`p-2 h-auto flex-col items-start ${
-                      selectedImageStyle?.id === style.id
-                        ? 'border-2 border-amber-500 bg-amber-50 shadow-md'
-                        : 'border-slate-300/50 hover:border-slate-400'
-                    }`}
-                  >
-                    {style.cover_image ? (
+              {selectedImageStyle ? (
+                <div className="flex flex-col gap-3 rounded-xl border border-amber-300/70 bg-amber-50/80 p-3 sm:flex-row sm:items-center">
+                  <div className="h-24 w-full overflow-hidden rounded-lg bg-slate-100 sm:w-32">
+                    {selectedImageStyle.cover_image ? (
                       <img
-                        src={style.cover_image}
-                        alt={style.name}
-                        className="mb-1.5 w-full aspect-[3/2] object-cover rounded-lg"
+                        src={toApiUrl(selectedImageStyle.cover_image)}
+                        alt={selectedImageStyle.name}
+                        className="h-full w-full object-cover"
                       />
                     ) : (
-                      <div className="h-12 bg-slate-200 rounded-lg flex items-center justify-center mb-1.5 w-full">
-                        <ImageIcon className="w-6 h-6 text-slate-400" />
+                      <div className="flex h-full w-full items-center justify-center text-slate-400">
+                        <ImageIcon className="h-8 w-8" />
                       </div>
                     )}
-                    <div className="font-medium text-slate-800 text-sm truncate w-full">{style.name}</div>
-                    {style.description && (
-                      <div className="text-xs text-slate-500 line-clamp-2 text-left mt-1">{style.description}</div>
-                    )}
-                  </Button>
-                ))}
-              </div>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold text-slate-800">{selectedImageStyle.name}</div>
+                    <p className="mt-1 text-sm leading-5 text-slate-600 line-clamp-2">
+                      {selectedImageStyle.description || '暂无描述'}
+                    </p>
+                    <p className="mt-2 text-xs text-slate-500">如需更换画风，请返回上一步调整。</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-300/70 bg-white/50 px-4 py-6 text-center text-sm text-slate-500">
+                  尚未选择画风，请返回上一步选择。
+                </div>
+              )}
             </div>
           </div>
 
           {/* 底部操作栏 */}
-          <div className="flex items-center gap-2 px-4 py-3 flex-nowrap border-t border-white/50 bg-white/20">
-            {/* 上一步按钮 */}
-            <Button
-              onClick={onBack}
-              disabled={isSubmitting}
-              variant="outline"
-              className="shrink-0"
-            >
-              上一步
-            </Button>
-
+          <div className="flex flex-col gap-3 px-4 py-3 border-t border-white/50 bg-white/20 sm:flex-row sm:items-center">
             {/* 参数选择器 */}
-            <div className="flex-1 flex items-center justify-center gap-3">
+            <div className="flex flex-wrap items-center gap-3 sm:flex-1 sm:justify-start">
               {/* 图片比例 */}
               <Select
                 value={params.aspect_ratio}
@@ -307,7 +330,7 @@ const CreateStorybookStep: React.FC<CreateStorybookStepProps> = ({
               onClick={handleCreate}
               disabled={isSubmitting || !selectedImageStyle}
               variant="gradient-rose"
-              className="shrink-0 shadow-lg hover:shadow-purple-400/60 hover:scale-105 active:scale-95 transition-all"
+              className="w-full shrink-0 shadow-lg transition-all hover:scale-105 hover:shadow-purple-400/60 active:scale-95 sm:w-auto"
             >
               {isSubmitting ? (
                 <>
