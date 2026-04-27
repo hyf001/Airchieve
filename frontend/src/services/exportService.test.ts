@@ -138,9 +138,9 @@ const storybook: Storybook = {
   description: null,
   creator: 'tester',
   pages: [
-    { id: 1, text: 'cover', image_url: '/cover.png', page_type: 'cover' },
-    { id: 2, text: 'page', image_url: '/page.png', page_type: 'content' },
-    { id: 3, text: 'back', image_url: '/back.png', page_type: 'back_cover' },
+    { id: 1, page_index: 0, text: 'cover', image_url: '/cover.png', page_type: 'cover' },
+    { id: 2, page_index: 1, text: 'page', image_url: '/page.png', page_type: 'content' },
+    { id: 3, page_index: 2, text: 'back', image_url: '/back.png', page_type: 'back_cover' },
   ],
   status: 'finished',
   aspect_ratio: '4:3',

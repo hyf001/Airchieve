@@ -69,46 +69,51 @@ def _build_image_prompt(
     image_style_version: Optional[ImageStyleVersion] = None,
 ) -> str:
     """构建图片生成的 prompt"""
-    full_story_context = "完整故事上下文：\n"
-    for idx, text in enumerate(story_context, 1):
-        full_story_context += f"第{idx}页：{text}\n"
+    visual_summary = story_text
+    if storyboard and storyboard.get("summary"):
+        visual_summary = storyboard.get("summary") or story_text
 
     if storyboard:
         storyboard_desc = (
-            f"故事文本：{story_text}\n"
-            f"分镜描述：\n"
+            f"【当前页视觉摘要】\n{visual_summary}\n\n"
+            f"【当前页分镜】\n"
             f"- 场景：{storyboard.get('scene', '')}\n"
             f"- 角色：{storyboard.get('characters', '')}\n"
-            f"- 构图：{storyboard.get('shot', '')}\n"
-            f"- 色调：{storyboard.get('color', '')}\n"
-            f"- 光影：{storyboard.get('lighting', '')}"
+            f"- 构图：{storyboard.get('shot', '')}"
         )
     else:
-        storyboard_desc = f"故事文本：{story_text}"
+        storyboard_desc = f"【当前页视觉摘要】\n{visual_summary}\n\n【当前页分镜】\n- 场景：\n- 角色：\n- 构图："
 
-    style_prefix = ""
+    style_lines = []
     if template and template.name:
-        style_prefix = f"艺术风格：{template.name}。"
+        style_lines.append(f"- 模板风格：{template.name}")
         if template.description:
-            style_prefix += f"{template.description}。"
+            style_lines.append(f"- 模板描述：{template.description}")
     if image_style_version:
         if image_style_version.style_description:
-            style_prefix += f"锁定画风描述：{image_style_version.style_description}。"
+            style_lines.append(f"- 锁定画风描述：{image_style_version.style_description}")
         if image_style_version.generation_prompt:
-            style_prefix += f"画风生成提示词：{image_style_version.generation_prompt}。"
+            style_lines.append(f"- 画风生成提示词：{image_style_version.generation_prompt}")
         if image_style_version.negative_prompt:
-            style_prefix += f"负面提示词：{image_style_version.negative_prompt}。"
+            style_lines.append(f"- 负面提示词：{image_style_version.negative_prompt}")
+    locked_style = "\n".join(style_lines) if style_lines else "- 使用所选儿童绘本画风"
 
     prompt = (
-        f"{style_prefix}"
-        f"{full_story_context}\n"
-        f"当前任务：为第{page_index + 1}页生成插图。\n\n"
+        "你是一名专业儿童绘本插画师。\n\n"
+        "【优先级规则，必须严格遵守】\n"
+        "1. 第一优先级：跨页视觉连续性\n"
+        "2. 第二优先级：锁定画风\n"
+        "3. 第三优先级：当前页视觉摘要和分镜\n"
+        "4. 第四优先级：用户明确的图片调整指令\n\n"
+        "如果提供了上一页图片，上一页图片是最重要的连续性参考。必须尽量保持已建立的角色外观、关键物外观、画风、色彩体系和场景延续。\n"
+        "除非用户明确要求改变，否则不要改变已经建立的视觉身份。\n\n"
+        f"【当前任务】\n为第{page_index + 1}页 / 共{len(story_context)}页生成一张儿童绘本内页插画。\n\n"
         f"{storyboard_desc}\n\n"
-        f"要求：\n"
-        f"- 按要求生成一张绘本插画\n"
-        f"- 图片中不要出现任何文字、字母或单词\n"
-        f"- 干净的背景，无边框\n"
-        f"- 这是共{len(story_context)}页中的第{page_index + 1}页"
+        f"【锁定画风】\n{locked_style}\n\n"
+        "【禁止】\n"
+        "- 图片中不要出现任何文字、字母、标题、标签、边框。\n"
+        "- 只画当前页，不要把其他页面的内容画进来。\n"
+        "- 角色参考图片只用于保持角色身份、外观特征和可辨识性，不要从中学习画风、色调、背景复杂度或构图。"
     )
     return prompt
 
@@ -121,6 +126,21 @@ def _style_reference_urls(image_style_version: Optional[ImageStyleVersion]) -> L
         for image in image_style_version.reference_images
         if image.url
     ]
+
+
+def _style_main_reference_url(image_style_version: Optional[ImageStyleVersion]) -> Optional[str]:
+    """返回单张风格主图：优先 is_cover，其次排序后的第一张。"""
+    if not image_style_version:
+        return None
+    images = [
+        image
+        for image in image_style_version.reference_images
+        if image.url
+    ]
+    if not images:
+        return None
+    images.sort(key=lambda image: (not image.is_cover, image.sort_order, image.id))
+    return images[0].url
 
 
 async def _async_image_generate(**kwargs) -> str:
@@ -153,11 +173,10 @@ async def _async_image_generate(**kwargs) -> str:
 
 class _StoryboardDetail(BaseModel):
     """分镜描述结构，与 Storyboard TypedDict 对齐"""
+    summary: str
     scene: str
     characters: str
     shot: str
-    color: str
-    lighting: str
 
 
 class _StoryResponse(BaseModel):
@@ -336,11 +355,10 @@ def _build_storyboard_system_prompt(
         "  {\n"
         '    "text": "该页的故事文本（从原故事中提取或精炼，保持原文情感和语调）",\n'
         '    "storyboard": {\n'
-        '      "scene": "场景环境描述，必���与原文描述的场景一致",\n'
+        '      "summary": "给图片生成使用的一句话视觉摘要",\n'
+        '      "scene": "场景环境描述，必须与原文描述的场景一致",\n'
         '      "characters": "角色动作、姿态和表情描述，必须与原文中该页的角色状态一致",\n'
-        '      "shot": "镜头类型和构图",\n'
-        '      "color": "色调和氛围，必须贴合原文的情感基调",\n'
-        '      "lighting": "光影方向和质感"\n'
+        '      "shot": "镜头类型和构图"\n'
         "    }\n"
         "  }\n"
         "]\n"
@@ -352,6 +370,7 @@ def _build_storyboard_system_prompt(
         "- 叙事弧线：分镜顺序必须体现「开端 → 发展 → 高潮 → 结局」的完整叙事弧线\n"
         "- 情感连贯：各页之间的情绪变化必须与原故事的情感走向一致\n"
         "- 分镜 JSON key 保持英文，但内容（描述文本）必须使用中文\n"
+        "- summary 字段：一句话说明当前页要画什么，只保留可视化信息（角色、动作、关键物、场景、情绪），30-60字；不写心理活动、旁白解释、抽象主题或长对话\n"
         "- 各页之间保持视觉连贯性\n"
         "- 'characters'字段：仅描述角色的动作、姿态和表情"
     )
@@ -384,17 +403,17 @@ def _build_insertion_system_prompt(count: int, template: Optional[Template] = No
         "  {\n"
         '    "text": "故事叙述文本",\n'
         '    "storyboard": {\n'
+        '      "summary": "给图片生成使用的一句话视觉摘要",\n'
         '      "scene": "场景环境描述",\n'
         '      "characters": "角色动作、姿态和表情",\n'
-        '      "shot": "镜头类型和构图",\n'
-        '      "color": "色调和氛围",\n'
-        '      "lighting": "光影方向和质感"\n'
+        '      "shot": "镜头类型和构图"\n'
         "    }\n"
         "  }\n"
         "]\n"
         "```\n\n"
         f"- 数量：恰好{count}个画面\n"
         "- 分镜 JSON key 保持英文，但内容（描述文本）必须使用中文\n"
+        "- summary 字段：一句话说明当前页要画什么，只保留可视化信息，30-60字，不写心理活动、旁白解释、抽象主题或长对话\n"
         "- 叙事流畅：新画面应自然衔接前后页面\n"
         "- 每个画面必须同时包含'text'和'storyboard'字段"
     )
@@ -604,6 +623,24 @@ class DoubaoCli(LLMClientBase):
                     page_index + 1, story_text[:50],
                     len(character_reference_images) if character_reference_images else 0,
                     bool(previous_page_image))
+        visual_summary = (storyboard.get("summary") or story_text) if storyboard else story_text
+        first_page_style_main_reference = (
+            _style_main_reference_url(image_style_version)
+            if page_index == 0
+            else None
+        )
+        logger.info(
+            "图片生成 prompt 使用上下文收敛模式 | page_index=%d summary=%s has_storyboard=%s "
+            "has_style_version=%s has_first_page_style_main_reference=%s character_reference_count=%d "
+            "has_previous_page_image=%s context_mode=current_page_only",
+            page_index,
+            visual_summary[:50],
+            bool(storyboard),
+            bool(image_style_version),
+            bool(first_page_style_main_reference),
+            len(character_reference_images) if character_reference_images else 0,
+            bool(previous_page_image),
+        )
 
         prompt = _build_image_prompt(
             story_text,
@@ -616,41 +653,38 @@ class DoubaoCli(LLMClientBase):
         if image_instruction:
             prompt += (
                 f"\n\n【用户图片调整指令】{image_instruction}\n"
-                "请在保持最终故事文本、分镜和前后页视觉连贯的前提下执行该调整。"
+                "请在保持跨页视觉连续性、锁定画风、当前页视觉摘要和分镜的前提下执行该调整。"
             )
         size = _resolve_image_size(aspect_ratio, image_size)
 
         # 收集参考图片并按顺序说明用途
         input_images: List[str] = []
         ref_desc_parts: List[str] = []
+        if first_page_style_main_reference:
+            input_images.append(first_page_style_main_reference)
+            ref_desc_parts.append(
+                "第1张图片是风格主图片，仅第一页生成时提供。请学习它的媒介质感、笔触、线条、色彩关系、背景细节密度和儿童绘本整体气质；不要复制其中的具体人物、场景、构图、文字或物体。"
+            )
+            logger.info("第 %d 页添加风格主图片 | count=1", page_index + 1)
+
         if previous_page_image:
             input_images.append(previous_page_image)
+            index = len(input_images)
             ref_desc_parts.append(
-                "第1张图片是上一页的插画，请保持角色形象、艺术风格、色调和环境的连贯性，确保前后页视觉风格一致。"
+                f"第{index}张图片是上一页插画，也是最高优先级连续性参考。请保持已建立的角色外观、服装配饰、比例气质、关键物外观、场景延续、画风、色彩体系、材质和线条一致。除非用户明确要求改变，否则不要改变已经建立的视觉身份。"
             )
-            logger.info("第 %d 页添加上一页图片作为连续性参考", page_index + 1)
+            logger.info("第 %d 页添加上一页图片作为最高优先级连续性参考", page_index + 1)
 
         if character_reference_images:
             input_images.extend(character_reference_images)
             start = len(input_images) - len(character_reference_images) + 1
             end = len(input_images)
             ref_desc_parts.append(
-                f"第{start}到第{end}张图片是角色参考照片，"
-                "请提取人物的身份特征（面部轮廓、发型、distinguishing marks），"
-                "在绘本插画的风格中还原这些角色，保持人物可辨识性。"
+                f"第{start}到第{end}张图片是角色参考图片。"
+                "角色不一定是人，也可以是动物、玩偶或拟人化物体。"
+                "它们只用于保持角色身份、外观特征、姿态特征和可辨识性；不要从角色参考图片中学习画风、色调、背景复杂度或构图。"
             )
             logger.info("第 %d 页添加用户角色参考图 | count=%d", page_index + 1, len(character_reference_images))
-
-        style_reference_images = _style_reference_urls(image_style_version)
-        if style_reference_images:
-            input_images.extend(style_reference_images)
-            start = len(input_images) - len(style_reference_images) + 1
-            end = len(input_images)
-            ref_desc_parts.append(
-                f"第{start}到第{end}张图片是锁定画风参考图，"
-                "只学习整体视觉风格、媒介质感、色彩、线条和氛围，不复制其中的人物、文字、构图、场景或具体物体。"
-            )
-            logger.info("第 %d 页添加画风参考图 | count=%d", page_index + 1, len(style_reference_images))
 
         if ref_desc_parts:
             prompt += "\n\n【参考图片说明】" + " ".join(ref_desc_parts)
@@ -877,15 +911,15 @@ class DoubaoCli(LLMClientBase):
             "返回以下 JSON 结构：\n"
             "```\n"
             "{\n"
+            '  "summary": "给图片生成使用的一句话视觉摘要",\n'
             '  "scene": "场景环境描述",\n'
             '  "characters": "角色动作、姿态和表情",\n'
-            '  "shot": "镜头类型和构图",\n'
-            '  "color": "色调和氛围",\n'
-            '  "lighting": "光影方向和质感"\n'
+            '  "shot": "镜头类型和构图"\n'
             "}\n"
             "```\n\n"
             "约束：\n"
             "- 分镜字段必须使用中文\n"
+            "- summary 字段：一句话说明当前页要画什么，只保留可视化信息（角色、动作、关键物、场景、情绪），30-60字；不写心理活动、旁白解释、抽象主题或长对话\n"
             "- 'characters'字段：仅描述角色的动作、姿态和表情\n"
             "- 与前后页保持视觉连贯性"
         )
@@ -893,6 +927,7 @@ class DoubaoCli(LLMClientBase):
         user_prompt = f"{full_context}\n\n当前页（第{page_index + 1}页）文本：{page_text}\n\n请为这一页创建视觉分镜描述。\n"
         if instruction:
             user_prompt += f"用户调整指令：{instruction}\n"
+        user_prompt += "\n返回 JSON 对象，字段只能包含 summary、scene、characters、shot。"
 
         raw_text = await _async_chat_create(
             model=settings.DOUBAO_TEXT_MODEL,

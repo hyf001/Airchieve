@@ -45,11 +45,10 @@ export interface StoryboardItem {
   text: string;
   page_type?: 'cover' | 'content';
   storyboard: {
+    summary: string;
     scene: string;
     characters: string;
     shot: string;
-    color: string;
-    lighting: string;
   };
 }
 

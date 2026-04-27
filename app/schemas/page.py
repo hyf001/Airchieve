@@ -3,7 +3,7 @@ Page & Layer Schemas
 页面与图层的 Pydantic 请求/响应模型
 """
 from datetime import datetime
-from typing import Optional, TypedDict, Union
+from typing import NotRequired, Optional, TypedDict, Union
 
 from pydantic import BaseModel, Field
 
@@ -17,11 +17,10 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 class Storyboard(TypedDict):
+    summary: NotRequired[str]  # 当前页视觉摘要，用于图片生成；旧数据可能不存在
     scene: str       # 场景环境
-    characters: str  # 人物与动作
+    characters: str  # 人物动作、姿态、表情
     shot: str        # 景别构图
-    color: str       # 色调氛围
-    lighting: str    # 光线
 
 
 class StorybookPage(BaseModel):

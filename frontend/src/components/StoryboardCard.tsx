@@ -101,6 +101,17 @@ const StoryboardCard: React.FC<StoryboardCardProps> = ({
         {isEditing ? (
           <div className="space-y-2">
             <div>
+              <label className="block text-xs text-gray-600 mb-1">视觉摘要</label>
+              <input
+                type="text"
+                value={editedStoryboard.summary || ''}
+                onChange={(e) =>
+                  setEditedStoryboard({ ...editedStoryboard, summary: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              />
+            </div>
+            <div>
               <label className="block text-xs text-gray-600 mb-1">场景</label>
               <input
                 type="text"
@@ -133,31 +144,13 @@ const StoryboardCard: React.FC<StoryboardCardProps> = ({
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
               />
             </div>
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">色调</label>
-              <input
-                type="text"
-                value={editedStoryboard.color}
-                onChange={(e) =>
-                  setEditedStoryboard({ ...editedStoryboard, color: e.target.value })
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">光线</label>
-              <input
-                type="text"
-                value={editedStoryboard.lighting}
-                onChange={(e) =>
-                  setEditedStoryboard({ ...editedStoryboard, lighting: e.target.value })
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-              />
-            </div>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="bg-purple-50 p-2 rounded col-span-2">
+              <span className="text-purple-700 font-medium">视觉摘要:</span>
+              <span className="text-gray-700 ml-1">{item.storyboard.summary}</span>
+            </div>
             <div className="bg-amber-50 p-2 rounded">
               <span className="text-amber-700 font-medium">场景:</span>
               <span className="text-gray-700 ml-1">{item.storyboard.scene}</span>
@@ -169,14 +162,6 @@ const StoryboardCard: React.FC<StoryboardCardProps> = ({
             <div className="bg-green-50 p-2 rounded">
               <span className="text-green-700 font-medium">构图:</span>
               <span className="text-gray-700 ml-1">{item.storyboard.shot}</span>
-            </div>
-            <div className="bg-yellow-50 p-2 rounded">
-              <span className="text-yellow-700 font-medium">色调:</span>
-              <span className="text-gray-700 ml-1">{item.storyboard.color}</span>
-            </div>
-            <div className="bg-pink-50 p-2 rounded col-span-2">
-              <span className="text-pink-700 font-medium">光线:</span>
-              <span className="text-gray-700 ml-1">{item.storyboard.lighting}</span>
             </div>
           </div>
         )}

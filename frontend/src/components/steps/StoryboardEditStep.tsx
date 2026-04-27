@@ -224,6 +224,12 @@ const StoryboardEditStep: React.FC<StoryboardEditStepProps> = ({
                       <p className="text-sm text-slate-700 line-clamp-4 mb-3">{item.text}</p>
                       {item.storyboard && (
                         <div className="grid grid-cols-2 gap-2 text-xs">
+                          {item.storyboard.summary && (
+                            <div className="bg-purple-50 p-2 rounded col-span-2">
+                              <span className="text-purple-700 font-medium">视觉摘要:</span>
+                              <span className="text-gray-700 ml-1">{item.storyboard.summary}</span>
+                            </div>
+                          )}
                           {item.storyboard.scene && (
                             <div className="bg-amber-50 p-2 rounded">
                               <span className="text-amber-700 font-medium">场景:</span>
@@ -240,18 +246,6 @@ const StoryboardEditStep: React.FC<StoryboardEditStepProps> = ({
                             <div className="bg-green-50 p-2 rounded">
                               <span className="text-green-700 font-medium">构图:</span>
                               <span className="text-gray-700 ml-1">{item.storyboard.shot}</span>
-                            </div>
-                          )}
-                          {item.storyboard.color && (
-                            <div className="bg-yellow-50 p-2 rounded">
-                              <span className="text-yellow-700 font-medium">色调:</span>
-                              <span className="text-gray-700 ml-1">{item.storyboard.color}</span>
-                            </div>
-                          )}
-                          {item.storyboard.lighting && (
-                            <div className="bg-pink-50 p-2 rounded col-span-2">
-                              <span className="text-pink-700 font-medium">光线:</span>
-                              <span className="text-gray-700 ml-1">{item.storyboard.lighting}</span>
                             </div>
                           )}
                         </div>

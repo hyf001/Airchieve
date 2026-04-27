@@ -44,6 +44,7 @@ def build_cover_storyboard(
     """基于正文分镜生成封面分镜占位，供用户在确认阶段编辑。"""
     first_storyboard = next((sb for sb in content_storyboards if sb), None)
     return {
+        "summary": f"《{title}》封面画面，突出主角和核心故事情境，形成清晰、有吸引力的绘本封面。",
         "scene": f"概括《{title}》核心故事的封面场景，体现整本绘本最重要的情境。{story_content[:80]}",
         "characters": (
             first_storyboard.get("characters", "")
@@ -51,16 +52,6 @@ def build_cover_storyboard(
             else "主角以温暖、清晰、有吸引力的姿态出现在画面中心"
         ),
         "shot": "封面式构图，主角突出，画面有层次，并预留书名艺术字空间",
-        "color": (
-            first_storyboard.get("color", "")
-            if first_storyboard
-            else "温暖明亮、适合儿童绘本的主色调"
-        ),
-        "lighting": (
-            first_storyboard.get("lighting", "")
-            if first_storyboard
-            else "柔和、有童话感的光线，突出封面主体"
-        ),
     }
 
 

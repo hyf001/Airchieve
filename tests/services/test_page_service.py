@@ -2,10 +2,13 @@
 page_service 的单元测试
 """
 
+from datetime import datetime
+
 import pytest
 
 from app.models.enums import PageStatus, PageType
 from app.models.page import Page
+from app.schemas.page import PageResponse
 from app.models.storybook import Storybook
 from app.services import page_service
 
@@ -110,19 +113,48 @@ class TestPromptHelpers:
     def test_build_cover_description_includes_text_and_storyboard(self):
         page = make_page(1, PageType.COVER, text="月亮船")
         page.storyboard = {
+            "summary": "孩子坐着月亮船飞过夜空",
             "scene": "夜空",
             "characters": "孩子坐在月亮船上",
             "shot": "远景",
-            "color": "蓝色",
-            "lighting": "月光",
         }
 
         result = page_service.build_cover_description("备用标题", page)
 
         assert result.startswith("月亮船")
         assert "Cover storyboard:" in result
+        assert "Summary: 孩子坐着月亮船飞过夜空" in result
         assert "Scene: 夜空" in result
         assert "Characters: 孩子坐在月亮船上" in result
+
+
+class TestStoryboardSchemaCompatibility:
+    def test_page_response_accepts_legacy_storyboard_without_summary(self):
+        result = PageResponse.model_validate({
+            "id": 1,
+            "storybook_id": 1,
+            "page_index": 0,
+            "image_url": "image.png",
+            "text": "旧页面",
+            "page_type": "content",
+            "status": "finished",
+            "error_message": None,
+            "storyboard": {
+                "scene": "森林",
+                "characters": "小熊走路",
+                "shot": "中景",
+                "color": "旧色调",
+                "lighting": "旧光线",
+            },
+            "created_at": datetime.now(),
+            "updated_at": datetime.now(),
+        })
+
+        assert result.storyboard == {
+            "scene": "森林",
+            "characters": "小熊走路",
+            "shot": "中景",
+        }
 
 
 class TestReferenceImageSelection:

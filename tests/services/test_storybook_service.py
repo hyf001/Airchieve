@@ -23,25 +23,23 @@ class FakeLLMClient:
 
 
 class TestBuildCoverStoryboard:
-    def test_reuses_first_content_storyboard_style_fields(self):
+    def test_reuses_first_content_storyboard_character_fields(self):
         result = storybook_service.build_cover_storyboard(
             title="星星灯",
             story_content="小熊在森林里找到一盏会发光的灯，并学会勇敢。",
             content_storyboards=[
                 None,
                 {
+                    "summary": "小熊抱着星星灯站在森林小路上。",
                     "scene": "森林小路",
                     "characters": "小熊抱着星星灯",
                     "shot": "中景",
-                    "color": "蓝紫色夜晚",
-                    "lighting": "星光柔和",
                 },
             ],
         )
 
+        assert result["summary"] == "《星星灯》封面画面，突出主角和核心故事情境，形成清晰、有吸引力的绘本封面。"
         assert result["characters"] == "小熊抱着星星灯"
-        assert result["color"] == "蓝紫色夜晚"
-        assert result["lighting"] == "星光柔和"
         assert "星星灯" in result["scene"]
         assert "小熊在森林里找到一盏会发光的灯" in result["scene"]
         assert "预留书名艺术字空间" in result["shot"]
@@ -54,8 +52,7 @@ class TestBuildCoverStoryboard:
         )
 
         assert result["characters"] == "主角以温暖、清晰、有吸引力的姿态出现在画面中心"
-        assert result["color"] == "温暖明亮、适合儿童绘本的主色调"
-        assert result["lighting"] == "柔和、有童话感的光线，突出封面主体"
+        assert result["summary"] == "《月亮船》封面画面，突出主角和核心故事情境，形成清晰、有吸引力的绘本封面。"
 
 
 class TestStoryGeneration:

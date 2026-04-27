@@ -4,7 +4,7 @@ Page Model
 """
 import json
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Optional, TypedDict
+from typing import TYPE_CHECKING, NotRequired, Optional, TypedDict
 
 from enum import Enum
 from pydantic import BaseModel
@@ -53,11 +53,10 @@ class JsonText(TypeDecorator):
 
 
 class Storyboard(TypedDict):
+    summary: NotRequired[str]  # 当前页视觉摘要，用于图片生成；旧数据可能不存在
     scene: str       # 场景环境
-    characters: str  # 人物与动作
+    characters: str  # 人物动作、姿态、表情
     shot: str        # 景别构图
-    color: str       # 色调氛围
-    lighting: str    # 光线
 
 
 class Page(Base):

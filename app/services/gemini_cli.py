@@ -151,6 +151,21 @@ def _style_reference_urls(image_style_version: Optional[ImageStyleVersion]) -> L
     ]
 
 
+def _style_main_reference_url(image_style_version: Optional[ImageStyleVersion]) -> Optional[str]:
+    """Return the single style anchor image: cover image first, otherwise first sorted reference."""
+    if not image_style_version:
+        return None
+    images = [
+        image
+        for image in image_style_version.reference_images
+        if image.url
+    ]
+    if not images:
+        return None
+    images.sort(key=lambda image: (not image.is_cover, image.sort_order, image.id))
+    return images[0].url
+
+
 def _inline_data_to_data_url(inline_data: types.Blob) -> str:
     """将 inline_data 转为 data URL（确保为 base64 字符串）"""
     data = inline_data.data
@@ -250,9 +265,10 @@ def _parse_story_json_response(response: types.GenerateContentResponse) -> Tuple
                     if isinstance(data, list):
                         for item in data:
                             if isinstance(item, dict):
-                                story_texts.append(item.get('text', ''))
+                                page_text = item.get('text', '')
+                                story_texts.append(page_text)
                                 sb = item.get('storyboard')
-                                story_storyboards.append(sb if isinstance(sb, dict) else None)  # type: ignore[arg-type]
+                                story_storyboards.append(_normalize_storyboard(sb, page_text))
                             else:
                                 story_texts.append(str(item))
                                 story_storyboards.append(None)
@@ -264,6 +280,19 @@ def _parse_story_json_response(response: types.GenerateContentResponse) -> Tuple
                 break
 
     return story_texts, story_storyboards
+
+
+def _normalize_storyboard(raw: object, fallback_text: str = "") -> Optional[Storyboard]:
+    """Normalize LLM storyboard output and keep old color/lighting fields out of the contract."""
+    if not isinstance(raw, dict):
+        return None
+    summary = raw.get("summary") or fallback_text
+    return {
+        "summary": str(summary or ""),
+        "scene": str(raw.get("scene") or ""),
+        "characters": str(raw.get("characters") or ""),
+        "shot": str(raw.get("shot") or ""),
+    }
 
 
 def _parse_images_response(response: types.GenerateContentResponse) -> List[str]:
@@ -517,11 +546,10 @@ class GeminiCli(LLMClientBase):
             "  {\n"
             "    \"text\": \"Story text for this page\",\n"
             "    \"storyboard\": {\n"
+            "      \"summary\": \"One-sentence visual summary for image generation\",\n"
             "      \"scene\": \"Scene environment description\",\n"
             "      \"characters\": \"Character actions, posture and expressions — describe what they are DOING and FEELING\",\n"
-            "      \"shot\": \"Shot type and composition (e.g. medium shot, close-up, wide shot)\",\n"
-            "      \"color\": \"Color tone and mood\",\n"
-            "      \"lighting\": \"Lighting direction and quality\"\n"
+            "      \"shot\": \"Shot type and composition (e.g. medium shot, close-up, wide shot)\"\n"
             "    }\n"
             "  }\n"
             "]\n"
@@ -530,6 +558,7 @@ class GeminiCli(LLMClientBase):
             "- Page count: Exactly {page_count} pages\n"
             "- Text per page: Use appropriate text from the original story\n"
             "- Storyboard fields: Must be in English\n"
+            "- 'summary' field: One sentence, visual-only, 20-40 words; include only visible characters, action, key objects, setting, and mood\n"
             "- Story flow: Each page should naturally lead to the next\n"
             "- Visual consistency: Maintain character and style consistency across pages\n"
             "- 'characters' field: Describe actions, posture, and expressions ONLY — do not describe physical appearance"
@@ -552,7 +581,7 @@ class GeminiCli(LLMClientBase):
             f"TASK: Break this story into {page_count} pages and create a visual storyboard for each page.\n\n"
             f"Return a JSON array with {page_count} objects, each containing:\n"
             f"- 'text': The story text for this page\n"
-            f"- 'storyboard': Visual description with fields: scene, characters, shot, color, lighting\n\n"
+            f"- 'storyboard': Visual description with fields: summary, scene, characters, shot\n\n"
             f"Ensure smooth narrative flow across all pages."
         )
 
@@ -582,9 +611,10 @@ class GeminiCli(LLMClientBase):
                         if isinstance(data, list):
                             for item in data:
                                 if isinstance(item, dict):
-                                    story_texts.append(item.get("text", ""))
+                                    page_text = item.get("text", "")
+                                    story_texts.append(page_text)
                                     sb = item.get("storyboard")
-                                    storyboards.append(sb if isinstance(sb, dict) else None)  # type: ignore[arg-type]
+                                    storyboards.append(_normalize_storyboard(sb, page_text))
                         logger.info("分镜解析完成 | pages=%d", len(storyboards))
                     except (json.JSONDecodeError, KeyError) as e:
                         logger.warning("JSON 解析失败: %s", e)
@@ -684,11 +714,10 @@ class GeminiCli(LLMClientBase):
                 "  {\n"
                 "    \"text\": \"Story narrative text\",\n"
                 "    \"storyboard\": {\n"
+                "      \"summary\": \"One-sentence visual summary for image generation\",\n"
                 "      \"scene\": \"Scene environment, e.g. sunlit forest clearing with tall oak trees\",\n"
                 "      \"characters\": \"Character actions, posture and expression for this panel, e.g. kneeling down with arms outstretched, mouth open in surprise — describe what they are DOING and FEELING, not what they look like\",\n"
-                "      \"shot\": \"Shot type and composition, e.g. medium shot, subject centered\",\n"
-                "      \"color\": \"Color tone and mood, e.g. warm golden tones, soft afternoon light\",\n"
-                "      \"lighting\": \"Lighting direction and quality, e.g. dappled sunlight from upper left\"\n"
+                "      \"shot\": \"Shot type and composition, e.g. medium shot, subject centered\"\n"
                 "    }\n"
                 "  }\n"
                 "]\n"
@@ -698,6 +727,7 @@ class GeminiCli(LLMClientBase):
                 "- Length: Exactly {count} panel(s)\n"
                 "- Each text: Simple and engaging\n"
                 "- Story flow: The new panels should naturally connect the before and after pages\n"
+                "- 'summary' field: One sentence, visual-only, 20-40 words; do not include thoughts, narration, abstract themes, or long dialogue\n"
                 "- Storyboard: Be specific and visual, avoid abstract descriptions\n"
                 "- 'characters' field: describe actions, posture, and expressions ONLY — do not describe physical appearance or clothing\n"
                 "- IMPORTANT: Every panel MUST include both 'text' and 'storyboard' fields; omitting storyboard is not allowed"
@@ -712,7 +742,7 @@ class GeminiCli(LLMClientBase):
             f"INSERTION INSTRUCTION: {insert_instruction}\n\n"
             f"TASK: Generate exactly {count} new panel(s) to insert at position {insert_position}. "
             f"Return a JSON array with {count} objects, each containing a 'text' field (story narrative) "
-            f"and a 'storyboard' object with fields: scene, characters, shot, color, lighting. "
+            f"and a 'storyboard' object with fields: summary, scene, characters, shot. "
             f"The new panels should naturally bridge the narrative flow at the insertion point, "
             f"considering the complete story context above."
         )
@@ -791,108 +821,130 @@ class GeminiCli(LLMClientBase):
             str: 生成的图片URL（base64 data URL）
         """
         client = _get_client()
-        logger.info("生成第 %d 页图片 | text=%s", page_index + 1, story_text[:50])
-
-        # 图片生成的系统指令（专注于视觉风格）
-        image_system_instruction = (
-            "You are a professional children's book illustrator. "
-            "Your task is to create a single illustration based on the provided storyboard and story context. "
-            "Create a full-bleed cinematic scene with clean backgrounds. "
-            "If a CHARACTER REFERENCE PHOTO is provided, extract the character's identity features "
-            "(facial structure, hair color and style, distinguishing marks) and render them in the story's illustration art style — "
-            "preserve the person's recognizability, but do not replicate the photographic style. "
-            "If a PREVIOUS PAGE illustration is provided, treat it as the established rendering of the character in this story's art style. "
-            "Maintain full consistency with it: same character rendering, art style, color palette, and environment progression."
+        visual_summary = story_text
+        if storyboard and storyboard.get("summary"):
+            visual_summary = storyboard.get("summary") or story_text
+        total_pages = len(story_context)
+        has_previous_page_image = bool(previous_page_image)
+        character_reference_count = len(character_reference_images) if character_reference_images else 0
+        first_page_style_main_reference = (
+            _style_main_reference_url(image_style_version)
+            if page_index == 0
+            else None
+        )
+        logger.info(
+            "图片生成 prompt 使用上下文收敛模式 | page_index=%d summary=%s has_storyboard=%s "
+            "has_style_version=%s has_first_page_style_main_reference=%s character_reference_count=%d "
+            "has_previous_page_image=%s context_mode=current_page_only",
+            page_index,
+            visual_summary[:50],
+            bool(storyboard),
+            bool(image_style_version),
+            bool(first_page_style_main_reference),
+            character_reference_count,
+            has_previous_page_image,
         )
 
-        # 添加模板风格到系统指令
-        if template and template.name:
-            image_system_instruction += f"\n\nART STYLE: {template.name}"
-            if template.description:
-                image_system_instruction += f"\n{template.description}"
-        if image_style_version:
-            if image_style_version.style_description:
-                image_system_instruction += f"\n\nLOCKED STYLE DESCRIPTION:\n{image_style_version.style_description}"
-            if image_style_version.negative_prompt:
-                image_system_instruction += f"\n\nNEGATIVE PROMPT:\n{image_style_version.negative_prompt}"
+        image_system_instruction = (
+            "You are a professional children's picture book illustrator.\n\n"
+            "Priority order:\n"
+            "1. Preserve cross-page visual continuity.\n"
+            "2. Follow the LOCKED ART STYLE.\n"
+            "3. Follow the CURRENT PAGE visual summary and storyboard.\n"
+            "4. Apply explicit user image adjustment instructions.\n\n"
+            "If a previous page image is provided, treat it as the strongest continuity reference for established "
+            "character appearance, object appearance, art style, palette, and scene continuity. "
+            "Do not change established visual identity unless the user explicitly asks for a change.\n\n"
+            "Create one full-bleed children's book illustration. "
+            "No text, letters, captions, labels, borders, or frames."
+        )
 
-        # 构建完整故事上下文
-        full_story_context = "Complete Story Context:\n"
-        for idx, text in enumerate(story_context, 1):
-            full_story_context += f"Page {idx}: {text}\n"
-
-        # 用分镜描述驱动图像生成，文本作为叙事语义补充
         if storyboard:
             storyboard_desc = (
-                f"Story text: {story_text}\n\n"
-                f"Storyboard for this page:\n"
+                f"CURRENT PAGE STORYBOARD:\n"
                 f"- Scene: {storyboard.get('scene', '')}\n"
                 f"- Characters: {storyboard.get('characters', '')}\n"
-                f"- Shot: {storyboard.get('shot', '')}\n"
-                f"- Color: {storyboard.get('color', '')}\n"
-                f"- Lighting: {storyboard.get('lighting', '')}"
+                f"- Shot: {storyboard.get('shot', '')}"
             )
         else:
-            storyboard_desc = f"Story text: {story_text}"
+            storyboard_desc = "CURRENT PAGE STORYBOARD:\n- Scene: \n- Characters: \n- Shot: "
+
+        locked_style_parts = []
+        if template and template.name:
+            locked_style_parts.append(f"Template style: {template.name}")
+            if template.description:
+                locked_style_parts.append(f"Template description: {template.description}")
+        if image_style_version:
+            if image_style_version.style_description:
+                locked_style_parts.append(f"Locked style description: {image_style_version.style_description}")
+            if image_style_version.generation_prompt:
+                locked_style_parts.append(f"Locked style generation prompt: {image_style_version.generation_prompt}")
+            if image_style_version.negative_prompt:
+                locked_style_parts.append(f"Negative prompt: {image_style_version.negative_prompt}")
+        locked_style = "\n".join(locked_style_parts) if locked_style_parts else "Use the selected children's book style."
 
         single_image_prompt = (
-            f"{full_story_context}\n\n"
-            f"CURRENT TASK: Generate illustration for PAGE {page_index + 1} ONLY\n\n"
+            f"CURRENT TASK:\n"
+            f"Generate illustration for Page {page_index + 1} of {total_pages}.\n\n"
+            f"CURRENT PAGE VISUAL SUMMARY:\n"
+            f"{visual_summary}\n\n"
             f"{storyboard_desc}\n\n"
-            f"Requirements:\n"
-            f"- Create a single full-bleed cinematic illustration for PAGE {page_index + 1}\n"
-            f"- Follow the storyboard specifications above precisely\n"
-            f"- Consider the complete story context above to understand the narrative flow\n"
-            f"- No text, letters, or words in the image\n"
-            f"- Clean background, no borders or frames\n"
-            f"- This is page {page_index + 1} of {len(story_context)} total pages"
+            f"LOCKED ART STYLE:\n"
+            f"{locked_style}\n\n"
+            f"RULES:\n"
+            f"- Draw only the current page.\n"
+            f"- Do not add text, letters, captions, labels, borders, or frames.\n"
+            f"- If a previous page image is provided, preserve established visual continuity from it.\n"
+            f"- Character reference images are only for maintaining character identity and recognizability; "
+            f"do not learn art style, palette, background complexity, or composition from them."
         )
-        if image_style_version and image_style_version.generation_prompt:
+        if first_page_style_main_reference:
             single_image_prompt += (
-                "\n\nLocked style generation prompt:\n"
-                f"{image_style_version.generation_prompt}"
+                "\n\nSTYLE MAIN REFERENCE IMAGE:\n"
+                "Only when generating page 1, use the provided style main image as the primary locked art style reference. "
+                "Learn its medium, brushwork, line quality, palette, texture, background detail level, and overall children's book feeling. "
+                "Do not copy its specific subject, character, scene, text, or composition."
             )
         if image_instruction:
             single_image_prompt += (
                 f"\n\nUser image adjustment instruction:\n{image_instruction}\n"
-                "Apply this instruction while preserving narrative continuity and the final story text/storyboard."
+                "Apply this instruction while preserving cross-page visual continuity, locked art style, and the current page summary/storyboard."
             )
 
         # 调用 Gemini API 生成单张图片
         parts = [types.Part(text=single_image_prompt)]
 
-        # 用户提供的参考图片（风格/角色指引）
+        if first_page_style_main_reference:
+            parts.append(types.Part(
+                text=(
+                    "The following image is the STYLE MAIN REFERENCE IMAGE for page 1. "
+                    "Use it only to establish the locked art style: medium, brushwork, line quality, palette, texture, "
+                    "background detail level, and children's book feeling. Do not copy its subject, characters, scene, text, or composition."
+                )
+            ))
+            parts.extend(_build_image_parts([first_page_style_main_reference]))
+            logger.info("第 %d 页添加风格主图片 | count=1", page_index + 1)
+
+        if previous_page_image:
+            parts.append(types.Part(
+                text=(
+                    "The following image is the PREVIOUS PAGE illustration and the HIGHEST-PRIORITY CONTINUITY REFERENCE. "
+                    "Preserve established character appearance, clothing, accessories, proportions, object details, scene continuity, "
+                    "art style, palette, texture, and line quality. Do not change established visual identity unless explicitly requested."
+                )
+            ))
+            parts.extend(_build_image_parts([previous_page_image]))
+            logger.info("第 %d 页添加上一页图片作为最高优先级连续性参考 | previous_page=%d", page_index + 1, page_index)
+
         if character_reference_images:
             parts.append(types.Part(
-                text=f"The following {len(character_reference_images)} image(s) are CHARACTER REFERENCE PHOTOS. "
-                f"Extract this person's identity features (facial structure, hair, distinguishing marks) "
-                f"and render them in the story's illustration art style. "
-                f"Preserve their recognizability — do not replicate the photographic style or color grading."
+                text=f"The following {len(character_reference_images)} image(s) are CHARACTER REFERENCE IMAGES. "
+                f"The character may be a person, animal, toy, or anthropomorphic object. "
+                f"Use them only to preserve character identity, appearance cues, posture features, and recognizability. "
+                f"Do not learn art style, color grading, background detail level, or composition from these images."
             ))
             parts.extend(_build_image_parts(character_reference_images))
             logger.info("第 %d 页添加用户角色参考图 | count=%d", page_index + 1, len(character_reference_images))
-
-        # 上一页生成的图片（叙事连续性）
-        if previous_page_image:
-            parts.append(types.Part(
-                text="The following image is the PREVIOUS PAGE illustration from this story. "
-                "This is how the character has been rendered in this story's art style. "
-                "Maintain full consistency with it: same character appearance, art style, color palette, and environment progression."
-            ))
-            parts.extend(_build_image_parts([previous_page_image]))
-            logger.info("第 %d 页添加上一页图片作为连续性参考 | previous_page=%d", page_index + 1, page_index)
-
-        style_reference_images = _style_reference_urls(image_style_version)
-        if style_reference_images:
-            parts.append(types.Part(
-                text=(
-                    f"The following {len(style_reference_images)} image(s) are LOCKED ART STYLE REFERENCES. "
-                    "Learn only the overall visual style, medium, palette, texture, line quality, and mood. "
-                    "Do not copy specific characters, text, composition, scene, or objects from these images."
-                )
-            ))
-            parts.extend(_build_image_parts(style_reference_images))
-            logger.info("第 %d 页添加画风参考图 | count=%d", page_index + 1, len(style_reference_images))
 
         image_response = await client.aio.models.generate_content(
             model=settings.GEMINI_MODEL,
@@ -1218,15 +1270,15 @@ class GeminiCli(LLMClientBase):
             "Return a JSON object with the following structure:\n"
             "```\n"
             "{\n"
+            '  "summary": "One-sentence visual summary for image generation",\n'
             '  "scene": "Scene environment description",\n'
             '  "characters": "Character actions, posture and expressions",\n'
-            '  "shot": "Shot type and composition",\n'
-            '  "color": "Color tone and mood",\n'
-            '  "lighting": "Lighting direction and quality"\n'
+            '  "shot": "Shot type and composition"\n'
             "}\n"
             "```\n\n"
             "Constraints:\n"
             "- All storyboard fields must be in English\n"
+            "- 'summary' field: One sentence, visual-only, 20-40 words; include only visible characters, action, key objects, setting, and mood\n"
             "- 'characters' field: describe actions, posture, and expressions ONLY\n"
             "- Maintain visual consistency with surrounding pages"
         )
@@ -1238,7 +1290,7 @@ class GeminiCli(LLMClientBase):
         )
         if instruction:
             user_prompt += f"User adjustment instruction: {instruction}\n"
-        user_prompt += "\nReturn a JSON object with scene, characters, shot, color, lighting."
+        user_prompt += "\nReturn a JSON object with summary, scene, characters, shot."
 
         parts = [types.Part(text=user_prompt)]
         response = await client.aio.models.generate_content(
@@ -1256,9 +1308,10 @@ class GeminiCli(LLMClientBase):
                 if part.text:
                     try:
                         data = json.loads(part.text)
-                        if isinstance(data, dict) and "scene" in data:
+                        normalized = _normalize_storyboard(data, page_text)
+                        if normalized and normalized.get("scene"):
                             logger.info("Page %d storyboard regenerated", page_index + 1)
-                            return data  # type: ignore[return-value]
+                            return normalized
                     except (json.JSONDecodeError, KeyError) as e:
                         logger.warning("Storyboard JSON parse failed: %s", e)
 

@@ -26,18 +26,21 @@ vi.mock('@/services/exportService', async (importOriginal) => {
 const pages: StorybookPage[] = [
   {
     id: 1,
+    page_index: 0,
     text: 'Cover page',
     image_url: '/images/cover.png',
     page_type: 'cover',
   },
   {
     id: 2,
+    page_index: 1,
     text: 'First content page',
     image_url: '/images/page-1.png',
     page_type: 'content',
   },
   {
     id: 3,
+    page_index: 2,
     text: 'Back cover',
     image_url: '/images/back-cover.png',
     page_type: 'back_cover',

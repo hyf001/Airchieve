@@ -35,6 +35,15 @@ export const TOOL_REGISTRY: Record<ToolId, ToolConfig> = {
     description: '输入指令描述你想要的修改',
   },
 
+  'regenerate': {
+    id: 'regenerate',
+    label: 'AI调整页面',
+    icon: '🔄',
+    category: 'basic',
+    component: PlaceholderTool,
+    description: '重新生成当前页面的文本、分镜或图片',
+  },
+
   'text': {
     id: 'text',
     label: '文字',

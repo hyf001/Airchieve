@@ -37,11 +37,10 @@ export interface StorybookPage {
   text: string;
   image_url: string;
   storyboard?: {
+    summary: string;
     scene: string;
     characters: string;
     shot: string;
-    color: string;
-    lighting: string;
   } | null;
   page_type?: PageType;
   status?: PageStatus;

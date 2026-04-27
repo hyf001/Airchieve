@@ -105,11 +105,10 @@ def format_storyboard_for_prompt(storyboard: Optional[Storyboard]) -> str:
     if not storyboard:
         return ""
     return (
+        f"Summary: {storyboard.get('summary', '')}\n"
         f"Scene: {storyboard.get('scene', '')}\n"
         f"Characters: {storyboard.get('characters', '')}\n"
-        f"Shot: {storyboard.get('shot', '')}\n"
-        f"Color: {storyboard.get('color', '')}\n"
-        f"Lighting: {storyboard.get('lighting', '')}"
+        f"Shot: {storyboard.get('shot', '')}"
     )
 
 

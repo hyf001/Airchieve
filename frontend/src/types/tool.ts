@@ -19,6 +19,7 @@ export type ToolId =
   | 'background'    // 背景工具
   | 'effect'        // 特效
   | 'creative'      // 创意玩法
+  | 'regenerate'    // AI调整页面
   | 'repair';       // 画质修复
 
 /**
