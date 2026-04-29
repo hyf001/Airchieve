@@ -19,6 +19,7 @@ from app.models.payment import (
 )
 # 业务域
 from app.models.storybook import Storybook, StorybookStatus
+from app.models.generation_debug import GenerationDebugRun, StorybookReferenceImage
 from app.models.template import Template
 from app.models.image_style import (
     ImageStyle,
@@ -43,7 +44,7 @@ __all__ = [
     # payment
     "RechargeOrder", "SubscriptionOrder", "OrderStatus", "SubscriptionStatus",
     # storybook
-    "Storybook", "StorybookStatus",
+    "Storybook", "StorybookStatus", "GenerationDebugRun", "StorybookReferenceImage",
     # template
     "Template",
     # image style

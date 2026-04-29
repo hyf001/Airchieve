@@ -10,6 +10,10 @@ from app.models.template import Template
 from app.models.image_style import ImageStyleVersion
 from app.models.enums import CliType, StoryType, Language, AgeGroup
 from app.schemas.visual_anchor import VisualAnchor
+from app.schemas.page_generation import (
+    PageGenerationContext,
+    PageGenerationInputResource,
+)
 
 
 # ============ 通用 LLM 异常基类 ============
@@ -57,37 +61,28 @@ class LLMClientBase(ABC):
 
 
     @abstractmethod
+    def build_page_prompt(self, context: PageGenerationContext) -> str:
+        """构建正文页图片生成 prompt。"""
+        pass
+
+    @abstractmethod
+    def build_page_input_resources(
+        self,
+        context: PageGenerationContext,
+    ) -> list[PageGenerationInputResource]:
+        """构建正文页图片生成输入资源列表。"""
+        pass
+
+    @abstractmethod
     async def generate_page(
         self,
-        story_text: str,
-        storyboard: Optional[Storyboard],
-        story_context: List[str],
-        page_index: int,
-        character_reference_images: Optional[List[str]] = None,
-        previous_page_image: Optional[str] = None,
-        template: Optional[Template] = None,
-        image_style_version: Optional[ImageStyleVersion] = None,
-        aspect_ratio: str = "16:9",
-        image_size: str = "1k",
-        image_instruction: str = "",
-        visual_anchors: Optional[List[VisualAnchor]] = None,
+        context: PageGenerationContext,
     ) -> str:
         """
         生成单页图片
 
         Args:
-            story_text: 当前页的故事文本
-            storyboard: 当前页的分镜描述
-            story_context: 完整故事的所有文本
-            page_index: 当前页索引
-            character_reference_images: 用户提供的角色参考图片
-            previous_page_image: 上一页生成的图片URL
-            template: 风格模板
-            image_style_version: 绘本锁定的画风版本
-            aspect_ratio: 图片比例
-            image_size: 图片尺寸
-            image_instruction: 用户图片调整指令
-            visual_anchors: 当前页引用的轻量视觉锚点
+            context: 页面生成上下文
 
         Returns:
             str: 生成的图片URL（base64 data URL）

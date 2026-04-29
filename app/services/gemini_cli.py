@@ -5,6 +5,7 @@ Gemini 大模型客户端实现（原子化接口版本）
 import re
 import base64
 import json
+from dataclasses import asdict
 from typing import List, Optional, Tuple
 
 from google import genai
@@ -18,6 +19,10 @@ from app.models.template import Template
 from app.models.image_style import ImageStyleVersion
 from app.models.enums import PageType, StoryType, Language, AgeGroup
 from app.schemas.visual_anchor import VisualAnchor
+from app.schemas.page_generation import (
+    PageGenerationContext,
+    PageGenerationInputResource,
+)
 from app.services.visual_anchor_service import (
     clean_storyboards_anchor_refs,
     format_anchors_for_prompt,
@@ -200,6 +205,26 @@ def _format_style_prompt(
     )
     if image_style_version and image_style_version.negative_prompt:
         prompt += f"\nAvoid visual traits such as: {image_style_version.negative_prompt}"
+    return prompt
+
+
+def _format_generation_style_prompt(context: PageGenerationContext) -> str:
+    cues = []
+    if context.style.name:
+        cues.append(context.style.name)
+    if context.style.generation_prompt:
+        cues.append(context.style.generation_prompt)
+    style_text = "; ".join(cue.strip() for cue in cues if cue and cue.strip())
+    if not style_text:
+        style_text = "Use a warm, playful illustration style suitable for a children's picture book."
+    prompt = (
+        f"{style_text}\n"
+        "Treat this as guidance for the overall mood, medium, brushwork, line quality, palette, texture, "
+        "and level of detail. Let the style support the current scene naturally; do not copy specific "
+        "characters, composition, text, or objects from any reference image."
+    )
+    if context.style.negative_prompt:
+        prompt += f"\nAvoid visual traits such as: {context.style.negative_prompt}"
     return prompt
 
 
@@ -872,60 +897,124 @@ class GeminiCli(LLMClientBase):
         logger.info("插入页面文本生成完成 | count=%d", len(story_texts))
         return story_texts, story_storyboards
 
+    def build_page_prompt(self, context: PageGenerationContext) -> str:
+        visual_summary = context.story_text
+        if context.storyboard and context.storyboard.summary:
+            visual_summary = context.storyboard.summary or context.story_text
+        total_pages = len(context.story_context)
+        storyboard = context.storyboard
+
+        if storyboard:
+            must_include = ", ".join(storyboard.must_include or [])
+            avoid = ", ".join(storyboard.avoid or [])
+            storyboard_desc = (
+                f"CURRENT PAGE STORYBOARD:\n"
+                f"- Visual brief: {storyboard.visual_brief}\n"
+                f"- Must include: {must_include}\n"
+                f"- Composition: {storyboard.composition}\n"
+                f"- Avoid: {avoid}"
+            )
+        else:
+            storyboard_desc = "CURRENT PAGE STORYBOARD:\n- Visual brief: \n- Must include: \n- Composition: \n- Avoid: "
+
+        anchor_prompt = format_anchors_for_prompt(
+            [asdict(anchor) for anchor in context.visual_anchors],
+            language="en",
+        )
+
+        single_image_prompt = (
+            f"CURRENT TASK:\n"
+            f"Generate illustration for Page {context.page_index + 1} of {total_pages}.\n\n"
+            f"CURRENT PAGE VISUAL SUMMARY:\n"
+            f"{visual_summary}\n\n"
+            f"{storyboard_desc}\n\n"
+            f"CURRENT PAGE VISUAL ANCHORS:\n"
+            f"{anchor_prompt}\n\n"
+            f"VISUAL ANCHOR BOUNDARIES:\n"
+            f"- Anchors are lightweight hints for a few recurring story-critical attributes only.\n"
+            f"- If anchors conflict with the previous page image, follow the previous page image.\n"
+            f"- If anchors conflict with character reference images, follow the character reference images.\n"
+            f"- Use color words in anchors only as coarse guidance; established image continuity decides final color.\n"
+            f"- Do not invent constraints from anchors beyond what is listed for this page.\n\n"
+            f"STYLE GUIDANCE:\n"
+            f"{_format_generation_style_prompt(context)}\n\n"
+            f"RULES:\n"
+            f"- Draw only the current page.\n"
+            f"- Do not add text, letters, captions, labels, borders, or frames.\n"
+            f"- If a previous page image is provided, preserve established visual continuity from it.\n"
+            f"- Character reference images are only for maintaining character identity and recognizability; "
+            f"do not learn art style, palette, background complexity, or composition from them."
+        )
+        if context.page_index == 0 and context.style.reference_images:
+            single_image_prompt += (
+                "\n\nSTYLE MAIN REFERENCE IMAGE:\n"
+                "For page 1, use the provided style main image as a strong style reference. "
+                "Notice its medium, brushwork, line quality, palette, texture, background detail level, and overall children's book feeling. "
+                "Do not copy its specific subject, character, scene, text, or composition."
+            )
+        if context.image_instruction:
+            single_image_prompt += (
+                f"\n\nUser image adjustment instruction:\n{context.image_instruction}\n"
+                "Apply this instruction while preserving cross-page visual continuity, style guidance, and the current page summary/storyboard."
+            )
+        return single_image_prompt
+
+    def build_page_input_resources(
+        self,
+        context: PageGenerationContext,
+    ) -> list[PageGenerationInputResource]:
+        resources: list[PageGenerationInputResource] = []
+        if context.page_index == 0 and context.style.reference_images:
+            resources.append(PageGenerationInputResource(
+                role="style_reference",
+                url=context.style.reference_images[0],
+                source="image_style",
+                sort_order=len(resources),
+                note="Style main reference for the first content page.",
+            ))
+        if context.previous_page_image:
+            resources.append(PageGenerationInputResource(
+                role="previous_page",
+                url=context.previous_page_image,
+                source="page",
+                sort_order=len(resources),
+            ))
+        for url in context.character_reference_images:
+            resources.append(PageGenerationInputResource(
+                role="character_reference",
+                url=url,
+                source="storybook_reference_images",
+                sort_order=len(resources),
+            ))
+        for url in context.selected_reference_page_images:
+            resources.append(PageGenerationInputResource(
+                role="selected_page_reference",
+                url=url,
+                source="page",
+                sort_order=len(resources),
+            ))
+        return resources
+
     async def generate_page(
         self,
-        story_text: str,
-        storyboard: Optional[Storyboard],
-        story_context: List[str],
-        page_index: int,
-        character_reference_images: Optional[List[str]] = None,
-        previous_page_image: Optional[str] = None,
-        template: Optional[Template] = None,
-        image_style_version: Optional[ImageStyleVersion] = None,
-        aspect_ratio: str = "16:9",
-        image_size: str = "1k",
-        image_instruction: str = "",
-        visual_anchors: Optional[List[VisualAnchor]] = None,
+        context: PageGenerationContext,
     ) -> str:
-        """
-        生成单页图片，返回图片URL
-
-        Args:
-            story_text: 当前页的故事文本
-            storyboard: 当前页的分镜描述
-            story_context: 完整故事的所有文本（用于上下文理解）
-            page_index: 当前页索引（从0开始）
-            character_reference_images: 用户提供的角色参考图片
-            previous_page_image: 上一页生成的图片URL
-            template: 风格模板
-            image_style_version: 绘本锁定的画风版本
-            aspect_ratio: 图片比例
-            image_size: 图片尺寸
-            image_instruction: 用户图片调整指令
-
-        Returns:
-            str: 生成的图片URL（base64 data URL）
-        """
+        """生成单页图片，返回图片URL"""
         client = _get_client()
-        visual_summary = story_text
-        if storyboard and storyboard.get("summary"):
-            visual_summary = storyboard.get("summary") or story_text
-        total_pages = len(story_context)
-        has_previous_page_image = bool(previous_page_image)
-        character_reference_count = len(character_reference_images) if character_reference_images else 0
-        first_page_style_main_reference = (
-            _style_main_reference_url(image_style_version)
-            if page_index == 0
-            else None
-        )
+        visual_summary = context.story_text
+        if context.storyboard and context.storyboard.summary:
+            visual_summary = context.storyboard.summary or context.story_text
+        has_previous_page_image = bool(context.previous_page_image)
+        character_reference_count = len(context.character_reference_images)
+        first_page_style_main_reference = context.style.reference_images[0] if context.page_index == 0 and context.style.reference_images else None
         logger.info(
             "图片生成 prompt 使用上下文收敛模式 | page_index=%d summary=%s has_storyboard=%s "
             "has_style_version=%s has_first_page_style_main_reference=%s character_reference_count=%d "
             "has_previous_page_image=%s context_mode=current_page_only",
-            page_index,
+            context.page_index,
             visual_summary[:50],
-            bool(storyboard),
-            bool(image_style_version),
+            bool(context.storyboard),
+            bool(context.style.generation_prompt or context.style.reference_images),
             bool(first_page_style_main_reference),
             character_reference_count,
             has_previous_page_image,
@@ -941,57 +1030,7 @@ class GeminiCli(LLMClientBase):
             "No text, letters, captions, labels, borders, or frames."
         )
 
-        if storyboard:
-            must_include = ", ".join(storyboard.get("must_include") or [])
-            avoid = ", ".join(storyboard.get("avoid") or [])
-            storyboard_desc = (
-                f"CURRENT PAGE STORYBOARD:\n"
-                f"- Visual brief: {storyboard.get('visual_brief', '')}\n"
-                f"- Must include: {must_include}\n"
-                f"- Composition: {storyboard.get('composition', '')}\n"
-                f"- Avoid: {avoid}"
-            )
-        else:
-            storyboard_desc = "CURRENT PAGE STORYBOARD:\n- Visual brief: \n- Must include: \n- Composition: \n- Avoid: "
-
-        style_prompt = _format_style_prompt(template, image_style_version)
-        anchor_prompt = format_anchors_for_prompt(visual_anchors or [], language="en")
-
-        single_image_prompt = (
-            f"CURRENT TASK:\n"
-            f"Generate illustration for Page {page_index + 1} of {total_pages}.\n\n"
-            f"CURRENT PAGE VISUAL SUMMARY:\n"
-            f"{visual_summary}\n\n"
-            f"{storyboard_desc}\n\n"
-            f"CURRENT PAGE VISUAL ANCHORS:\n"
-            f"{anchor_prompt}\n\n"
-            f"VISUAL ANCHOR BOUNDARIES:\n"
-            f"- Anchors are lightweight hints for a few recurring story-critical attributes only.\n"
-            f"- If anchors conflict with the previous page image, follow the previous page image.\n"
-            f"- If anchors conflict with character reference images, follow the character reference images.\n"
-            f"- Use color words in anchors only as coarse guidance; established image continuity decides final color.\n"
-            f"- Do not invent constraints from anchors beyond what is listed for this page.\n\n"
-            f"STYLE GUIDANCE:\n"
-            f"{style_prompt}\n\n"
-            f"RULES:\n"
-            f"- Draw only the current page.\n"
-            f"- Do not add text, letters, captions, labels, borders, or frames.\n"
-            f"- If a previous page image is provided, preserve established visual continuity from it.\n"
-            f"- Character reference images are only for maintaining character identity and recognizability; "
-            f"do not learn art style, palette, background complexity, or composition from them."
-        )
-        if first_page_style_main_reference:
-            single_image_prompt += (
-                "\n\nSTYLE MAIN REFERENCE IMAGE:\n"
-                "For page 1, use the provided style main image as a strong style reference. "
-                "Notice its medium, brushwork, line quality, palette, texture, background detail level, and overall children's book feeling. "
-                "Do not copy its specific subject, character, scene, text, or composition."
-            )
-        if image_instruction:
-            single_image_prompt += (
-                f"\n\nUser image adjustment instruction:\n{image_instruction}\n"
-                "Apply this instruction while preserving cross-page visual continuity, style guidance, and the current page summary/storyboard."
-            )
+        single_image_prompt = self.build_page_prompt(context)
 
         # 调用 Gemini API 生成单张图片
         parts = [types.Part(text=single_image_prompt)]
@@ -1005,9 +1044,9 @@ class GeminiCli(LLMClientBase):
                 )
             ))
             parts.extend(_build_image_parts([first_page_style_main_reference]))
-            logger.info("第 %d 页添加风格主图片 | count=1", page_index + 1)
+            logger.info("第 %d 页添加风格主图片 | count=1", context.page_index + 1)
 
-        if previous_page_image:
+        if context.previous_page_image:
             parts.append(types.Part(
                 text=(
                     "The following image is the PREVIOUS PAGE illustration and the HIGHEST-PRIORITY CONTINUITY REFERENCE. "
@@ -1015,18 +1054,25 @@ class GeminiCli(LLMClientBase):
                     "art style, palette, texture, and line quality. Do not change established visual identity unless explicitly requested."
                 )
             ))
-            parts.extend(_build_image_parts([previous_page_image]))
-            logger.info("第 %d 页添加上一页图片作为最高优先级连续性参考 | previous_page=%d", page_index + 1, page_index)
+            parts.extend(_build_image_parts([context.previous_page_image]))
+            logger.info("第 %d 页添加上一页图片作为最高优先级连续性参考 | previous_page=%d", context.page_index + 1, context.page_index)
 
-        if character_reference_images:
+        if context.character_reference_images:
             parts.append(types.Part(
-                text=f"The following {len(character_reference_images)} image(s) are CHARACTER REFERENCE IMAGES. "
+                text=f"The following {len(context.character_reference_images)} image(s) are CHARACTER REFERENCE IMAGES. "
                 f"The character may be a person, animal, toy, or anthropomorphic object. "
                 f"Use them only to preserve character identity, appearance cues, posture features, and recognizability. "
                 f"Do not learn art style, color grading, background detail level, or composition from these images."
             ))
-            parts.extend(_build_image_parts(character_reference_images))
-            logger.info("第 %d 页添加用户角色参考图 | count=%d", page_index + 1, len(character_reference_images))
+            parts.extend(_build_image_parts(context.character_reference_images))
+            logger.info("第 %d 页添加用户角色参考图 | count=%d", context.page_index + 1, len(context.character_reference_images))
+
+        if context.selected_reference_page_images:
+            parts.append(types.Part(
+                text=f"The following {len(context.selected_reference_page_images)} image(s) are SELECTED PAGE REFERENCE IMAGES. "
+                "Use them as extra continuity references requested for this generation, while following the current page prompt."
+            ))
+            parts.extend(_build_image_parts(context.selected_reference_page_images))
 
         image_response = await client.aio.models.generate_content(
             model=settings.GEMINI_MODEL,
@@ -1034,7 +1080,7 @@ class GeminiCli(LLMClientBase):
             config=types.GenerateContentConfig(
                 system_instruction=image_system_instruction,
                 response_modalities=["IMAGE"],
-                image_config=types.ImageConfig(aspect_ratio=aspect_ratio, image_size=image_size),
+                image_config=types.ImageConfig(aspect_ratio=context.aspect_ratio, image_size=context.image_size),
             ),
         )
 
@@ -1042,11 +1088,11 @@ class GeminiCli(LLMClientBase):
         response_images = _parse_images_response(image_response)
         if response_images:
             image_url = response_images[0]
-            logger.info("第 %d 页图片生成成功", page_index + 1)
+            logger.info("第 %d 页图片生成成功", context.page_index + 1)
             return image_url
         else:
             raise GeminiTechnicalError(
-                f"第 {page_index + 1} 页图片生成失败",
+                f"第 {context.page_index + 1} 页图片生成失败",
                 "图片生成失败，请稍后重试",
                 "NO_IMAGE_RETURNED",
             )

@@ -39,17 +39,29 @@ export interface CreationParams {
 }
 
 /**
- * 分镜项
+ * 页面分镜
  */
+export interface CreationStoryboard {
+  summary: string;
+  visual_brief: string;
+  anchor_refs: string[];
+  must_include: string[];
+  composition: string;
+  avoid: string[];
+}
+
 export interface StoryboardItem {
   text: string;
   page_type?: 'cover' | 'content';
-  storyboard: {
-    summary: string;
-    scene: string;
-    characters: string;
-    shot: string;
-  };
+  storyboard: CreationStoryboard;
+}
+
+export interface VisualAnchor {
+  id: string;
+  type: string;
+  name: string;
+  description?: string;
+  key_attributes?: string[];
 }
 
 /**
@@ -62,6 +74,7 @@ export interface CreationState {
   storyTitle: string;
   storyContent: string;
   storyboards: StoryboardItem[];
+  visualAnchors: VisualAnchor[];
   selectedImageStyle: ImageStyleListItem | null;
   uploadedImages: string[];
   creationParams: CreationParams;     // 步骤 4 的参数

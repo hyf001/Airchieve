@@ -23,6 +23,10 @@ from app.services.points_service import (
     consume_for_page_edit,
 )
 from app.services.visual_anchor_service import anchors_for_storyboard
+from app.services.page_generation_service import (
+    build_page_generation_context_from_page,
+    generate_page_with_context,
+)
 
 logger = get_logger(__name__)
 
@@ -460,20 +464,12 @@ async def run_regenerate_page_background(
                     if page_idx > 0 and content_pages[page_idx - 1].image_url
                     else None
                 )
-                image_url = await llm_client.generate_page(
-                    story_text=page.text,
-                    storyboard=page.storyboard,
-                    story_context=story_texts,
-                    page_index=page_idx,
-                    character_reference_images=selected_reference_urls or None,
-                    previous_page_image=previous_page_image,
-                    template=template,
-                    image_style_version=image_style_version,
-                    aspect_ratio=aspect_ratio,
-                    image_size=image_size,
+                context = await build_page_generation_context_from_page(
+                    page_id,
                     image_instruction=image_instruction,
-                    visual_anchors=anchors_for_storyboard(page.storyboard, storybook.visual_anchors),
+                    selected_reference_page_ids=reference_page_ids,
                 )
+                image_url = await generate_page_with_context(context)
 
             page.image_url = image_url
             page.status = PageStatus.FINISHED

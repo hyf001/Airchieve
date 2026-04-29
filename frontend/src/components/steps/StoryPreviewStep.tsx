@@ -6,6 +6,7 @@ import React, { useState, useCallback } from 'react';
 import { Check, FileText, Image as ImageIcon } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ImageStyleListItem } from '../../services/imageStyleService';
 import { toApiUrl } from '@/services/storybookService';
 import {
@@ -23,7 +24,7 @@ interface StoryPreviewStepProps {
   imageStyles: ImageStyleListItem[];
   selectedImageStyle: ImageStyleListItem | null;
   onImageStyleChange: (style: ImageStyleListItem) => void;
-  onNext: (title: string, content: string, pageCount: number) => void;
+  onNext: (title: string, content: string, pageCount: number, hasCharacterReferenceImages: boolean) => void;
   onBack: () => void;
 }
 
@@ -39,6 +40,7 @@ const StoryPreviewStep: React.FC<StoryPreviewStepProps> = ({
   const [title, setTitle] = useState(initialTitle);
   const [content, setContent] = useState(initialContent);
   const [pageCount, setPageCount] = useState(initialPageCount);
+  const [hasCharacterReferenceImages, setHasCharacterReferenceImages] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const titleMissing = title.trim().length === 0;
   const contentMissing = content.trim().length === 0;
@@ -50,11 +52,11 @@ const StoryPreviewStep: React.FC<StoryPreviewStepProps> = ({
 
     setIsSubmitting(true);
     try {
-      await onNext(title.trim(), content.trim(), pageCount);
+      await onNext(title.trim(), content.trim(), pageCount, hasCharacterReferenceImages);
     } finally {
       setIsSubmitting(false);
     }
-  }, [title, content, pageCount, selectedImageStyle, isSubmitting, onNext]);
+  }, [title, content, pageCount, hasCharacterReferenceImages, selectedImageStyle, isSubmitting, onNext]);
 
   return (
     <div className="w-full max-w-4xl mx-auto relative">
@@ -194,6 +196,14 @@ const StoryPreviewStep: React.FC<StoryPreviewStepProps> = ({
                   <SelectItem value="20">20页</SelectItem>
                 </SelectContent>
               </Select>
+              <label className="flex items-center gap-2 text-sm text-slate-600">
+                <Checkbox
+                  checked={hasCharacterReferenceImages}
+                  onCheckedChange={(checked) => setHasCharacterReferenceImages(checked === true)}
+                  disabled={isSubmitting}
+                />
+                会上传角色参考图
+              </label>
 
             </div>
 

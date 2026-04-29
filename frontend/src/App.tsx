@@ -7,6 +7,7 @@ import TemplatesView from './pages/TemplatesView';
 import ImageStylesView from './pages/ImageStylesView';
 import UserProfileView from './pages/UserProfileView';
 import UserManagementView from './pages/UserManagementView';
+import GenerationDebugView from './pages/GenerationDebugView';
 import LoadingSpinner from './components/LoadingSpinner';
 import { ToastContextProvider } from './components/ui/toast-provider';
 import { Toaster } from './components/ui/toaster';
@@ -22,6 +23,7 @@ const InnerApp: React.FC = () => {
   const [showProfile,     setShowProfile]     = useState(false);
   const [showAdmin,       setShowAdmin]       = useState(false);
   const [showImageStyles, setShowImageStyles] = useState(false);
+  const [showGenerationDebug, setShowGenerationDebug] = useState(false);
 
   const handleBack = () => {
     setCurrentStorybookId(undefined);
@@ -30,9 +32,10 @@ const InnerApp: React.FC = () => {
     setShowProfile(false);
     setShowAdmin(false);
     setShowImageStyles(false);
+    setShowGenerationDebug(false);
   };
 
-  const isHomeView = !currentStorybookId && !showMyWorks && !showMyTemplates && !showProfile && !showAdmin && !showImageStyles;
+  const isHomeView = !currentStorybookId && !showMyWorks && !showMyTemplates && !showProfile && !showAdmin && !showImageStyles && !showGenerationDebug;
 
   if (isLoading) {
     return (
@@ -53,6 +56,8 @@ const InnerApp: React.FC = () => {
 
       {showImageStyles ? (
         <ImageStylesView onBack={handleBack} />
+      ) : showGenerationDebug ? (
+        <GenerationDebugView onBack={handleBack} />
       ) : showAdmin ? (
         <UserManagementView onBack={handleBack} />
       ) : showProfile ? (
@@ -88,6 +93,7 @@ const InnerApp: React.FC = () => {
             setShowMyWorks(false);
             setShowMyTemplates(false);
             setShowImageStyles(false);
+            setShowGenerationDebug(false);
           }}
           onShowImageStyles={() => {
             setShowImageStyles(true);
@@ -95,6 +101,15 @@ const InnerApp: React.FC = () => {
             setShowMyWorks(false);
             setShowMyTemplates(false);
             setShowAdmin(false);
+            setShowGenerationDebug(false);
+          }}
+          onShowGenerationDebug={() => {
+            setShowGenerationDebug(true);
+            setCurrentStorybookId(undefined);
+            setShowMyWorks(false);
+            setShowMyTemplates(false);
+            setShowAdmin(false);
+            setShowImageStyles(false);
           }}
         />
       ) : (

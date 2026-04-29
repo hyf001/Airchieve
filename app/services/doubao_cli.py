@@ -5,6 +5,7 @@ Doubao CLI Implementation
 import asyncio
 import json
 import re
+from dataclasses import asdict
 from typing import List, Optional, Tuple, TypeVar
 
 from pydantic import BaseModel, Field
@@ -19,6 +20,10 @@ from app.models.template import Template
 from app.models.image_style import ImageStyleVersion
 from app.models.enums import PageType, StoryType, Language, AgeGroup
 from app.schemas.visual_anchor import VisualAnchor
+from app.schemas.page_generation import (
+    PageGenerationContext,
+    PageGenerationInputResource,
+)
 from app.services.visual_anchor_service import (
     clean_storyboards_anchor_refs,
     format_anchors_for_prompt,
@@ -145,6 +150,24 @@ def _format_style_prompt(
     )
     if image_style_version and image_style_version.negative_prompt:
         prompt += f"\n尽量避免：{image_style_version.negative_prompt}"
+    return prompt
+
+
+def _format_generation_style_prompt(context: PageGenerationContext) -> str:
+    cues = []
+    if context.style.name:
+        cues.append(context.style.name)
+    if context.style.generation_prompt:
+        cues.append(context.style.generation_prompt)
+    style_text = "；".join(cue.strip() for cue in cues if cue and cue.strip())
+    if not style_text:
+        style_text = "使用温暖、有童趣、适合儿童绘本的插画风格。"
+    prompt = (
+        f"{style_text}\n"
+        "把这些画风信息当作整体氛围、媒介质感、线条、色彩和细节密度的参考，自然服务于当前页画面；不要机械照抄参考图的具体人物、构图或场景。"
+    )
+    if context.style.negative_prompt:
+        prompt += f"\n尽量避免：{context.style.negative_prompt}"
     return prompt
 
 
@@ -679,60 +702,115 @@ class DoubaoCli(LLMClientBase):
             "PARSE_ERROR",
         )
 
+    def build_page_prompt(self, context: PageGenerationContext) -> str:
+        visual_summary = context.story_text
+        if context.storyboard and context.storyboard.summary:
+            visual_summary = context.storyboard.summary or context.story_text
+        if context.storyboard:
+            must_include = "、".join(context.storyboard.must_include or [])
+            avoid = "、".join(context.storyboard.avoid or [])
+            storyboard_desc = (
+                f"【当前页视觉摘要】\n{visual_summary}\n\n"
+                f"【当前页分镜】\n"
+                f"- 画面目标：{context.storyboard.visual_brief}\n"
+                f"- 必须出现：{must_include}\n"
+                f"- 构图：{context.storyboard.composition}\n"
+                f"- 避免出现：{avoid}"
+            )
+        else:
+            storyboard_desc = f"【当前页视觉摘要】\n{visual_summary}\n\n【当前页分镜】\n- 画面目标：\n- 必须出现：\n- 构图：\n- 避免出现："
+
+        anchor_prompt = format_anchors_for_prompt(
+            [asdict(anchor) for anchor in context.visual_anchors],
+            language="zh",
+        )
+        prompt = (
+            "你是一名专业儿童绘本插画师。\n\n"
+            "先保证跨页连续性和角色参考图的可辨识度，再自然融入本页分镜、视觉锚点和画风参考。\n"
+            "如果提供了上一页图片，请沿用已经建立的角色外观、关键物、画风、色彩和场景气质；只有用户明确要求时才改变。\n\n"
+            f"【当前任务】\n为第{context.page_index + 1}页 / 共{len(context.story_context)}页生成一张儿童绘本内页插画。\n\n"
+            f"{storyboard_desc}\n\n"
+            f"【当前页视觉锚点】\n{anchor_prompt}\n\n"
+            "【锚点边界规则】\n"
+            "- 锚点只是少量重复角色或关键物的轻量连续性提示。\n"
+            "- 如果锚点和上一页图片冲突，以上一页图片为准。\n"
+            "- 如果锚点和角色参考图冲突，以角色参考图为准。\n"
+            "- 颜色锚点只做粗粒度提示，最终颜色以已生成图片连续性为准。\n"
+            "- 不要把锚点扩展成额外剧情、额外物品或硬性构图要求。\n\n"
+            f"【画风参考】\n{_format_generation_style_prompt(context)}\n\n"
+            "【禁止】\n"
+            "- 图片中不要出现任何文字、字母、标题、标签、边框。\n"
+            "- 只画当前页，不要把其他页面的内容画进来。\n"
+            "- 角色参考图片只用于保持角色身份、外观特征和可辨识性，不要从中学习画风、色调、背景复杂度或构图。"
+        )
+        if context.image_instruction:
+            prompt += (
+                f"\n\n【用户图片调整指令】{context.image_instruction}\n"
+                "请在保持跨页视觉连续性、锁定画风、当前页视觉摘要和分镜的前提下执行该调整。"
+            )
+        return prompt
+
+    def build_page_input_resources(
+        self,
+        context: PageGenerationContext,
+    ) -> list[PageGenerationInputResource]:
+        resources: list[PageGenerationInputResource] = []
+        if context.page_index == 0 and context.style.reference_images:
+            resources.append(PageGenerationInputResource(
+                role="style_reference",
+                url=context.style.reference_images[0],
+                source="image_style",
+                sort_order=len(resources),
+            ))
+        if context.previous_page_image:
+            resources.append(PageGenerationInputResource(
+                role="previous_page",
+                url=context.previous_page_image,
+                source="page",
+                sort_order=len(resources),
+            ))
+        for url in context.character_reference_images:
+            resources.append(PageGenerationInputResource(
+                role="character_reference",
+                url=url,
+                source="storybook_reference_images",
+                sort_order=len(resources),
+            ))
+        for url in context.selected_reference_page_images:
+            resources.append(PageGenerationInputResource(
+                role="selected_page_reference",
+                url=url,
+                source="page",
+                sort_order=len(resources),
+            ))
+        return resources
+
     async def generate_page(
         self,
-        story_text: str,
-        storyboard: Optional[Storyboard],
-        story_context: List[str],
-        page_index: int,
-        character_reference_images: Optional[List[str]] = None,
-        previous_page_image: Optional[str] = None,
-        template: Optional[Template] = None,
-        image_style_version: Optional[ImageStyleVersion] = None,
-        aspect_ratio: str = "16:9",
-        image_size: str = "1k",
-        image_instruction: str = "",
-        visual_anchors: Optional[List[VisualAnchor]] = None,
+        context: PageGenerationContext,
     ) -> str:
         """生成单页图片，返回 base64 data URL"""
         logger.info("生成第 %d 页图片 | text=%s ref=%s prev=%s",
-                    page_index + 1, story_text[:50],
-                    len(character_reference_images) if character_reference_images else 0,
-                    bool(previous_page_image))
-        visual_summary = (storyboard.get("summary") or story_text) if storyboard else story_text
-        first_page_style_main_reference = (
-            _style_main_reference_url(image_style_version)
-            if page_index == 0
-            else None
-        )
+                    context.page_index + 1, context.story_text[:50],
+                    len(context.character_reference_images),
+                    bool(context.previous_page_image))
+        visual_summary = (context.storyboard.summary or context.story_text) if context.storyboard else context.story_text
+        first_page_style_main_reference = context.style.reference_images[0] if context.page_index == 0 and context.style.reference_images else None
         logger.info(
             "图片生成 prompt 使用上下文收敛模式 | page_index=%d summary=%s has_storyboard=%s "
             "has_style_version=%s has_first_page_style_main_reference=%s character_reference_count=%d "
             "has_previous_page_image=%s context_mode=current_page_only",
-            page_index,
+            context.page_index,
             visual_summary[:50],
-            bool(storyboard),
-            bool(image_style_version),
+            bool(context.storyboard),
+            bool(context.style.generation_prompt or context.style.reference_images),
             bool(first_page_style_main_reference),
-            len(character_reference_images) if character_reference_images else 0,
-            bool(previous_page_image),
+            len(context.character_reference_images),
+            bool(context.previous_page_image),
         )
 
-        prompt = _build_image_prompt(
-            story_text,
-            storyboard,
-            story_context,
-            page_index,
-            template,
-            image_style_version,
-            visual_anchors,
-        )
-        if image_instruction:
-            prompt += (
-                f"\n\n【用户图片调整指令】{image_instruction}\n"
-                "请在保持跨页视觉连续性、锁定画风、当前页视觉摘要和分镜的前提下执行该调整。"
-            )
-        size = _resolve_image_size(aspect_ratio, image_size)
+        prompt = self.build_page_prompt(context)
+        size = _resolve_image_size(context.aspect_ratio, context.image_size)
 
         # 收集参考图片并按顺序说明用途
         input_images: List[str] = []
@@ -742,26 +820,34 @@ class DoubaoCli(LLMClientBase):
             ref_desc_parts.append(
                 "第1张图片是风格主图片，仅第一页生成时提供。请学习它的媒介质感、笔触、线条、色彩关系、背景细节密度和儿童绘本整体气质；不要复制其中的具体人物、场景、构图、文字或物体。"
             )
-            logger.info("第 %d 页添加风格主图片 | count=1", page_index + 1)
+            logger.info("第 %d 页添加风格主图片 | count=1", context.page_index + 1)
 
-        if previous_page_image:
-            input_images.append(previous_page_image)
+        if context.previous_page_image:
+            input_images.append(context.previous_page_image)
             index = len(input_images)
             ref_desc_parts.append(
                 f"第{index}张图片是上一页插画，也是最高优先级连续性参考。请保持已建立的角色外观、服装配饰、比例气质、关键物外观、场景延续、画风、色彩体系、材质和线条一致。除非用户明确要求改变，否则不要改变已经建立的视觉身份。"
             )
-            logger.info("第 %d 页添加上一页图片作为最高优先级连续性参考", page_index + 1)
+            logger.info("第 %d 页添加上一页图片作为最高优先级连续性参考", context.page_index + 1)
 
-        if character_reference_images:
-            input_images.extend(character_reference_images)
-            start = len(input_images) - len(character_reference_images) + 1
+        if context.character_reference_images:
+            input_images.extend(context.character_reference_images)
+            start = len(input_images) - len(context.character_reference_images) + 1
             end = len(input_images)
             ref_desc_parts.append(
                 f"第{start}到第{end}张图片是角色参考图片。"
                 "角色不一定是人，也可以是动物、玩偶或拟人化物体。"
                 "它们只用于保持角色身份、外观特征、姿态特征和可辨识性；不要从角色参考图片中学习画风、色调、背景复杂度或构图。"
             )
-            logger.info("第 %d 页添加用户角色参考图 | count=%d", page_index + 1, len(character_reference_images))
+            logger.info("第 %d 页添加用户角色参考图 | count=%d", context.page_index + 1, len(context.character_reference_images))
+
+        if context.selected_reference_page_images:
+            input_images.extend(context.selected_reference_page_images)
+            start = len(input_images) - len(context.selected_reference_page_images) + 1
+            end = len(input_images)
+            ref_desc_parts.append(
+                f"第{start}到第{end}张图片是选择的页面参考图。请把它们作为额外连续性参考，同时以当前页 prompt 为准。"
+            )
 
         if ref_desc_parts:
             prompt += "\n\n【参考图片说明】" + " ".join(ref_desc_parts)
@@ -781,7 +867,7 @@ class DoubaoCli(LLMClientBase):
             generate_kwargs["image"] = input_images
 
         data_url = await _async_image_generate(**generate_kwargs)
-        logger.info("第 %d 页图片生成成功", page_index + 1)
+        logger.info("第 %d 页图片生成成功", context.page_index + 1)
         return data_url
 
     async def edit_image(

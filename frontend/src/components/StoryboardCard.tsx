@@ -112,24 +112,55 @@ const StoryboardCard: React.FC<StoryboardCardProps> = ({
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-600 mb-1">场景</label>
+              <label className="block text-xs text-gray-600 mb-1">画面目标</label>
               <input
                 type="text"
-                value={editedStoryboard.scene}
+                value={editedStoryboard.visual_brief}
                 onChange={(e) =>
-                  setEditedStoryboard({ ...editedStoryboard, scene: e.target.value })
+                  setEditedStoryboard({ ...editedStoryboard, visual_brief: e.target.value })
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-600 mb-1">人物</label>
-              <input
-                type="text"
-                value={editedStoryboard.characters}
+              <label className="block text-xs text-gray-600 mb-1">必须出现（每行一个）</label>
+              <textarea
+                value={editedStoryboard.must_include.join('\n')}
                 onChange={(e) =>
-                  setEditedStoryboard({ ...editedStoryboard, characters: e.target.value })
+                  setEditedStoryboard({
+                    ...editedStoryboard,
+                    must_include: e.target.value.split('\n').map((item) => item.trim()).filter(Boolean),
+                  })
                 }
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">锚点 ID（每行一个）</label>
+              <textarea
+                value={editedStoryboard.anchor_refs.join('\n')}
+                onChange={(e) =>
+                  setEditedStoryboard({
+                    ...editedStoryboard,
+                    anchor_refs: e.target.value.split('\n').map((item) => item.trim()).filter(Boolean),
+                  })
+                }
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">避免出现（每行一个）</label>
+              <textarea
+                value={editedStoryboard.avoid.join('\n')}
+                onChange={(e) =>
+                  setEditedStoryboard({
+                    ...editedStoryboard,
+                    avoid: e.target.value.split('\n').map((item) => item.trim()).filter(Boolean),
+                  })
+                }
+                rows={3}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
               />
             </div>
@@ -137,9 +168,9 @@ const StoryboardCard: React.FC<StoryboardCardProps> = ({
               <label className="block text-xs text-gray-600 mb-1">构图</label>
               <input
                 type="text"
-                value={editedStoryboard.shot}
+                value={editedStoryboard.composition}
                 onChange={(e) =>
-                  setEditedStoryboard({ ...editedStoryboard, shot: e.target.value })
+                  setEditedStoryboard({ ...editedStoryboard, composition: e.target.value })
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
               />
@@ -152,16 +183,20 @@ const StoryboardCard: React.FC<StoryboardCardProps> = ({
               <span className="text-gray-700 ml-1">{item.storyboard.summary}</span>
             </div>
             <div className="bg-amber-50 p-2 rounded">
-              <span className="text-amber-700 font-medium">场景:</span>
-              <span className="text-gray-700 ml-1">{item.storyboard.scene}</span>
+              <span className="text-amber-700 font-medium">画面目标:</span>
+              <span className="text-gray-700 ml-1">{item.storyboard.visual_brief}</span>
             </div>
             <div className="bg-blue-50 p-2 rounded">
-              <span className="text-blue-700 font-medium">人物:</span>
-              <span className="text-gray-700 ml-1">{item.storyboard.characters}</span>
+              <span className="text-blue-700 font-medium">必须出现:</span>
+              <span className="text-gray-700 ml-1">{item.storyboard.must_include.join('、') || '无'}</span>
             </div>
             <div className="bg-green-50 p-2 rounded">
               <span className="text-green-700 font-medium">构图:</span>
-              <span className="text-gray-700 ml-1">{item.storyboard.shot}</span>
+              <span className="text-gray-700 ml-1">{item.storyboard.composition}</span>
+            </div>
+            <div className="bg-red-50 p-2 rounded">
+              <span className="text-red-700 font-medium">避免:</span>
+              <span className="text-gray-700 ml-1">{item.storyboard.avoid.join('、') || '无'}</span>
             </div>
           </div>
         )}

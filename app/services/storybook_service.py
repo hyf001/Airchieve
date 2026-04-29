@@ -6,6 +6,7 @@ from typing import Optional, List, Tuple
 import asyncio
 import time
 import io
+import uuid
 from sqlalchemy import select, update
 import httpx
 from PIL import Image as PILImage, ImageDraw, ImageFont
@@ -33,6 +34,18 @@ from app.services.visual_anchor_service import (
     anchors_for_storyboard,
     clean_storyboard_anchor_refs,
     normalize_visual_anchors,
+)
+from app.services.oss_service import upload_from_url
+from app.services.page_generation_service import (
+    build_page_generation_context_from_page,
+    create_storybook_reference_images,
+    generate_page_with_context,
+    list_storybook_reference_images,
+    page_generation_storyboard_from_raw,
+    page_generation_style_context_from_version,
+)
+from app.schemas.page_generation import (
+    PageGenerationContext,
 )
 
 logger = get_logger(__name__)
@@ -263,6 +276,7 @@ async def run_insert_pages_background(
             and reference_pages[ref_insert_position].image_url
             and _page_type_value(reference_pages[ref_insert_position].page_type) == PageType.CONTENT.value):
             reference_images.append(reference_pages[ref_insert_position].image_url)
+        character_reference_images = await list_storybook_reference_images(storybook_id)
 
         for i, (story_text, storyboard) in enumerate(zip(story_texts, storyboards)):
             # 检查是否中止
@@ -274,18 +288,22 @@ async def run_insert_pages_background(
             logger.info("生成插入页面第 %d 页图片 | storybook_id=%s", i + 1, storybook_id)
 
             # 生成单页
-            image_url = await llm_client.generate_page(
-                story_text=story_text,
-                storyboard=storyboard,
-                story_context=all_story_texts,
+            context = PageGenerationContext(
+                cli_type=_page_type_value(cli_type),
+                storybook_id=storybook_id,
+                page_id=None,
                 page_index=insert_position + i,
-                character_reference_images=reference_images,
+                story_text=story_text,
+                storyboard=page_generation_storyboard_from_raw(storyboard),
+                story_context=all_story_texts,
+                style=page_generation_style_context_from_version(image_style_version),
+                aspect_ratio=_page_type_value(aspect_ratio),
+                image_size=_page_type_value(image_size),
                 previous_page_image=image_urls[-1] if image_urls else None,
-                template=template,
-                image_style_version=image_style_version,
-                aspect_ratio=aspect_ratio,
-                image_size=image_size,
+                character_reference_images=character_reference_images,
+                selected_reference_page_images=reference_images,
             )
+            image_url = await generate_page_with_context(context)
 
             image_urls.append(image_url)
 
@@ -596,6 +614,7 @@ async def create_storybook_from_story_async(
     image_size: ImageSize = ImageSize.SIZE_1K,
     visual_anchors: Optional[List[VisualAnchor]] = None,
     has_character_reference_images: bool = False,
+    images: Optional[List[str]] = None,
 ) -> tuple[int, str, int]:
     """
     基于已有的故事和分镜创建绘本（同步阶段）
@@ -722,6 +741,12 @@ async def create_storybook_from_story_async(
         await session.commit()
         await session.refresh(new_storybook)
 
+    persisted_images: list[str] = []
+    for index, image in enumerate(images or []):
+        url = await upload_from_url(image, f"storybook-reference/{storybook_id}/{index}-{uuid.uuid4().hex}.png")
+        persisted_images.append(url)
+    await create_storybook_reference_images(storybook_id, persisted_images)
+
     total_pages = 1 + len(content_pages) + 1  # cover + content + back_cover
     logger.info("绘本记录和分镜已保存 | storybook_id=%s pages=%d", storybook_id, total_pages)
     return storybook_id, title, style_version.id
@@ -733,7 +758,6 @@ async def run_create_storybook_from_story_background(
     aspect_ratio: str = "16:9",
     image_size: str = "1k",
     cli_type: CliType = CliType.GEMINI,
-    images: Optional[List[str]] = None,
 ) -> None:
     """
     后台任务：为已有分镜的绘本生成图片
@@ -807,18 +831,8 @@ async def run_create_storybook_from_story_background(
                     db_page.error_message = None
                     await session.commit()
 
-            image_url = await llm_client.generate_page(
-                story_text=page.text,
-                storyboard=page.storyboard,
-                story_context=story_texts,
-                page_index=i,
-                character_reference_images=images,
-                previous_page_image=content_pages[i - 1].image_url if i > 0 and content_pages[i - 1].image_url else None,
-                image_style_version=image_style_version,
-                aspect_ratio=aspect_ratio,
-                image_size=image_size,
-                visual_anchors=anchors_for_storyboard(page.storyboard, storybook.visual_anchors),
-            )
+            context = await build_page_generation_context_from_page(page.id)
+            image_url = await generate_page_with_context(context)
 
             page.image_url = image_url
             page.status = PageStatus.FINISHED

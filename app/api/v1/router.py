@@ -13,6 +13,7 @@ from app.api.v1.image_style_api import router as image_style_router
 from app.api.v1.payment_api import router as payment_router
 from app.api.v1.oss_api import router as oss_router
 from app.api.v1.page_api import router as page_router
+from app.api.v1.generation_debug_api import router as generation_debug_router
 
 api_router = APIRouter()
 
@@ -25,6 +26,7 @@ api_router.include_router(image_style_asset_router, tags=["image-style-assets"])
 api_router.include_router(payment_router)
 api_router.include_router(oss_router)
 api_router.include_router(page_router)
+api_router.include_router(generation_debug_router, tags=["generation-debug"])
 
 
 # 健康检查

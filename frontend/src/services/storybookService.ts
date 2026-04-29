@@ -1,5 +1,6 @@
 const API_BASE = "/api/v1/storybooks";
 import { getAuthHeaders, triggerUnauthorized } from "./authService";
+import type { StoryboardItem, VisualAnchor } from "@/types/creation";
 
 // ============ 内部工具 ============
 
@@ -36,12 +37,7 @@ export interface StorybookPage {
   page_index: number;
   text: string;
   image_url: string;
-  storyboard?: {
-    summary: string;
-    scene: string;
-    characters: string;
-    shot: string;
-  } | null;
+  storyboard?: StoryboardItem['storyboard'] | null;
   page_type?: PageType;
   status?: PageStatus;
   error_message?: string | null;
@@ -209,6 +205,7 @@ export interface CreateStorybookFromStoryRequest {
   aspect_ratio?: AspectRatio;
   image_size?: ImageSize;
   images?: string[];
+  visual_anchors?: VisualAnchor[];
   pages: StorybookPageCreate[];
 }
 
@@ -255,6 +252,7 @@ export const createStorybookFromStory = async (
       cli_type: req.cli_type || 'gemini',
       aspect_ratio: req.aspect_ratio || '16:9',
       image_size: req.image_size || '1k',
+      visual_anchors: req.visual_anchors || [],
       pages: req.pages,
     }),
   });

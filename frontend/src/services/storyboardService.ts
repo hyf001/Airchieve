@@ -2,8 +2,8 @@
  * 分镜相关 API
  */
 import { getAuthHeaders, triggerUnauthorized } from './authService';
-import { CliType } from './storybookService';
-import { StoryboardItem } from '../types/creation';
+import type { CliType } from './storybookService';
+import type { StoryboardItem, VisualAnchor } from '../types/creation';
 
 const API_BASE = '/api/v1/storybooks';
 
@@ -15,10 +15,12 @@ export interface GenerateStoryboardRequest {
   page_count: number;
   cli_type: CliType;
   image_style_id: number;
+  has_character_reference_images: boolean;
 }
 
 export interface GenerateStoryboardResponse {
   storyboards: StoryboardItem[];
+  visual_anchors: VisualAnchor[];
 }
 
 // ============ API Functions ============

@@ -3,7 +3,7 @@
  * 支持向导式创建流程：输入指令 → 预览故事 → 编辑分镜 → 创建绘本
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import { Sparkles, ChevronLeft, BookOpen, LogOut, Coins, Crown, User, Shield, Palette } from 'lucide-react';
+import { Sparkles, ChevronLeft, BookOpen, LogOut, Coins, Crown, User, Shield, Palette, Beaker } from 'lucide-react';
 import { createStory, createStorybookFromStory, InsufficientPointsError, listStorybooks, StorybookListItem } from '../services/storybookService';
 import { generateStoryboard } from '../services/storyboardService';
 import { listImageStyles, ImageStyleListItem } from '../services/imageStyleService';
@@ -16,7 +16,7 @@ import CreateStorybookStep from '../components/steps/CreateStorybookStep';
 import { useAuth } from '../contexts/AuthContext';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
-import { CreationState, StoryParams, CreationParams, StoryboardItem } from '../types/creation';
+import { CreationState, StoryParams, CreationParams, StoryboardItem, VisualAnchor } from '../types/creation';
 
 interface HomeViewProps {
   onStart?: (storybookId: number) => void;
@@ -25,6 +25,7 @@ interface HomeViewProps {
   onShowProfile?: () => void;
   onShowAdmin?: () => void;
   onShowImageStyles?: () => void;
+  onShowGenerationDebug?: () => void;
 }
 
 const MEMBERSHIP_LABEL: Record<string, string> = {
@@ -52,6 +53,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   onShowProfile,
   onShowAdmin,
   onShowImageStyles,
+  onShowGenerationDebug,
 }) => {
   const { user, logout, openLoginModal } = useAuth();
   const { toast } = useToast();
@@ -63,6 +65,7 @@ const HomeView: React.FC<HomeViewProps> = ({
   const [storyContent, setStoryContent] = useState('');
   const [originalInstruction, setOriginalInstruction] = useState('');
   const [storyboards, setStoryboards] = useState<StoryboardItem[]>([]);
+  const [visualAnchors, setVisualAnchors] = useState<VisualAnchor[]>([]);
   const [creationParams, setCreationParams] = useState<CreationParams>(defaultCreationParams);
 
   // 画风和公开作品列表
@@ -162,7 +165,12 @@ const HomeView: React.FC<HomeViewProps> = ({
   }, [isCreating, user, storyParams, creationParams, toast]);
 
   // 步骤2：确认故事并生��分镜
-  const handleStoryConfirm = useCallback(async (title: string, content: string, pageCount: number) => {
+  const handleStoryConfirm = useCallback(async (
+    title: string,
+    content: string,
+    pageCount: number,
+    hasCharacterReferenceImages: boolean,
+  ) => {
     if (!selectedImageStyle) {
       toast({ variant: 'destructive', title: '请选择画风' });
       return;
@@ -170,17 +178,19 @@ const HomeView: React.FC<HomeViewProps> = ({
     setIsCreating(true);
 
     try {
-      const { storyboards: newStoryboards } = await generateStoryboard({
+      const { storyboards: newStoryboards, visual_anchors: newVisualAnchors } = await generateStoryboard({
         title,
         story_content: content,
         page_count: pageCount,
         cli_type: creationParams.cli_type,
         image_style_id: selectedImageStyle.id,
+        has_character_reference_images: hasCharacterReferenceImages,
       });
 
       setStoryTitle(title);
       setStoryContent(content);
       setStoryboards(newStoryboards);
+      setVisualAnchors(newVisualAnchors);
       setStep('storyboard');
       setStepMountKey(prev => prev + 1);
     } catch (err) {
@@ -231,6 +241,7 @@ const HomeView: React.FC<HomeViewProps> = ({
         cli_type: params.cli_type,
         aspect_ratio: params.aspect_ratio,
         image_size: params.image_size,
+        visual_anchors: visualAnchors,
         pages: pages,
       });
 
@@ -249,7 +260,7 @@ const HomeView: React.FC<HomeViewProps> = ({
     } finally {
       setIsCreating(false);
     }
-  }, [storyTitle, originalInstruction, storyboards, user, openLoginModal, toast, onStart]);
+  }, [storyTitle, originalInstruction, storyboards, visualAnchors, user, openLoginModal, toast, onStart]);
 
   // 导航处理
   const handleBack = useCallback(() => {
@@ -498,6 +509,12 @@ const HomeView: React.FC<HomeViewProps> = ({
                     className="gap-2 focus:bg-slate-700/50 focus:text-slate-100"
                   >
                     <Palette size={16} className="text-violet-400" /> 图片风格管理
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => onShowGenerationDebug?.()}
+                    className="gap-2 focus:bg-slate-700/50 focus:text-slate-100"
+                  >
+                    <Beaker size={16} className="text-teal-400" /> 生成调试
                   </DropdownMenuItem>
                 </>
               )}

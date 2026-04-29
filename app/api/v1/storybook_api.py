@@ -180,6 +180,7 @@ async def create_storybook_from_story_endpoint(
             image_size=req.image_size,
             visual_anchors=req.visual_anchors,
             has_character_reference_images=bool(req.images),
+            images=req.images,
         )
     except InsufficientPointsError as e:
         raise HTTPException(
@@ -199,7 +200,6 @@ async def create_storybook_from_story_endpoint(
         req.aspect_ratio.value,
         req.image_size.value,
         req.cli_type,
-        req.images,
     )
 
     return StorybookCreateResponse(

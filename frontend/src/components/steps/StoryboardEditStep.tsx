@@ -230,22 +230,28 @@ const StoryboardEditStep: React.FC<StoryboardEditStepProps> = ({
                               <span className="text-gray-700 ml-1">{item.storyboard.summary}</span>
                             </div>
                           )}
-                          {item.storyboard.scene && (
+                          {item.storyboard.visual_brief && (
                             <div className="bg-amber-50 p-2 rounded">
-                              <span className="text-amber-700 font-medium">场景:</span>
-                              <span className="text-gray-700 ml-1">{item.storyboard.scene}</span>
+                              <span className="text-amber-700 font-medium">画面目标:</span>
+                              <span className="text-gray-700 ml-1">{item.storyboard.visual_brief}</span>
                             </div>
                           )}
-                          {item.storyboard.characters && (
+                          {item.storyboard.must_include.length > 0 && (
                             <div className="bg-blue-50 p-2 rounded">
-                              <span className="text-blue-700 font-medium">角色:</span>
-                              <span className="text-gray-700 ml-1">{item.storyboard.characters}</span>
+                              <span className="text-blue-700 font-medium">必须出现:</span>
+                              <span className="text-gray-700 ml-1">{item.storyboard.must_include.join('、')}</span>
                             </div>
                           )}
-                          {item.storyboard.shot && (
+                          {item.storyboard.composition && (
                             <div className="bg-green-50 p-2 rounded">
                               <span className="text-green-700 font-medium">构图:</span>
-                              <span className="text-gray-700 ml-1">{item.storyboard.shot}</span>
+                              <span className="text-gray-700 ml-1">{item.storyboard.composition}</span>
+                            </div>
+                          )}
+                          {item.storyboard.avoid.length > 0 && (
+                            <div className="bg-red-50 p-2 rounded">
+                              <span className="text-red-700 font-medium">避免:</span>
+                              <span className="text-gray-700 ml-1">{item.storyboard.avoid.join('、')}</span>
                             </div>
                           )}
                         </div>
