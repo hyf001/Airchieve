@@ -43,6 +43,20 @@ app/
 
 ## 核心规范
 
+### 0. 本地 Python 环境
+
+后端 Python 统一使用仓库内的虚拟环境，不使用系统 `python` 直接跑项目命令。
+
+优先使用：
+
+```bash
+./venv/bin/python -m compileall app
+./venv/bin/python -m pytest
+./venv/bin/python -c "from app.models.storybook import Storybook; print(Storybook.__tablename__)"
+```
+
+如果当前仓库没有 `venv/`，先检查是否存在 `.venv/`；仍不存在时再说明环境缺失，不要把系统 Python 缺依赖误判为项目代码问题。
+
 ### 1. 全异步优先
 
 ```python
@@ -257,6 +271,7 @@ await client.regenerate_page_storyboard(...) # 重新生成分镜
 4. **枚举优先** - 使用 Enum 而非字符串字面量
 5. **类型明确** - 稳定业务结构优先使用 schema / dataclass / TypedDict / ORM model / 领域类，避免跨层手拼 `dict`
 6. **依赖注入** - 优先使用 `Depends(get_db)` 自动管理事务
+7. **venv 优先** - 运行后端 Python 命令时优先使用 `./venv/bin/python`，不要直接使用系统 `python`
 
 ## 参考文件
 

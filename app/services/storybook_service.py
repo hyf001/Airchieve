@@ -17,6 +17,7 @@ from app.models.page import Storyboard, Page
 from app.schemas.page import PageCreate, StorybookPage
 from app.models.template import Template
 from app.models.enums import CliType, AspectRatio, ImageSize, PageStatus, PageType, StoryType, Language, AgeGroup
+from app.schemas.visual_anchor import VisualAnchor
 from app.services.llm_cli import LLMClientBase, LLMError
 from app.services import page_service
 from app.services.image_style_service import (
@@ -27,6 +28,11 @@ from app.services.points_service import (
     check_creation_points,
     consume_for_creation,
     consume_for_page_edit,
+)
+from app.services.visual_anchor_service import (
+    anchors_for_storyboard,
+    clean_storyboard_anchor_refs,
+    normalize_visual_anchors,
 )
 
 logger = get_logger(__name__)
@@ -43,27 +49,17 @@ def build_cover_storyboard(
 ) -> Storyboard:
     """基于正文分镜生成封面分镜占位，供用户在确认阶段编辑。"""
     first_storyboard = next((sb for sb in content_storyboards if sb), None)
+    must_include = []
+    if first_storyboard:
+        must_include = list(first_storyboard.get("must_include") or [])[:3]
     return {
         "summary": f"《{title}》封面画面，突出主角和核心故事情境，形成清晰、有吸引力的绘本封面。",
-        "scene": f"概括《{title}》核心故事的封面场景，体现整本绘本最重要的情境。{story_content[:80]}",
-        "characters": (
-            first_storyboard.get("characters", "")
-            if first_storyboard
-            else "主角以温暖、清晰、有吸引力的姿态出现在画面中心"
-        ),
-        "shot": "封面式构图，主角突出，画面有层次，并预留书名艺术字空间",
+        "visual_brief": f"概括《{title}》核心故事的封面画面，突出主角和最重要的故事情境。{story_content[:80]}",
+        "anchor_refs": list(first_storyboard.get("anchor_refs") or [])[:3] if first_storyboard else [],
+        "must_include": must_include or ["主角", "核心故事情境"],
+        "composition": "封面式构图，主角突出，画面有层次，并预留书名艺术字空间",
+        "avoid": ["文字", "标签", "边框"],
     }
-
-
-def _build_storyboard_complexity_hint(style_summary: Optional[str]) -> str:
-    """根据画风摘要给分镜阶段一个轻量复杂度建议。"""
-    if not style_summary:
-        return "按儿童绘本常规复杂度安排镜头，保持画面清晰易读。"
-    summary = style_summary.lower()
-    simple_keywords = ["极简", "简笔", "涂鸦", "低龄", "扁平", "simple", "minimal", "doodle"]
-    if any(keyword in summary for keyword in simple_keywords):
-        return "画风偏极简或低龄，分镜应减少复杂镜头、强光影和拥挤构图，优先清楚的主体动作。"
-    return "保持适中画面层次，分镜复杂度服务于故事，不额外增加与故事无关的视觉元素。"
 
 
 async def _is_terminated(storybook_id: int) -> bool:
@@ -549,7 +545,8 @@ async def create_storyboard_only(
     page_count: int = 10,
     cli_type: CliType = CliType.GEMINI,
     image_style_id: int | None = None,
-) -> Tuple[List[str], List[Optional[Storyboard]]]:
+    has_character_reference_images: bool = False,
+) -> Tuple[List[str], List[Optional[Storyboard]], List[VisualAnchor]]:
     """
     仅生成分镜，不保存数据库
 
@@ -560,7 +557,7 @@ async def create_storyboard_only(
         image_style_id: 图片风格ID
 
     Returns:
-        Tuple[List[str], List[Optional[Storyboard]]]: (每页文字列表, 分镜列表)
+        Tuple[List[str], List[Optional[Storyboard]], List[VisualAnchor]]: (每页文字列表, 分镜列表, 绘本级视觉锚点)
     """
     logger.info("开始生成分镜 | page_count=%d content_length=%d", page_count, len(story_content))
 
@@ -569,16 +566,21 @@ async def create_storyboard_only(
     style, style_version = await validate_style_available(image_style_id)
 
     llm_client = LLMClientBase.get_client(cli_type)
-    story_texts, storyboards = await llm_client.create_storyboard_from_story(
+    style_reference_images = [
+        image.url
+        for image in style_version.reference_images
+        if image.url
+    ]
+    story_texts, storyboards, visual_anchors = await llm_client.create_storyboard_from_story(
         story_content=story_content,
         page_count=page_count,
         style_name=style.name,
-        style_summary=style_version.style_summary,
-        storyboard_complexity=_build_storyboard_complexity_hint(style_version.style_summary),
+        style_reference_images=style_reference_images,
+        has_character_reference_images=has_character_reference_images,
     )
 
-    logger.info("分镜生成完成 | count=%d", len(story_texts))
-    return story_texts, storyboards
+    logger.info("分镜生成完成 | count=%d anchors=%d", len(story_texts), len(visual_anchors))
+    return story_texts, storyboards, visual_anchors
 
 
 # ============ 基于故事创建绘本（分镜+图片） ============
@@ -592,6 +594,8 @@ async def create_storybook_from_story_async(
     cli_type: CliType = CliType.GEMINI,
     aspect_ratio: AspectRatio = AspectRatio.RATIO_16_9,
     image_size: ImageSize = ImageSize.SIZE_1K,
+    visual_anchors: Optional[List[VisualAnchor]] = None,
+    has_character_reference_images: bool = False,
 ) -> tuple[int, str, int]:
     """
     基于已有的故事和分镜创建绘本（同步阶段）
@@ -616,6 +620,11 @@ async def create_storybook_from_story_async(
     Returns:
         tuple[int, str, int]: (绘本ID, 标题, 锁定的画风版本ID)
     """
+    normalized_anchors = normalize_visual_anchors(
+        visual_anchors or [],
+        has_character_reference_images=has_character_reference_images,
+    )
+
     # 分离封面页和正文页
     cover_pages = [p for p in pages if p.page_type == PageType.COVER.value]
     content_pages = [p for p in pages if p.page_type != PageType.COVER.value]
@@ -640,6 +649,7 @@ async def create_storybook_from_story_async(
             template_id=None,
             image_style_id=image_style_id,
             image_style_version_id=style_version.id,
+            visual_anchors=normalized_anchors or None,
             cli_type=cli_type,
             aspect_ratio=aspect_ratio,
             image_size=image_size,
@@ -661,7 +671,7 @@ async def create_storybook_from_story_async(
                     page_index=page_index,
                     text=cover_data.text or title,
                     image_url="",
-                    storyboard=cover_data.storyboard,
+                    storyboard=clean_storyboard_anchor_refs(cover_data.storyboard, normalized_anchors),
                     page_type=PageType.COVER.value,
                     status=PageStatus.PENDING.value,
                 ),
@@ -689,7 +699,7 @@ async def create_storybook_from_story_async(
                     page_index=page_index,
                     text=page.text,
                     image_url="",
-                    storyboard=page.storyboard,
+                    storyboard=clean_storyboard_anchor_refs(page.storyboard, normalized_anchors),
                     page_type=PageType.CONTENT.value,
                     status=PageStatus.PENDING.value,
                 ),
@@ -807,6 +817,7 @@ async def run_create_storybook_from_story_background(
                 image_style_version=image_style_version,
                 aspect_ratio=aspect_ratio,
                 image_size=image_size,
+                visual_anchors=anchors_for_storyboard(page.storyboard, storybook.visual_anchors),
             )
 
             page.image_url = image_url

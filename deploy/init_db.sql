@@ -140,6 +140,7 @@ CREATE TABLE IF NOT EXISTS `storybooks` (
   `creator`      VARCHAR(128)  NOT NULL,
   `instruction`  TEXT          DEFAULT NULL COMMENT '用户输入/提示词',
   `template_id`  INT           DEFAULT NULL,
+  `visual_anchors` LONGTEXT    DEFAULT NULL COMMENT '绘本级轻量视觉锚点 JSON',
   `is_public`    TINYINT(1)    NOT NULL DEFAULT 0,
   `pages`        LONGTEXT      DEFAULT NULL COMMENT '[{text, image_url}, ...]',
   `status`       VARCHAR(32)   NOT NULL DEFAULT 'init'

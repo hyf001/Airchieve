@@ -43,8 +43,6 @@ interface StyleForm {
 }
 
 interface VersionForm {
-  style_summary: string;
-  style_description: string;
   generation_prompt: string;
   negative_prompt: string;
 }
@@ -58,8 +56,6 @@ const emptyStyleForm: StyleForm = {
 };
 
 const emptyVersionForm: VersionForm = {
-  style_summary: '',
-  style_description: '',
   generation_prompt: '',
   negative_prompt: '',
 };
@@ -193,8 +189,6 @@ const ImageStylesView: React.FC<ImageStylesViewProps> = ({ onBack }) => {
   const openVersionEditor = (version: ImageStyleVersion) => {
     setEditingVersion(version);
     setVersionForm({
-      style_summary: version.style_summary || '',
-      style_description: version.style_description || '',
       generation_prompt: version.generation_prompt || '',
       negative_prompt: version.negative_prompt || '',
     });
@@ -396,7 +390,7 @@ const ImageStylesView: React.FC<ImageStylesViewProps> = ({ onBack }) => {
                       <h3 className="font-semibold text-slate-900">{version.version_no}</h3>
                       <Badge variant={version.status === 'published' ? 'success' : 'warning'}>{version.status === 'published' ? '已发布' : '草稿'}</Badge>
                     </div>
-                    <p className="text-sm text-slate-500 mt-1">{version.style_summary || '暂无摘要'}</p>
+                    <p className="text-sm text-slate-500 mt-1">{version.generation_prompt || '暂无生成提示词'}</p>
                     <p className="text-xs text-slate-400 mt-1">{version.reference_images.length} 张参考图</p>
                   </div>
                   <div className="flex gap-2">
@@ -414,8 +408,6 @@ const ImageStylesView: React.FC<ImageStylesViewProps> = ({ onBack }) => {
                 <Badge variant={editingVersion.status === 'published' ? 'success' : 'warning'}>{editingVersion.status === 'published' ? '已发布只读' : '草稿可编辑'}</Badge>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div><Label>画风摘要</Label><Textarea disabled={!canEditVersion} value={versionForm.style_summary} onChange={(event) => setVersionForm((prev) => ({ ...prev, style_summary: event.target.value }))} rows={4} /></div>
-                <div><Label>风格描述</Label><Textarea disabled={!canEditVersion} value={versionForm.style_description} onChange={(event) => setVersionForm((prev) => ({ ...prev, style_description: event.target.value }))} rows={4} /></div>
                 <div><Label>生成提示词</Label><Textarea disabled={!canEditVersion} value={versionForm.generation_prompt} onChange={(event) => setVersionForm((prev) => ({ ...prev, generation_prompt: event.target.value }))} rows={4} /></div>
                 <div><Label>负面提示词</Label><Textarea disabled={!canEditVersion} value={versionForm.negative_prompt} onChange={(event) => setVersionForm((prev) => ({ ...prev, negative_prompt: event.target.value }))} rows={4} /></div>
               </div>

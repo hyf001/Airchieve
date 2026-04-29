@@ -164,8 +164,6 @@ def _version_response(version) -> ImageStyleVersionResponse:
         id=version.id,
         image_style_id=version.image_style_id,
         version_no=version.version_no,
-        style_summary=version.style_summary,
-        style_description=version.style_description,
         generation_prompt=version.generation_prompt,
         negative_prompt=version.negative_prompt,
         reference_images=[_reference_response(image) for image in version.reference_images],
@@ -411,8 +409,6 @@ async def create_style_version_endpoint(
     try:
         version = await create_style_version(
             style_id=style_id,
-            style_summary=req.style_summary,
-            style_description=req.style_description,
             generation_prompt=req.generation_prompt,
             negative_prompt=req.negative_prompt,
             reference_images=[
@@ -458,8 +454,6 @@ async def update_style_version_endpoint(
         version = await update_style_version(
             style_id=style_id,
             version_id=version_id,
-            style_summary=req.style_summary if "style_summary" in fields else UNSET,
-            style_description=req.style_description if "style_description" in fields else UNSET,
             generation_prompt=req.generation_prompt if "generation_prompt" in fields else UNSET,
             negative_prompt=req.negative_prompt if "negative_prompt" in fields else UNSET,
         )

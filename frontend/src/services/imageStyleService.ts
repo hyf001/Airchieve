@@ -92,8 +92,6 @@ export interface ImageStyleVersion {
   id: number;
   image_style_id: number;
   version_no: string;
-  style_summary: string | null;
-  style_description: string | null;
   generation_prompt: string | null;
   negative_prompt: string | null;
   reference_images: ReferenceImage[];
@@ -122,16 +120,12 @@ export interface UpdateImageStyleRequest {
 }
 
 export interface CreateImageStyleVersionRequest {
-  style_summary?: string | null;
-  style_description?: string | null;
   generation_prompt?: string | null;
   negative_prompt?: string | null;
   reference_images?: ReferenceImageCreate[];
 }
 
 export interface UpdateImageStyleVersionRequest {
-  style_summary?: string | null;
-  style_description?: string | null;
   generation_prompt?: string | null;
   negative_prompt?: string | null;
 }

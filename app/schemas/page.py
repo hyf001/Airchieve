@@ -3,25 +3,16 @@ Page & Layer Schemas
 页面与图层的 Pydantic 请求/响应模型
 """
 from datetime import datetime
-from typing import NotRequired, Optional, TypedDict, Union
+from typing import Optional, Union
 
 from pydantic import BaseModel, Field
+
+from app.schemas.storyboard import Storyboard
 
 
 # ---------------------------------------------------------------------------
 # Page Schemas
 # ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
-# Storyboard (TypedDict, 供 StorybookPage 和 ORM 共用)
-# ---------------------------------------------------------------------------
-
-class Storyboard(TypedDict):
-    summary: NotRequired[str]  # 当前页视觉摘要，用于图片生成；旧数据可能不存在
-    scene: str       # 场景环境
-    characters: str  # 人物动作、姿态、表情
-    shot: str        # 景别构图
-
 
 class StorybookPage(BaseModel):
     """创建绘本时的页面输入（前端请求体）"""

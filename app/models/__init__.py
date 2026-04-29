@@ -28,7 +28,8 @@ from app.models.image_style import (
     ImageStyleVersionStatus,
 )
 # 页面与图层
-from app.models.page import Page, Storyboard, JsonText
+from app.db.base import JsonText
+from app.models.page import Page, Storyboard
 from app.models.layer import Layer
 from app.models.enums import LayerType
 

@@ -22,6 +22,7 @@ from app.services.points_service import (
     check_creation_points,
     consume_for_page_edit,
 )
+from app.services.visual_anchor_service import anchors_for_storyboard
 
 logger = get_logger(__name__)
 
@@ -104,11 +105,14 @@ def format_storyboard_for_prompt(storyboard: Optional[Storyboard]) -> str:
     """将页面分镜整理为图片生成 prompt 片段。"""
     if not storyboard:
         return ""
+    must_include = ", ".join(storyboard.get("must_include") or [])
+    avoid = ", ".join(storyboard.get("avoid") or [])
     return (
         f"Summary: {storyboard.get('summary', '')}\n"
-        f"Scene: {storyboard.get('scene', '')}\n"
-        f"Characters: {storyboard.get('characters', '')}\n"
-        f"Shot: {storyboard.get('shot', '')}"
+        f"Visual brief: {storyboard.get('visual_brief', '')}\n"
+        f"Must include: {must_include}\n"
+        f"Composition: {storyboard.get('composition', '')}\n"
+        f"Avoid: {avoid}"
     )
 
 
@@ -468,6 +472,7 @@ async def run_regenerate_page_background(
                     aspect_ratio=aspect_ratio,
                     image_size=image_size,
                     image_instruction=image_instruction,
+                    visual_anchors=anchors_for_storyboard(page.storyboard, storybook.visual_anchors),
                 )
 
             page.image_url = image_url

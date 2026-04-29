@@ -29,14 +29,14 @@ const mockStyles = [
 
 const draftVersion = {
   id: 12, image_style_id: 1, version_no: "v2", status: "draft",
-  style_summary: "草稿摘要", style_description: "描述", generation_prompt: "提示词",
+  generation_prompt: "提示词",
   negative_prompt: "负面", reference_images: [], creator: "admin",
   created_at: "2026-01-03T00:00:00Z", published_at: null,
 };
 
 const publishedVersion = {
   id: 11, image_style_id: 1, version_no: "v1", status: "published",
-  style_summary: "已发布摘要", style_description: "描述", generation_prompt: "提示词",
+  generation_prompt: "提示词",
   negative_prompt: "负面", reference_images: [], creator: "admin",
   created_at: "2026-01-01T00:00:00Z", published_at: "2026-01-01T12:00:00Z",
 };

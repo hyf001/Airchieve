@@ -30,8 +30,6 @@ CREATE TABLE IF NOT EXISTS image_style_versions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     image_style_id INTEGER NOT NULL,
     version_no VARCHAR(32) NOT NULL,
-    style_summary TEXT NULL,
-    style_description TEXT NULL,
     generation_prompt TEXT NULL,
     negative_prompt TEXT NULL,
     status VARCHAR(32) NOT NULL DEFAULT 'draft',

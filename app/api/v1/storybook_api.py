@@ -116,14 +116,16 @@ async def generate_storyboard_endpoint(
     前端可预览和编辑后，再调用创建绘本接口生成图片。
     """
     try:
-        story_texts, storyboards = await create_storyboard_only(
+        story_texts, storyboards, visual_anchors = await create_storyboard_only(
             story_content=req.story_content,
             page_count=req.page_count,
             cli_type=req.cli_type,
             image_style_id=req.image_style_id,
+            has_character_reference_images=req.has_character_reference_images,
         )
 
         return GenerateStoryboardResponse(
+            visual_anchors=visual_anchors,
             storyboards=[
                 StoryboardItemResponse(
                     text=req.title or "封面",
@@ -176,6 +178,8 @@ async def create_storybook_from_story_endpoint(
             cli_type=req.cli_type,
             aspect_ratio=req.aspect_ratio,
             image_size=req.image_size,
+            visual_anchors=req.visual_anchors,
+            has_character_reference_images=bool(req.images),
         )
     except InsufficientPointsError as e:
         raise HTTPException(

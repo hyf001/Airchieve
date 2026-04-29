@@ -114,9 +114,10 @@ class TestPromptHelpers:
         page = make_page(1, PageType.COVER, text="月亮船")
         page.storyboard = {
             "summary": "孩子坐着月亮船飞过夜空",
-            "scene": "夜空",
-            "characters": "孩子坐在月亮船上",
-            "shot": "远景",
+            "visual_brief": "孩子坐着月亮船飞过夜空",
+            "must_include": ["孩子", "月亮船"],
+            "composition": "远景",
+            "avoid": ["文字"],
         }
 
         result = page_service.build_cover_description("备用标题", page)
@@ -124,12 +125,13 @@ class TestPromptHelpers:
         assert result.startswith("月亮船")
         assert "Cover storyboard:" in result
         assert "Summary: 孩子坐着月亮船飞过夜空" in result
-        assert "Scene: 夜空" in result
-        assert "Characters: 孩子坐在月亮船上" in result
+        assert "Visual brief: 孩子坐着月亮船飞过夜空" in result
+        assert "Must include: 孩子, 月亮船" in result
+        assert "Composition: 远景" in result
 
 
 class TestStoryboardSchemaCompatibility:
-    def test_page_response_accepts_legacy_storyboard_without_summary(self):
+    def test_page_response_accepts_phase_2_storyboard(self):
         result = PageResponse.model_validate({
             "id": 1,
             "storybook_id": 1,
@@ -140,20 +142,24 @@ class TestStoryboardSchemaCompatibility:
             "status": "finished",
             "error_message": None,
             "storyboard": {
-                "scene": "森林",
-                "characters": "小熊走路",
-                "shot": "中景",
-                "color": "旧色调",
-                "lighting": "旧光线",
+                "summary": "小熊走过森林",
+                "visual_brief": "小熊沿着森林小路前进",
+                "anchor_refs": ["bear_01"],
+                "must_include": ["小熊", "森林小路"],
+                "composition": "中景",
+                "avoid": ["文字"],
             },
             "created_at": datetime.now(),
             "updated_at": datetime.now(),
         })
 
         assert result.storyboard == {
-            "scene": "森林",
-            "characters": "小熊走路",
-            "shot": "中景",
+            "summary": "小熊走过森林",
+            "visual_brief": "小熊沿着森林小路前进",
+            "anchor_refs": ["bear_01"],
+            "must_include": ["小熊", "森林小路"],
+            "composition": "中景",
+            "avoid": ["文字"],
         }
 
 

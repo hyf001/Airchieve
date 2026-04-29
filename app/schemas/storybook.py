@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field
 
 from app.models.enums import AgeGroup, AspectRatio, CliType, ImageSize, Language, StoryType
 from app.schemas.page import StorybookPage
+from app.schemas.storyboard import Storyboard
+from app.schemas.visual_anchor import VisualAnchor
 
 
 class StorybookPagePreviewResponse(BaseModel):
@@ -21,7 +23,7 @@ class StorybookPagePreviewResponse(BaseModel):
     page_type: Optional[str] = Field(None, description="页面类型")
     status: Optional[str] = Field(None, description="页面生成状态")
     error_message: Optional[str] = Field(None, description="页面错误信息")
-    storyboard: Optional[dict] = Field(None, description="分镜信息")
+    storyboard: Optional[Storyboard] = Field(None, description="分镜信息")
 
 
 class StorybookResponse(BaseModel):
@@ -41,6 +43,7 @@ class StorybookResponse(BaseModel):
     image_style_version_id: Optional[int] = None
     image_style_name: Optional[str] = None
     image_style_cover_image: Optional[str] = None
+    visual_anchors: Optional[list[VisualAnchor]] = None
     cli_type: CliType
     aspect_ratio: AspectRatio
     image_size: ImageSize
@@ -152,6 +155,7 @@ class CreateStorybookFromStoryRequest(BaseModel):
     template_id: Optional[int] = Field(None, description="已废弃：旧模板ID")
     image_style_id: Optional[int] = Field(None, description="图片风格ID")
     images: Optional[list[str]] = Field(None, description="参考图片列表（base64）")
+    visual_anchors: Optional[list[VisualAnchor]] = Field(None, description="绘本级轻量视觉锚点")
     cli_type: CliType = Field(CliType.GEMINI, description="CLI类型")
     aspect_ratio: AspectRatio = Field(AspectRatio.RATIO_16_9, description="图片比例")
     image_size: ImageSize = Field(ImageSize.SIZE_1K, description="图片尺寸")
@@ -165,15 +169,17 @@ class GenerateStoryboardRequest(BaseModel):
     page_count: int = Field(10, ge=1, le=20, description="页数")
     cli_type: CliType = Field(CliType.GEMINI, description="CLI类型")
     image_style_id: int = Field(..., description="图片风格ID")
+    has_character_reference_images: bool = Field(False, description="是否存在角色参考图")
 
 
 class StoryboardItemResponse(BaseModel):
     """分镜项响应"""
     text: str = Field(..., description="页面文本")
-    storyboard: Optional[dict] = Field(None, description="分镜信息")
+    storyboard: Optional[Storyboard] = Field(None, description="分镜信息")
     page_type: str = Field("content", description="页面类型：cover/content")
 
 
 class GenerateStoryboardResponse(BaseModel):
     """生成分镜响应"""
     storyboards: list[StoryboardItemResponse] = Field(..., description="分镜列表")
+    visual_anchors: list[VisualAnchor] = Field(default_factory=list, description="绘本级轻量视觉锚点")

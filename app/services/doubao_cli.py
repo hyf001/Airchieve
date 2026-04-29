@@ -7,7 +7,7 @@ import json
 import re
 from typing import List, Optional, Tuple, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from volcenginesdkarkruntime import Ark
 
@@ -18,6 +18,13 @@ from app.models.page import Storyboard, Page
 from app.models.template import Template
 from app.models.image_style import ImageStyleVersion
 from app.models.enums import PageType, StoryType, Language, AgeGroup
+from app.schemas.visual_anchor import VisualAnchor
+from app.services.visual_anchor_service import (
+    clean_storyboards_anchor_refs,
+    format_anchors_for_prompt,
+    normalize_storyboard,
+    normalize_visual_anchors,
+)
 
 logger = get_logger(__name__)
 
@@ -67,6 +74,7 @@ def _build_image_prompt(
     page_index: int,
     template: Optional[Template] = None,
     image_style_version: Optional[ImageStyleVersion] = None,
+    visual_anchors: Optional[List[VisualAnchor]] = None,
 ) -> str:
     """构建图片生成的 prompt"""
     visual_summary = story_text
@@ -74,47 +82,69 @@ def _build_image_prompt(
         visual_summary = storyboard.get("summary") or story_text
 
     if storyboard:
+        must_include = "、".join(storyboard.get("must_include") or [])
+        avoid = "、".join(storyboard.get("avoid") or [])
         storyboard_desc = (
             f"【当前页视觉摘要】\n{visual_summary}\n\n"
             f"【当前页分镜】\n"
-            f"- 场景：{storyboard.get('scene', '')}\n"
-            f"- 角色：{storyboard.get('characters', '')}\n"
-            f"- 构图：{storyboard.get('shot', '')}"
+            f"- 画面目标：{storyboard.get('visual_brief', '')}\n"
+            f"- 必须出现：{must_include}\n"
+            f"- 构图：{storyboard.get('composition', '')}\n"
+            f"- 避免出现：{avoid}"
         )
     else:
-        storyboard_desc = f"【当前页视觉摘要】\n{visual_summary}\n\n【当前页分镜】\n- 场景：\n- 角色：\n- 构图："
+        storyboard_desc = f"【当前页视觉摘要】\n{visual_summary}\n\n【当前页分镜】\n- 画面目标：\n- 必须出现：\n- 构图：\n- 避免出现："
 
-    style_lines = []
-    if template and template.name:
-        style_lines.append(f"- 模板风格：{template.name}")
-        if template.description:
-            style_lines.append(f"- 模板描述：{template.description}")
-    if image_style_version:
-        if image_style_version.style_description:
-            style_lines.append(f"- 锁定画风描述：{image_style_version.style_description}")
-        if image_style_version.generation_prompt:
-            style_lines.append(f"- 画风生成提示词：{image_style_version.generation_prompt}")
-        if image_style_version.negative_prompt:
-            style_lines.append(f"- 负面提示词：{image_style_version.negative_prompt}")
-    locked_style = "\n".join(style_lines) if style_lines else "- 使用所选儿童绘本画风"
+    style_prompt = _format_style_prompt(template, image_style_version)
+    anchor_prompt = format_anchors_for_prompt(visual_anchors or [], language="zh")
 
     prompt = (
         "你是一名专业儿童绘本插画师。\n\n"
-        "【优先级规则，必须严格遵守】\n"
-        "1. 第一优先级：跨页视觉连续性\n"
-        "2. 第二优先级：锁定画风\n"
-        "3. 第三优先级：当前页视觉摘要和分镜\n"
-        "4. 第四优先级：用户明确的图片调整指令\n\n"
-        "如果提供了上一页图片，上一页图片是最重要的连续性参考。必须尽量保持已建立的角色外观、关键物外观、画风、色彩体系和场景延续。\n"
-        "除非用户明确要求改变，否则不要改变已经建立的视觉身份。\n\n"
+        "先保证跨页连续性和角色参考图的可辨识度，再自然融入本页分镜、视觉锚点和画风参考。\n"
+        "如果提供了上一页图片，请沿用已经建立的角色外观、关键物、画风、色彩和场景气质；只有用户明确要求时才改变。\n\n"
         f"【当前任务】\n为第{page_index + 1}页 / 共{len(story_context)}页生成一张儿童绘本内页插画。\n\n"
         f"{storyboard_desc}\n\n"
-        f"【锁定画风】\n{locked_style}\n\n"
+        f"【当前页视觉锚点】\n{anchor_prompt}\n\n"
+        "【锚点边界规则】\n"
+        "- 锚点只是少量重复角色或关键物的轻量连续性提示。\n"
+        "- 如果锚点和上一页图片冲突，以上一页图片为准。\n"
+        "- 如果锚点和角色参考图冲突，以角色参考图为准。\n"
+        "- 颜色锚点只做粗粒度提示，最终颜色以已生成图片连续性为准。\n"
+        "- 不要把锚点扩展成额外剧情、额外物品或硬性构图要求。\n\n"
+        f"【画风参考】\n{style_prompt}\n\n"
         "【禁止】\n"
         "- 图片中不要出现任何文字、字母、标题、标签、边框。\n"
         "- 只画当前页，不要把其他页面的内容画进来。\n"
         "- 角色参考图片只用于保持角色身份、外观特征和可辨识性，不要从中学习画风、色调、背景复杂度或构图。"
     )
+    return prompt
+
+
+def _format_style_prompt(
+    template: Optional[Template] = None,
+    image_style_version: Optional[ImageStyleVersion] = None,
+) -> str:
+    """将画风配置压成更自然的绘画指令，避免字段堆叠。"""
+    cues = []
+    if template and template.name:
+        template_text = template.name
+        if template.description:
+            template_text += f"：{template.description}"
+        cues.append(template_text)
+    if image_style_version:
+        if image_style_version.generation_prompt:
+            cues.append(image_style_version.generation_prompt)
+
+    style_text = "；".join(cue.strip() for cue in cues if cue and cue.strip())
+    if not style_text:
+        style_text = "使用温暖、有童趣、适合儿童绘本的插画风格。"
+
+    prompt = (
+        f"{style_text}\n"
+        "把这些画风信息当作整体氛围、媒介质感、线条、色彩和细节密度的参考，自然服务于当前页画面；不要机械照抄参考图的具体人物、构图或场景。"
+    )
+    if image_style_version and image_style_version.negative_prompt:
+        prompt += f"\n尽量避免：{image_style_version.negative_prompt}"
     return prompt
 
 
@@ -174,9 +204,19 @@ async def _async_image_generate(**kwargs) -> str:
 class _StoryboardDetail(BaseModel):
     """分镜描述结构，与 Storyboard TypedDict 对齐"""
     summary: str
-    scene: str
-    characters: str
-    shot: str
+    visual_brief: str = ""
+    anchor_refs: list[str] = Field(default_factory=list)
+    must_include: list[str] = Field(default_factory=list)
+    composition: str = ""
+    avoid: list[str] = Field(default_factory=list)
+
+
+class _VisualAnchorItem(BaseModel):
+    id: str
+    type: str
+    name: str
+    description: str = ""
+    key_attributes: list[str] = Field(default_factory=list)
 
 
 class _StoryResponse(BaseModel):
@@ -193,6 +233,7 @@ class _StoryboardItem(BaseModel):
 
 class _StoryboardResponse(BaseModel):
     """分镜响应"""
+    anchors: list[_VisualAnchorItem] = Field(default_factory=list)
     pages: list[_StoryboardItem]
 
 
@@ -338,8 +379,8 @@ def _build_story_system_prompt(
 def _build_storyboard_system_prompt(
     page_count: int,
     style_name: Optional[str] = None,
-    style_summary: Optional[str] = None,
-    storyboard_complexity: Optional[str] = None,
+    style_reference_image_count: int = 0,
+    has_character_reference_images: bool = False,
 ) -> str:
     """构建分镜生成的 system prompt"""
     prompt = (
@@ -349,19 +390,26 @@ def _build_storyboard_system_prompt(
         f"将提供的故事内容拆分为{page_count}页，并为每一页创建视觉分镜描述。\n"
         "核心约束：分镜必须与原故事保持高度一致，情节、角色、场景严格按原文顺序推进，绝无错位。\n\n"
         "## 输出格式\n"
-        "返回以下结构的 JSON 数组：\n"
+        "返回以下结构的 JSON 对象：\n"
         "```\n"
-        "[\n"
-        "  {\n"
-        '    "text": "该页的故事文本（从原故事中提取或精炼，保持原文情感和语调）",\n'
-        '    "storyboard": {\n'
-        '      "summary": "给图片生成使用的一句话视觉摘要",\n'
-        '      "scene": "场景环境描述，必须与原文描述的场景一致",\n'
-        '      "characters": "角色动作、姿态和表情描述，必须与原文中该页的角色状态一致",\n'
-        '      "shot": "镜头类型和构图"\n'
+        "{\n"
+        '  "anchors": [\n'
+        '    {"id": "bear_01", "type": "character", "name": "小熊", "description": "短视觉设定", "key_attributes": ["粗粒度颜色或形状"]}\n'
+        "  ],\n"
+        '  "pages": [\n'
+        "    {\n"
+        '      "text": "该页的故事文本（从原故事中提取或精炼，保持原文情感和语调）",\n'
+        '      "storyboard": {\n'
+        '        "summary": "给图片生成使用的一句话视觉摘要",\n'
+        '        "visual_brief": "自然语言画面目标",\n'
+        '        "anchor_refs": ["bear_01"],\n'
+        '        "must_include": ["少量必须出现的元素"],\n'
+        '        "composition": "轻量构图要求",\n'
+        '        "avoid": ["禁止出现的内容"]\n'
+        "      }\n"
         "    }\n"
-        "  }\n"
-        "]\n"
+        "  ]\n"
+        "}\n"
         "```\n\n"
         "## 约束条件\n"
         f"- 页数：恰好{page_count}页\n"
@@ -372,15 +420,21 @@ def _build_storyboard_system_prompt(
         "- 分镜 JSON key 保持英文，但内容（描述文本）必须使用中文\n"
         "- summary 字段：一句话说明当前页要画什么，只保留可视化信息（角色、动作、关键物、场景、情绪），30-60字；不写心理活动、旁白解释、抽象主题或长对话\n"
         "- 各页之间保持视觉连贯性\n"
-        "- 'characters'字段：仅描述角色的动作、姿态和表情"
+        "- 不要输出 scene、characters、shot、color、lighting 字段\n"
+        "- 锚点只是轻量连续性提示，不是强视觉真相\n"
+        "- 锚点类型只允许 character 或 object，禁止 scene 锚点\n"
+        f"- has_character_reference_images={str(has_character_reference_images).lower()}；如果为 true，禁止生成 character 锚点\n"
+        "- 没有角色参考图时，character 锚点最多 3 个\n"
+        "- object 锚点最多 5 个，只保留多页出现或剧情关键物\n"
+        "- 每页 anchor_refs 最多 3 个，且必须引用 anchors 中已存在的 id\n"
+        "- 颜色只做粗粒度提示，不写精确色值或复杂色彩修饰"
     )
-    if style_name or style_summary:
+    if style_name or style_reference_image_count:
         prompt += (
             "\n\n## 画风弱参考\n"
-            "以下画风信息只用于影响画面表达复杂度，不得改变故事内容、人物关系或事件顺序。\n"
+            "画风参考图只用于影响分镜的画面密度、媒介质感和场景复杂度，不得改变故事内容、人物关系或事件顺序。\n"
             f"- 画风名称：{style_name or ''}\n"
-            f"- 画风摘要：{style_summary or ''}\n"
-            f"- 分镜复杂度建议：{storyboard_complexity or ''}"
+            f"- 画风参考图数量：{style_reference_image_count}"
         )
     return prompt
 
@@ -404,9 +458,11 @@ def _build_insertion_system_prompt(count: int, template: Optional[Template] = No
         '    "text": "故事叙述文本",\n'
         '    "storyboard": {\n'
         '      "summary": "给图片生成使用的一句话视觉摘要",\n'
-        '      "scene": "场景环境描述",\n'
-        '      "characters": "角色动作、姿态和表情",\n'
-        '      "shot": "镜头类型和构图"\n'
+        '      "visual_brief": "自然语言画面目标",\n'
+        '      "anchor_refs": [],\n'
+        '      "must_include": ["少量必须出现的元素"],\n'
+        '      "composition": "轻量构图要求",\n'
+        '      "avoid": ["禁止出现的内容"]\n'
         "    }\n"
         "  }\n"
         "]\n"
@@ -414,6 +470,8 @@ def _build_insertion_system_prompt(count: int, template: Optional[Template] = No
         f"- 数量：恰好{count}个画面\n"
         "- 分镜 JSON key 保持英文，但内容（描述文本）必须使用中文\n"
         "- summary 字段：一句话说明当前页要画什么，只保留可视化信息，30-60字，不写心理活动、旁白解释、抽象主题或长对话\n"
+        "- 不要输出 scene、characters、shot、color、lighting 字段\n"
+        "- 未明确提供整本锚点表时，anchor_refs 保持空数组\n"
         "- 叙事流畅：新画面应自然衔接前后页面\n"
         "- 每个画面必须同时包含'text'和'storyboard'字段"
     )
@@ -474,9 +532,9 @@ class DoubaoCli(LLMClientBase):
         story_content: str,
         page_count: int = 10,
         style_name: Optional[str] = None,
-        style_summary: Optional[str] = None,
-        storyboard_complexity: Optional[str] = None,
-    ) -> Tuple[List[str], List[Optional[Storyboard]]]:
+        style_reference_images: Optional[List[str]] = None,
+        has_character_reference_images: bool = False,
+    ) -> Tuple[List[str], List[Optional[Storyboard]], List[VisualAnchor]]:
         """基于故事内容创建分镜描述"""
         if not settings.DOUBAO_TEXT_MODEL:
             raise DoubaoTechnicalError(
@@ -490,22 +548,34 @@ class DoubaoCli(LLMClientBase):
         system_prompt = _build_storyboard_system_prompt(
             page_count,
             style_name=style_name,
-            style_summary=style_summary,
-            storyboard_complexity=storyboard_complexity,
+            style_reference_image_count=len(style_reference_images or []),
+            has_character_reference_images=has_character_reference_images,
         )
         user_prompt = (
             f"故事内容：\n{story_content}\n\n"
-            f"所选画风摘要：{style_summary or '无'}\n\n"
-            f"任务：将这个故事拆分为{page_count}页，并为每一页创建视觉分镜描述。\n"
-            f"返回包含{page_count}个页面对象的 JSON，外层用 pages 字段包裹。"
+            f"任务：将这个故事拆分为{page_count}页，并为每一页创建视觉分镜描述和轻量视觉锚点。\n"
+            f"返回包含 anchors 和 pages 的 JSON 对象，其中 pages 恰好 {page_count} 个页面对象。"
         )
+        user_content: object = user_prompt
+        if style_reference_images:
+            user_content = [
+                {"type": "text", "text": (
+                    f"{user_prompt}\n\n"
+                    f"下面提供 {len(style_reference_images)} 张画风参考图。只用它们判断分镜画面密度、媒介质感、色彩气质和背景复杂度；"
+                    "不要复制图中的具体人物、场景、构图、文字或物体。"
+                )},
+                *[
+                    {"type": "image_url", "image_url": {"url": image_url}}
+                    for image_url in style_reference_images
+                ],
+            ]
 
         resp = await _async_chat_parse(
             response_format=_StoryboardResponse,
             model=settings.DOUBAO_TEXT_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
+                {"role": "user", "content": user_content},
             ],
             max_tokens=20480,
             # extra_body={
@@ -520,11 +590,16 @@ class DoubaoCli(LLMClientBase):
         for item in resp.pages:
             story_texts.append(item.text)
             if item.storyboard:
-                storyboards.append(item.storyboard.model_dump())  # type: ignore[arg-type]
+                storyboards.append(normalize_storyboard(item.storyboard.model_dump(), item.text))  # type: ignore[arg-type]
             else:
                 storyboards.append(None)
-        logger.info("分镜解析完成 | pages=%d", len(storyboards))
-        return story_texts, storyboards
+        visual_anchors = normalize_visual_anchors(
+            [anchor.model_dump() for anchor in resp.anchors],
+            has_character_reference_images=has_character_reference_images,
+        )
+        storyboards = clean_storyboards_anchor_refs(storyboards, visual_anchors)
+        logger.info("分镜解析完成 | pages=%d anchors=%d", len(storyboards), len(visual_anchors))
+        return story_texts, storyboards, visual_anchors
 
     async def create_insertion_story_and_storyboard(
         self,
@@ -592,7 +667,7 @@ class DoubaoCli(LLMClientBase):
                     if isinstance(item, dict):
                         story_texts.append(item.get("text", ""))
                         sb = item.get("storyboard")
-                        storyboards.append(sb if isinstance(sb, dict) else None)  # type: ignore[arg-type]
+                        storyboards.append(normalize_storyboard(sb, item.get("text", "")))  # type: ignore[arg-type]
                 logger.info("插入页面解析完成 | count=%d", len(story_texts))
                 return story_texts, storyboards
         except (ValueError, json.JSONDecodeError) as e:
@@ -617,6 +692,7 @@ class DoubaoCli(LLMClientBase):
         aspect_ratio: str = "16:9",
         image_size: str = "1k",
         image_instruction: str = "",
+        visual_anchors: Optional[List[VisualAnchor]] = None,
     ) -> str:
         """生成单页图片，返回 base64 data URL"""
         logger.info("生成第 %d 页图片 | text=%s ref=%s prev=%s",
@@ -649,6 +725,7 @@ class DoubaoCli(LLMClientBase):
             page_index,
             template,
             image_style_version,
+            visual_anchors,
         )
         if image_instruction:
             prompt += (
@@ -779,12 +856,7 @@ class DoubaoCli(LLMClientBase):
             f"- 图片中除书名外不要出现其他文字或字母"
         )
         if image_style_version:
-            if image_style_version.style_description:
-                prompt += f"\n- 锁定画风描述：{image_style_version.style_description}"
-            if image_style_version.generation_prompt:
-                prompt += f"\n- 画风生成提示词：{image_style_version.generation_prompt}"
-            if image_style_version.negative_prompt:
-                prompt += f"\n- 负面提示词：{image_style_version.negative_prompt}"
+            prompt += f"\n\n画风参考：\n{_format_style_prompt(image_style_version=image_style_version)}"
         if image_instruction:
             prompt += (
                 f"\n\n【用户封面调整指令】{image_instruction}\n"
@@ -815,8 +887,8 @@ class DoubaoCli(LLMClientBase):
         style_reference_images = _style_reference_urls(image_style_version)
         if style_reference_images:
             prompt += (
-                f"\n\n【锁定画风参考】已提供{len(style_reference_images)}张画风参考图，"
-                "只学习整体视觉风格、媒介质感、色彩、线条和氛围，不复制具体人物、文字、构图或场景。"
+                f"\n\n【画风参考图】已提供{len(style_reference_images)}张画风参考图，"
+                "请参考整体媒介质感、色彩、线条和氛围，不复制具体人物、文字、构图或场景。"
             )
             input_images.extend(style_reference_images)
             logger.info("封面添加画风参考图 | count=%d", len(style_reference_images))
@@ -912,22 +984,25 @@ class DoubaoCli(LLMClientBase):
             "```\n"
             "{\n"
             '  "summary": "给图片生成使用的一句话视觉摘要",\n'
-            '  "scene": "场景环境描述",\n'
-            '  "characters": "角色动作、姿态和表情",\n'
-            '  "shot": "镜头类型和构图"\n'
+            '  "visual_brief": "自然语言画面目标",\n'
+            '  "anchor_refs": [],\n'
+            '  "must_include": ["少量必须出现的元素"],\n'
+            '  "composition": "轻量构图要求",\n'
+            '  "avoid": ["禁止出现的内容"]\n'
             "}\n"
             "```\n\n"
             "约束：\n"
             "- 分镜字段必须使用中文\n"
             "- summary 字段：一句话说明当前页要画什么，只保留可视化信息（角色、动作、关键物、场景、情绪），30-60字；不写心理活动、旁白解释、抽象主题或长对话\n"
-            "- 'characters'字段：仅描述角色的动作、姿态和表情\n"
+            "- 不要输出 scene、characters、shot、color、lighting 字段\n"
+            "- 未提供整本锚点表时，anchor_refs 保持空数组\n"
             "- 与前后页保持视觉连贯性"
         )
 
         user_prompt = f"{full_context}\n\n当前页（第{page_index + 1}页）文本：{page_text}\n\n请为这一页创建视觉分镜描述。\n"
         if instruction:
             user_prompt += f"用户调整指令：{instruction}\n"
-        user_prompt += "\n返回 JSON 对象，字段只能包含 summary、scene、characters、shot。"
+        user_prompt += "\n返回 JSON 对象，字段只能包含 summary、visual_brief、anchor_refs、must_include、composition、avoid。"
 
         raw_text = await _async_chat_create(
             model=settings.DOUBAO_TEXT_MODEL,
@@ -939,9 +1014,10 @@ class DoubaoCli(LLMClientBase):
 
         try:
             data = _parse_json_response(raw_text)
-            if isinstance(data, dict) and "scene" in data:
+            normalized = normalize_storyboard(data, page_text)
+            if normalized and normalized.get("summary"):
                 logger.info("第 %d 页分镜重新生成完成", page_index + 1)
-                return data  # type: ignore[return-value]
+                return normalized  # type: ignore[return-value]
         except (ValueError, json.JSONDecodeError) as e:
             logger.warning("分镜 JSON 解析失败: %s", e)
 

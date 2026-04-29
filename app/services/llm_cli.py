@@ -9,6 +9,7 @@ from app.models.page import Storyboard, Page
 from app.models.template import Template
 from app.models.image_style import ImageStyleVersion
 from app.models.enums import CliType, StoryType, Language, AgeGroup
+from app.schemas.visual_anchor import VisualAnchor
 
 
 # ============ 通用 LLM 异常基类 ============
@@ -69,6 +70,7 @@ class LLMClientBase(ABC):
         aspect_ratio: str = "16:9",
         image_size: str = "1k",
         image_instruction: str = "",
+        visual_anchors: Optional[List[VisualAnchor]] = None,
     ) -> str:
         """
         生成单页图片
@@ -85,6 +87,7 @@ class LLMClientBase(ABC):
             aspect_ratio: 图片比例
             image_size: 图片尺寸
             image_instruction: 用户图片调整指令
+            visual_anchors: 当前页引用的轻量视觉锚点
 
         Returns:
             str: 生成的图片URL（base64 data URL）
@@ -145,9 +148,9 @@ class LLMClientBase(ABC):
         story_content: str,
         page_count: int = 10,
         style_name: Optional[str] = None,
-        style_summary: Optional[str] = None,
-        storyboard_complexity: Optional[str] = None,
-    ) -> Tuple[List[str], List[Optional[Storyboard]]]:
+        style_reference_images: Optional[List[str]] = None,
+        has_character_reference_images: bool = False,
+    ) -> Tuple[List[str], List[Optional[Storyboard]], List[VisualAnchor]]:
         """
         基于故事内容创建分镜描述
 
@@ -155,11 +158,11 @@ class LLMClientBase(ABC):
             story_content: 故事内容（纯文本）
             page_count: 需要拆分的页数
             style_name: 画风名称
-            style_summary: 画风摘要
-            storyboard_complexity: 分镜复杂度建议
+            style_reference_images: 画风参考图 URL 列表
+            has_character_reference_images: 是否存在用户上传角色参考图
 
         Returns:
-            Tuple[List[str], List[Optional[Storyboard]]]: (每页故事文本列表, 分镜列表)
+            Tuple[List[str], List[Optional[Storyboard]], List[VisualAnchor]]: (每页故事文本列表, 分镜列表, 绘本级视觉锚点)
         """
         pass
 

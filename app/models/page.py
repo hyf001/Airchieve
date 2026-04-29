@@ -2,61 +2,21 @@
 Page Model
 页面模型（从 Storybook.pages JSON 中独立）
 """
-import json
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, NotRequired, Optional, TypedDict
+from typing import TYPE_CHECKING, Optional
 
-from enum import Enum
-from pydantic import BaseModel
 from sqlalchemy import Integer, String, DateTime, ForeignKey, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.types import TypeDecorator
 
-from app.db.base import Base
+from app.db.base import Base, JsonText
 from app.models.enums import PageStatus, PageType
+from app.schemas.storyboard import Storyboard
 
 if TYPE_CHECKING:
     from app.models.storybook import Storybook
 
 
 __all__ = ["Page", "Storyboard", "JsonText"]
-
-
-class JsonText(TypeDecorator):
-    """以 Text 存储 JSON，兼容低版本 MariaDB"""
-    impl = Text
-    cache_ok = True
-
-    @staticmethod
-    def _to_jsonable(value):
-        if isinstance(value, BaseModel):
-            if hasattr(value, "model_dump"):
-                return JsonText._to_jsonable(value.model_dump(mode="json"))
-            return JsonText._to_jsonable(value.dict())
-        if isinstance(value, Enum):
-            return value.value
-        if isinstance(value, list):
-            return [JsonText._to_jsonable(v) for v in value]
-        if isinstance(value, dict):
-            return {k: JsonText._to_jsonable(v) for k, v in value.items()}
-        return value
-
-    def process_bind_param(self, value, dialect):
-        if value is not None:
-            return json.dumps(self._to_jsonable(value), ensure_ascii=False)
-        return value
-
-    def process_result_value(self, value, dialect):
-        if value is not None:
-            return json.loads(value)
-        return value
-
-
-class Storyboard(TypedDict):
-    summary: NotRequired[str]  # 当前页视觉摘要，用于图片生成；旧数据可能不存在
-    scene: str       # 场景环境
-    characters: str  # 人物动作、姿态、表情
-    shot: str        # 景别构图
 
 
 class Page(Base):

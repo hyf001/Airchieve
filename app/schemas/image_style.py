@@ -139,8 +139,6 @@ class ImageStyleVersionResponse(BaseModel):
     id: int
     image_style_id: int
     version_no: str
-    style_summary: Optional[str]
-    style_description: Optional[str]
     generation_prompt: Optional[str]
     negative_prompt: Optional[str]
     reference_images: list[ReferenceImageResponse]
@@ -175,8 +173,6 @@ class UpdateImageStyleRequest(BaseModel):
 class CreateImageStyleVersionRequest(BaseModel):
     """创建图片风格版本草稿请求"""
 
-    style_summary: Optional[str] = Field(None, description="画风摘要")
-    style_description: Optional[str] = Field(None, description="风格描述")
     generation_prompt: Optional[str] = Field(None, description="生成提示词")
     negative_prompt: Optional[str] = Field(None, description="负面提示词")
     reference_images: list[ReferenceImageCreate] = Field(default_factory=list, description="初始参考图列表")
@@ -185,7 +181,5 @@ class CreateImageStyleVersionRequest(BaseModel):
 class UpdateImageStyleVersionRequest(BaseModel):
     """更新图片风格版本草稿请求"""
 
-    style_summary: Optional[str] = Field(None, description="画风摘要")
-    style_description: Optional[str] = Field(None, description="风格描述")
     generation_prompt: Optional[str] = Field(None, description="生成提示词")
     negative_prompt: Optional[str] = Field(None, description="负面提示词")

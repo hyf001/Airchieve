@@ -140,15 +140,15 @@ describe('imageStyleService', () => {
   // ---- 三期新增 service 测试 ----
 
   it('updates draft version via PUT with partial body', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ id: 11, style_summary: '新摘要' }));
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: 11, generation_prompt: '新提示词' }));
 
-    const result = await updateImageStyleVersion(1, 11, { style_summary: '新摘要' });
+    const result = await updateImageStyleVersion(1, 11, { generation_prompt: '新提示词' });
 
     const [url, init] = lastFetchCall();
     expect(url).toBe('/api/v1/image-styles/1/versions/11');
     expect(init?.method).toBe('PUT');
-    expect(JSON.parse(init?.body as string)).toEqual({ style_summary: '新摘要' });
-    expect(result.style_summary).toBe('新摘要');
+    expect(JSON.parse(init?.body as string)).toEqual({ generation_prompt: '新提示词' });
+    expect(result.generation_prompt).toBe('新提示词');
   });
 
   it('deletes draft version via DELETE', async () => {

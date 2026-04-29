@@ -92,9 +92,7 @@ def validate_style_version_complete(
         else len(version.reference_images)
     )
     if (
-        _is_blank(version.style_summary)
-        or _is_blank(version.style_description)
-        or _is_blank(version.generation_prompt)
+        _is_blank(version.generation_prompt)
         or _is_blank(version.negative_prompt)
         or image_count <= 0
     ):
@@ -484,8 +482,6 @@ async def update_image_style(
 async def create_style_version(
     style_id: int,
     creator: str,
-    style_summary: Optional[str] = None,
-    style_description: Optional[str] = None,
     generation_prompt: Optional[str] = None,
     negative_prompt: Optional[str] = None,
     reference_images: Optional[list[ReferenceImageInput]] = None,
@@ -509,8 +505,6 @@ async def create_style_version(
         version = ImageStyleVersion(
             image_style_id=style_id,
             version_no=f"v{version_count + 1}",
-            style_summary=style_summary,
-            style_description=style_description,
             generation_prompt=generation_prompt,
             negative_prompt=negative_prompt,
             status="draft",
@@ -544,8 +538,6 @@ async def create_style_version(
 async def update_style_version(
     style_id: int,
     version_id: int,
-    style_summary: Optional[str] | UnsetValue = UNSET,
-    style_description: Optional[str] | UnsetValue = UNSET,
     generation_prompt: Optional[str] | UnsetValue = UNSET,
     negative_prompt: Optional[str] | UnsetValue = UNSET,
 ) -> ImageStyleVersion:
@@ -568,8 +560,6 @@ async def update_style_version(
         _ensure_draft(version, "已发布版本不可编辑，请创建新版本")
 
         for field_name, value in (
-            ("style_summary", style_summary),
-            ("style_description", style_description),
             ("generation_prompt", generation_prompt),
             ("negative_prompt", negative_prompt),
         ):

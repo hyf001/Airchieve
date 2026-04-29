@@ -8,8 +8,9 @@ from typing import TYPE_CHECKING, Literal, Optional
 from sqlalchemy import Integer, String, DateTime, Text, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import Base
+from app.db.base import Base, JsonText
 from app.models.enums import CliType, AspectRatio, ImageSize
+from app.schemas.visual_anchor import VisualAnchor
 
 if TYPE_CHECKING:
     from app.models.page import Page
@@ -44,6 +45,7 @@ class Storybook(Base):
     image_style_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 图片风格ID（预留）
     image_style_version_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 图片风格版本ID（预留）
     is_public: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)  # 是否公开
+    visual_anchors: Mapped[list[VisualAnchor] | None] = mapped_column(JsonText, nullable=True)  # 绘本级轻量视觉锚点
 
     # CLI 配置
     cli_type: Mapped[CliType] = mapped_column(String(32), default=CliType.GEMINI, nullable=False)  # CLI类型

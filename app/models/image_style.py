@@ -112,8 +112,6 @@ class ImageStyleVersion(Base):
     )
 
     version_no: Mapped[str] = mapped_column(String(32), nullable=False)
-    style_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-    style_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     generation_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     negative_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
 
