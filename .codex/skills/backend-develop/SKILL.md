@@ -31,12 +31,12 @@ description: AIrchieve 项目后端开发技能。当处理后端代码（backen
 backend/
   app/
     main.py                 # FastAPI app 创建和路由注册入口
-    api/v1/                 # API 路由层
+    api/v1/                 # API 路由层（按模块 {module}_api.py）
     core/                   # 配置、安全、日志、基础设施
     db/                     # 数据库 engine/session/base
-    model/                  # SQLAlchemy ORM 模型
-    schema/                 # Pydantic 请求/响应/DTO
-    service/                # 业务逻辑层
+    model/{module}/         # ORM 模型层（按模块子目录组织）
+    schema/{module}/        # Pydantic 请求/响应/DTO（按模块子目录组织）
+    service/{module}/       # 业务逻辑层（按模块子目录组织）
   alembic/
     env.py                  # Alembic 异步迁移配置
     versions/               # 数据库迁移文件
@@ -254,17 +254,17 @@ uv run alembic revision --autogenerate -m "describe_change"
 修改已有模块时，先阅读：
 
 - 对应 `api/v1/*_api.py`
-- 对应 `service/*_service.py`
-- 对应 `schema/*.py`
-- 对应 `model/*.py`
+- 对应 `service/{module}/`
+- 对应 `schema/{module}/`
+- 对应 `model/{module}/`
 - `docs/module-design.md` 中的模块边界
 
 ## 命名约定
 
 - API 文件：`{module}_api.py`
-- Service 文件：`{module}_service.py`
-- Model 文件：`{module}.py`
-- Schema 文件：`{module}.py`
+- Service 目录：`service/{module}/`
+- Model 目录：`model/{module}/`
+- Schema 目录：`schema/{module}/`
 - 路由变量统一命名为 `router`
 - 数据库 session 参数统一命名为 `db`
 - 创建 schema：`XxxCreate`

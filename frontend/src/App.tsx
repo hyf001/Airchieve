@@ -2,6 +2,8 @@ import React from "react";
 
 import { useRouter } from "@/app/router";
 import { HomePage } from "@/pages/HomePage";
+import { BookDetailPage } from "@/pages/BookDetailPage";
+import { StoriesPage } from "@/pages/StoriesPage";
 import { AuthPage } from "@/pages/auth/AuthPage";
 import { ProfilesPage } from "@/pages/profiles/ProfilesPage";
 import { SkeletonPage } from "@/pages/prototype/SkeletonPage";
@@ -15,6 +17,14 @@ const App: React.FC = () => {
 
   if (path === "/auth") {
     return <AuthPage />;
+  }
+
+  if (path === "/stories") {
+    return <StoriesPage />;
+  }
+
+  if (path === "/book-detail") {
+    return <BookDetailPage />;
   }
 
   if (path === "/profile") {

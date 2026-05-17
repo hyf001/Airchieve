@@ -1,0 +1,1 @@
+export { RecommendationSlot } from "./RecommendationSlot";

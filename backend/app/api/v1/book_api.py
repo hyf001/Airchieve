@@ -1,0 +1,61 @@
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.v1.account_api import current_user_id
+from app.db.session import get_db
+from app.model.book import BookAccessLevel
+from app.schema.book import (
+    BookDetailRead,
+    BookListRead,
+    BookSimilarCreationRequest,
+    BookSort,
+    SimilarCreationSessionRead,
+)
+from app.service import book
+
+router = APIRouter()
+
+
+@router.get("", response_model=BookListRead)
+async def list_books(
+    q: str | None = None,
+    theme_id: int | None = None,
+    age_range_id: int | None = None,
+    language: str | None = None,
+    access_level: BookAccessLevel | None = None,
+    sort: BookSort = BookSort.FEATURED,
+    limit: int = Query(default=20, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+) -> BookListRead:
+    return await book.list_books(
+        db,
+        q=q,
+        theme_id=theme_id,
+        age_range_id=age_range_id,
+        language=language,
+        access_level=access_level,
+        sort=sort,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/{book_id}", response_model=BookDetailRead)
+async def get_book_detail(book_id: int, db: AsyncSession = Depends(get_db)) -> BookDetailRead:
+    return await book.get_book_detail(db, book_id)
+
+
+@router.post("/{book_id}/similar-creation-session", response_model=SimilarCreationSessionRead)
+async def create_similar_creation_session(
+    book_id: int,
+    payload: BookSimilarCreationRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(current_user_id),
+) -> SimilarCreationSessionRead:
+    return await book.create_session_from_book_reference(
+        db,
+        user_id=user_id,
+        book_id=book_id,
+        payload=payload,
+    )

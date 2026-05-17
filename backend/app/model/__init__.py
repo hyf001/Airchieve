@@ -8,9 +8,12 @@ from app.model.account import (
     User,
 )
 from app.model.audit import AuditLog
+from app.model.book import Book
 from app.model.entitlement import EntitlementQuotaReservation
 from app.model.membership import MembershipPlan, MembershipUsageCounter, UserMembership
 from app.model.payment import PaymentOrder, PaymentRecord, RefundRecord
+from app.model.recommendation import RecommendationItem, RecommendationSlot, RecommendationTopic
+from app.model.story import Story
 
 __all__ = [
     "AccountAuthIdentity",
@@ -18,6 +21,7 @@ __all__ = [
     "AccountSession",
     "AuditLog",
     "Base",
+    "Book",
     "ChildProfile",
     "EntitlementQuotaReservation",
     "MembershipPlan",
@@ -25,7 +29,11 @@ __all__ = [
     "PaymentOrder",
     "PaymentRecord",
     "RefundRecord",
+    "RecommendationItem",
+    "RecommendationSlot",
+    "RecommendationTopic",
     "SmsVerificationCode",
+    "Story",
     "User",
     "UserMembership",
 ]
