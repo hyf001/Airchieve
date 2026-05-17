@@ -78,3 +78,54 @@ class ChildProfileVisibility(StrEnum):
 class ChildProfileStatus(StrEnum):
     ACTIVE = "active"
     DELETED = "deleted"
+
+
+class ChildProfileAgeRange(StrEnum):
+    AGE_3_4 = "age_3_4"
+    AGE_5_6 = "age_5_6"
+    AGE_7_8 = "age_7_8"
+    AGE_9_10 = "age_9_10"
+
+
+class ChildProfileReadingLevel(StrEnum):
+    STARTER = "starter"
+    GROWING = "growing"
+    INDEPENDENT = "independent"
+
+
+class ChildProfileInterestTag(StrEnum):
+    ANIMALS = "animals"
+    FAIRY_TALE = "fairy_tale"
+    MUSIC = "music"
+    SPACE = "space"
+    NATURE = "nature"
+    FRIENDSHIP = "friendship"
+    SCIENCE = "science"
+    ADVENTURE = "adventure"
+
+
+class ChildProfileEducationGoal(StrEnum):
+    EMOTION = "emotion"
+    HABIT = "habit"
+    LANGUAGE = "language"
+    COURAGE = "courage"
+    SOCIAL = "social"
+    CREATIVITY = "creativity"
+
+
+class ChildProfileDefaultCharacter(StrEnum):
+    STAR_CHILD = "star-child"
+    FOREST_FRIEND = "forest-friend"
+    LITTLE_CAPTAIN = "little-captain"
+
+
+class ChildProfileDefaultVoice(StrEnum):
+    WARM_MOM = "warm-mom"
+    STORY_DAD = "story-dad"
+    CLEAR_TEACHER = "clear-teacher"
+
+
+class ChildProfileDefaultArtStyle(StrEnum):
+    WATERCOLOR = "watercolor"
+    CRAYON = "crayon"
+    BEDTIME = "bedtime"

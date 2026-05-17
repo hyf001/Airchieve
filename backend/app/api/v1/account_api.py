@@ -10,7 +10,6 @@ from app.schema.account import (
     CaptchaVerifyResult,
     ChildProfileCreate,
     ChildProfileRead,
-    ChildProfileSummary,
     ChildProfileUpdate,
     PhoneBindRequest,
     PhoneChangeRequest,
@@ -24,22 +23,23 @@ from app.schema.account import (
     WechatBindRequest,
     WechatLoginRequest,
 )
-from app.service import account_service
+from app.service import account as account_service
 
 router = APIRouter()
 
 
 async def current_session(
     authorization: str | None = Header(default=None),
-) -> tuple[str, str]:
+    db: AsyncSession = Depends(get_db),
+) -> tuple[int, int]:
     if not authorization or not authorization.lower().startswith("bearer "):
         from fastapi import HTTPException
 
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="请先登录")
-    return account_service.verify_access_token(authorization.split(" ", 1)[1])
+    return await account_service.verify_active_session(db, authorization.split(" ", 1)[1])
 
 
-async def current_user_id(session: tuple[str, str] = Depends(current_session)) -> str:
+async def current_user_id(session: tuple[int, int] = Depends(current_session)) -> int:
     return session[0]
 
 
@@ -55,7 +55,7 @@ async def register_with_phone(
 async def send_sms_code(
     payload: SmsCodeSendRequest,
     db: AsyncSession = Depends(get_db),
-    user_id: str | None = Depends(lambda: None),
+    user_id: int | None = Depends(lambda: None),
 ) -> SmsCodeSendResult:
     return await account_service.send_sms_code(db, payload, user_id=user_id)
 
@@ -95,7 +95,7 @@ async def refresh_session(
 @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
     db: AsyncSession = Depends(get_db),
-    session: tuple[str, str] = Depends(current_session),
+    session: tuple[int, int] = Depends(current_session),
 ) -> Response:
     await account_service.logout(db, session[1])
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -112,7 +112,7 @@ async def verify_captcha(
 @router.get("/me", response_model=UserRead)
 async def get_me(
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(current_user_id),
+    user_id: int = Depends(current_user_id),
 ) -> UserRead:
     return await account_service.get_current_user(db, user_id)
 
@@ -120,7 +120,7 @@ async def get_me(
 @router.get("/bindings", response_model=list[AuthBindingSummary])
 async def list_bindings(
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(current_user_id),
+    user_id: int = Depends(current_user_id),
 ) -> list[AuthBindingSummary]:
     return await account_service.list_auth_bindings(db, user_id)
 
@@ -129,7 +129,7 @@ async def list_bindings(
 async def bind_phone(
     payload: PhoneBindRequest,
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(current_user_id),
+    user_id: int = Depends(current_user_id),
 ) -> UserRead:
     return await account_service.bind_phone(db, user_id, payload)
 
@@ -138,7 +138,7 @@ async def bind_phone(
 async def change_phone(
     payload: PhoneChangeRequest,
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(current_user_id),
+    user_id: int = Depends(current_user_id),
 ) -> UserRead:
     return await account_service.change_phone(db, user_id, payload)
 
@@ -147,7 +147,7 @@ async def change_phone(
 async def unbind_phone(
     payload: PhoneUnbindRequest,
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(current_user_id),
+    user_id: int = Depends(current_user_id),
 ) -> UserRead:
     return await account_service.unbind_phone(db, user_id, payload)
 
@@ -156,7 +156,7 @@ async def unbind_phone(
 async def bind_wechat(
     payload: WechatBindRequest,
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(current_user_id),
+    user_id: int = Depends(current_user_id),
 ) -> UserRead:
     return await account_service.bind_wechat(db, user_id, payload)
 
@@ -165,25 +165,25 @@ async def bind_wechat(
 async def change_wechat(
     payload: WechatBindRequest,
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(current_user_id),
+    user_id: int = Depends(current_user_id),
 ) -> UserRead:
     return await account_service.change_wechat(db, user_id, payload)
 
 
 @router.delete("/wechat", response_model=UserRead)
 async def unbind_wechat(
-    identity_id: str | None = None,
+    identity_id: int | None = None,
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(current_user_id),
+    user_id: int = Depends(current_user_id),
 ) -> UserRead:
     return await account_service.unbind_wechat(db, user_id, identity_id=identity_id)
 
 
-@router.get("/child-profiles", response_model=list[ChildProfileSummary])
+@router.get("/child-profiles", response_model=list[ChildProfileRead])
 async def list_child_profiles(
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(current_user_id),
-) -> list[ChildProfileSummary]:
+    user_id: int = Depends(current_user_id),
+) -> list[ChildProfileRead]:
     return await account_service.list_child_profiles(db, user_id)
 
 
@@ -191,35 +191,35 @@ async def list_child_profiles(
 async def create_child_profile(
     payload: ChildProfileCreate,
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(current_user_id),
+    user_id: int = Depends(current_user_id),
 ) -> ChildProfileRead:
     return await account_service.create_child_profile(db, user_id, payload)
 
 
 @router.get("/child-profiles/{profile_id}", response_model=ChildProfileRead)
 async def get_child_profile(
-    profile_id: str,
+    profile_id: int,
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(current_user_id),
+    user_id: int = Depends(current_user_id),
 ) -> ChildProfileRead:
     return await account_service.get_child_profile(db, user_id, profile_id)
 
 
 @router.patch("/child-profiles/{profile_id}", response_model=ChildProfileRead)
 async def update_child_profile(
-    profile_id: str,
+    profile_id: int,
     payload: ChildProfileUpdate,
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(current_user_id),
+    user_id: int = Depends(current_user_id),
 ) -> ChildProfileRead:
     return await account_service.update_child_profile(db, user_id, profile_id, payload)
 
 
 @router.delete("/child-profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_child_profile(
-    profile_id: str,
+    profile_id: int,
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(current_user_id),
+    user_id: int = Depends(current_user_id),
 ) -> Response:
     await account_service.delete_child_profile(db, user_id, profile_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -227,8 +227,8 @@ async def delete_child_profile(
 
 @router.post("/child-profiles/{profile_id}/default", response_model=ChildProfileRead)
 async def set_default_child_profile(
-    profile_id: str,
+    profile_id: int,
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(current_user_id),
+    user_id: int = Depends(current_user_id),
 ) -> ChildProfileRead:
     return await account_service.set_default_child_profile(db, user_id, profile_id)

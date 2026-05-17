@@ -7,15 +7,25 @@ from app.model.account import (
     SmsVerificationCode,
     User,
 )
-from app.model.item import Item
+from app.model.audit import AuditLog
+from app.model.entitlement import EntitlementQuotaReservation
+from app.model.membership import MembershipPlan, MembershipUsageCounter, UserMembership
+from app.model.payment import PaymentOrder, PaymentRecord, RefundRecord
 
 __all__ = [
     "AccountAuthIdentity",
     "AccountRiskChallenge",
     "AccountSession",
+    "AuditLog",
     "Base",
     "ChildProfile",
-    "Item",
+    "EntitlementQuotaReservation",
+    "MembershipPlan",
+    "MembershipUsageCounter",
+    "PaymentOrder",
+    "PaymentRecord",
+    "RefundRecord",
     "SmsVerificationCode",
     "User",
+    "UserMembership",
 ]

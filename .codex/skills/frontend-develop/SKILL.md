@@ -1,3 +1,8 @@
+---
+name: frontend-develop
+description: AIrchieve 项目前端开发技能。当处理前端代码（frontend/ 目录）时使用此技能，包括创建组件、页面、功能、UI 改进或任何 React/TypeScript 开发工作。
+---
+
 # AIrchieve 前端开发指南
 
 当处理 `frontend/` 下的 React 前端代码时使用本技能。目标是让前端实现符合项目模块划分、React 开发规范、代码复用和多人协作边界。
@@ -11,7 +16,7 @@
 - 新增或调整前端业务模块。
 - 接入前端 API、状态、路由、表单、权限、会员权益。
 - 根据 `docs/frontend` 原型实现页面。
-- 根据 `docs/frontend/module-design.md` 拆分或落地模块。
+- 根据 `docs/module-design.md` 拆分或落地模块。
 
 不使用本技能的场景：
 
@@ -23,7 +28,7 @@
 
 开始前按需阅读：
 
-- `docs/frontend/module-design.md`：模块划分、分层职责、功能边界、依赖关系。
+- `docs/module-design.md`：前后端统一模块划分、分层职责、功能边界、依赖关系。
 - 对应原型文件：`docs/frontend/*.html`。
 - 当前前端目录：`frontend/src/`。
 - 当前组件风格：`frontend/src/components/ui/`、`frontend/src/components/auth/`、`frontend/src/components/editor/`。
@@ -78,7 +83,7 @@ frontend/src/
 
 - 新的大模块优先按 `app / pages / features / entities / shared` 组织。
 - 对既有小改动，可以先尊重当前目录结构，避免为了一个小需求做大规模迁移。
-- 如果开始实现 PRD 中的完整系统能力，应逐步迁移到 `docs/frontend/module-design.md` 中定义的分层。
+- 如果开始实现 PRD 中的完整系统能力，应逐步迁移到 `docs/module-design.md` 中定义的分层。
 - 页面层只做页面编排，不沉淀复杂业务逻辑。
 - 业务流程放到 `features`。
 - 资源展示和资源基础能力放到 `entities`。
@@ -86,7 +91,7 @@ frontend/src/
 
 ## 5. 模块边界规则
 
-必须遵守 `docs/frontend/module-design.md` 的模块边界。
+必须遵守 `docs/module-design.md` 的模块边界。
 
 核心约束：
 
@@ -184,6 +189,7 @@ API 代码约束：
 
 数据边界：
 
+- 后端 ORM model 暴露到前端的 `id` 以及内部关联 id（如 `user_id`、`child_profile_id`、`plan_id`、`order_id`）必须使用 `number` 类型；只有外部平台标识、业务编码、配置项 id、素材引用、设备 id 等非内部 model id 才使用 `string`。
 - 故事只表示文本资产。
 - 绘本表示可播放资产。
 - 绘本模板表示受限可替换资产。
@@ -281,7 +287,7 @@ npm run build
 
 ## 14. 与模块设计文档的关系
 
-`docs/frontend/module-design.md` 是前端模块边界的主依据。
+`docs/module-design.md` 是前后端统一模块边界的主依据。
 
 如果开发中发现模块设计与实际代码冲突：
 

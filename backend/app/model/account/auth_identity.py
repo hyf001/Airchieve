@@ -1,11 +1,10 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.model.account.enums import AuthIdentityStatus, AuthProvider
 from app.model.account.user import User
-from app.model.account.utils import uuid_str
 from app.model.base import Base, TimestampMixin
 
 
@@ -15,8 +14,8 @@ class AccountAuthIdentity(TimestampMixin, Base):
         UniqueConstraint("provider", "provider_app_id", "provider_user_id", name="uq_auth_identity_provider_user"),
     )
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     provider: Mapped[AuthProvider] = mapped_column(Enum(AuthProvider), nullable=False)
     provider_app_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     provider_user_id: Mapped[str] = mapped_column(String(255), nullable=False)

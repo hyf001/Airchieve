@@ -161,6 +161,7 @@ uv run alembic revision --autogenerate -m "describe_change"
 
 - 新增 model 后必须在 `backend/app/model/__init__.py` 导出，保证 Alembic metadata 能发现。
 - 任何数据库结构变化必须配套 Alembic migration。
+- 所有 ORM model 的主键 `id` 以及指向内部 model 的外键 id 必须使用 `int` / SQLAlchemy `Integer` 自增主键，禁止使用 UUID 或 `String(36)` 作为内部模型 id；外部平台单号、业务编码、素材引用等非内部模型 id 可继续使用字符串字段。
 - 不要在 model 里写业务流程。
 - 删除类能力优先使用软删除或状态字段；涉及用户内容、支付、审计、导出、分享记录时不要物理删除历史事实。
 
@@ -179,7 +180,7 @@ uv run alembic revision --autogenerate -m "describe_change"
 
 ## 推荐模块边界
 
-后端业务模块以 `docs/backend-module-design.md` 为准。开发前必须先确认自己负责的模块边界。
+业务模块以 `docs/module-design.md` 为准。开发前必须先确认自己负责的模块边界。
 
 当前推荐模块包括：
 
@@ -218,7 +219,7 @@ uv run alembic revision --autogenerate -m "describe_change"
 以下规则必须遵守，除非用户明确要求破例，并且在最终说明中解释原因。
 
 1. 新增 API 必须走 `api -> service -> model` 分层，不允许 API 直写数据库业务状态。
-2. 新增业务能力必须先判断归属模块；不能确定时先看 `docs/backend-module-design.md`。
+2. 新增业务能力必须先判断归属模块；不能确定时先看 `docs/module-design.md`。
 3. 跨模块写操作只能调用目标模块 service，禁止直接 import 对方 ORM model 修改。
 4. 权限、会员、额度、VIP 判断必须集中在 `entitlement_service`，业务模块不得自行散写判断。
 5. 配置读取只能走 `core/config.py`，禁止业务代码直接读环境变量。
@@ -256,7 +257,7 @@ uv run alembic revision --autogenerate -m "describe_change"
 - 对应 `service/*_service.py`
 - 对应 `schema/*.py`
 - 对应 `model/*.py`
-- `docs/backend-module-design.md` 中的模块边界
+- `docs/module-design.md` 中的模块边界
 
 ## 命名约定
 

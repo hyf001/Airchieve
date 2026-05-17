@@ -4,7 +4,6 @@ import { ArrowLeft } from "lucide-react";
 import { type AppRoute, useRouter } from "@/app/router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AuthPage } from "@/pages/auth/AuthPage";
 import { AppShell } from "@/shared/layout/AppShell";
 import { AppLink } from "@/shared/ui/AppLink";
 import { LoadingSpinner } from "@/shared/ui/loading";
@@ -32,10 +31,6 @@ export const SkeletonPage: React.FC<{ route: AppRoute }> = ({ route }) => {
   const { showToast } = useToast();
   const meta = routeMeta[route];
   const useTopBar = route === "/create" || route === "/player";
-
-  if (route === "/auth") {
-    return <AuthPage />;
-  }
 
   const content = (
     <main className="mx-auto max-w-[1160px] px-8 py-11 max-sm:px-4">

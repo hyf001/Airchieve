@@ -2,21 +2,21 @@ import type { StorybookSummary } from "@/types";
 
 export const demoStorybooks: StorybookSummary[] = [
   {
-    id: "storybook-1",
+    id: 1,
     title: "星空邮差",
     status: "draft",
     pages: 12,
     updatedAt: "今天 09:42",
   },
   {
-    id: "storybook-2",
+    id: 2,
     title: "会发光的森林",
     status: "generating",
     pages: 8,
     updatedAt: "昨天 18:20",
   },
   {
-    id: "storybook-3",
+    id: 3,
     title: "月亮小店",
     status: "finished",
     pages: 16,

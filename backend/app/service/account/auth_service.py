@@ -114,7 +114,7 @@ def _require_policy_versions(terms_version: str | None, privacy_version: str | N
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请先同意用户协议和隐私政策")
 
 
-def _sign_access_token(user_id: str, session_id: str) -> str:
+def _sign_access_token(user_id: int, session_id: int) -> str:
     exp = int((_now() + timedelta(seconds=settings.ACCESS_TOKEN_EXPIRE_SECONDS)).timestamp())
     payload = {"sub": user_id, "sid": session_id, "exp": exp}
     body = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode().rstrip("=")
@@ -122,7 +122,7 @@ def _sign_access_token(user_id: str, session_id: str) -> str:
     return f"{body}.{sig}"
 
 
-def verify_access_token(token: str) -> tuple[str, str]:
+def verify_access_token(token: str) -> tuple[int, int]:
     try:
         body, sig = token.split(".", 1)
     except ValueError as exc:
@@ -133,7 +133,20 @@ def verify_access_token(token: str) -> tuple[str, str]:
     payload = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
     if int(payload["exp"]) < int(_now().timestamp()):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="登录已过期")
-    return str(payload["sub"]), str(payload["sid"])
+    return int(payload["sub"]), int(payload["sid"])
+
+
+async def verify_active_session(db: AsyncSession, token: str) -> tuple[int, int]:
+    user_id, session_id = verify_access_token(token)
+    session = await db.get(AccountSession, session_id)
+    if not session or session.user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="登录态无效")
+    if session.revoked_at is not None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="登录已退出")
+    if _as_aware(session.expires_at) < _now():
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="刷新登录态已过期")
+    await _get_user(db, user_id)
+    return user_id, session_id
 
 
 async def _serialize_user(db: AsyncSession, user: User) -> UserRead:
@@ -157,7 +170,7 @@ async def _serialize_user(db: AsyncSession, user: User) -> UserRead:
     )
 
 
-async def _get_user(db: AsyncSession, user_id: str) -> User:
+async def _get_user(db: AsyncSession, user_id: int) -> User:
     user = await db.get(User, user_id)
     if not user or user.status != UserStatus.ACTIVE:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="账号不可用")
@@ -185,7 +198,7 @@ async def _find_active_phone_identity(db: AsyncSession, phone: str) -> AccountAu
     return result.scalar_one_or_none()
 
 
-async def _create_phone_identity(db: AsyncSession, user_id: str, phone: str) -> AccountAuthIdentity:
+async def _create_phone_identity(db: AsyncSession, user_id: int, phone: str) -> AccountAuthIdentity:
     existing = await _find_active_phone_identity(db, phone)
     if existing and existing.user_id != user_id:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="手机号已绑定其他账号")
@@ -241,7 +254,7 @@ async def _issue_tokens(
     )
 
 
-async def send_sms_code(db: AsyncSession, payload: SmsCodeSendRequest, user_id: str | None = None) -> SmsCodeSendResult:
+async def send_sms_code(db: AsyncSession, payload: SmsCodeSendRequest, user_id: int | None = None) -> SmsCodeSendResult:
     phone = _normal_phone(payload.phone)
     recent = await db.execute(
         select(SmsVerificationCode)
@@ -461,7 +474,7 @@ async def refresh_session(db: AsyncSession, refresh_token: str) -> AuthTokenRead
     )
 
 
-async def logout(db: AsyncSession, session_id: str) -> None:
+async def logout(db: AsyncSession, session_id: int) -> None:
     session = await db.get(AccountSession, session_id)
     if session and not session.revoked_at:
         session.revoked_at = _now()
@@ -487,11 +500,11 @@ async def verify_captcha(db: AsyncSession, payload: CaptchaVerifyRequest) -> Cap
     return CaptchaVerifyResult(captcha_ticket=ticket, expires_in_seconds=600)
 
 
-async def get_current_user(db: AsyncSession, user_id: str) -> UserRead:
+async def get_current_user(db: AsyncSession, user_id: int) -> UserRead:
     return await _serialize_user(db, await _get_user(db, user_id))
 
 
-async def list_auth_bindings(db: AsyncSession, user_id: str) -> list[AuthBindingSummary]:
+async def list_auth_bindings(db: AsyncSession, user_id: int) -> list[AuthBindingSummary]:
     identities = await db.execute(
         select(AccountAuthIdentity).where(
             AccountAuthIdentity.user_id == user_id,
@@ -513,7 +526,7 @@ async def list_auth_bindings(db: AsyncSession, user_id: str) -> list[AuthBinding
     ]
 
 
-async def assert_login_method_remains(db: AsyncSession, user_id: str, excluding_identity_id: str | None = None) -> None:
+async def assert_login_method_remains(db: AsyncSession, user_id: int, excluding_identity_id: int | None = None) -> None:
     query = select(func.count(AccountAuthIdentity.id)).where(
         AccountAuthIdentity.user_id == user_id,
         AccountAuthIdentity.status == AuthIdentityStatus.ACTIVE,
@@ -525,7 +538,7 @@ async def assert_login_method_remains(db: AsyncSession, user_id: str, excluding_
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="账号需保留至少一种登录方式")
 
 
-async def bind_phone(db: AsyncSession, user_id: str, payload: PhoneBindRequest) -> UserRead:
+async def bind_phone(db: AsyncSession, user_id: int, payload: PhoneBindRequest) -> UserRead:
     user = await _get_user(db, user_id)
     phone = _normal_phone(payload.phone)
     await assert_phone_code_valid(db, phone, SmsScene.BIND_PHONE, payload.sms_code)
@@ -540,7 +553,7 @@ async def bind_phone(db: AsyncSession, user_id: str, payload: PhoneBindRequest) 
     return await _serialize_user(db, user)
 
 
-async def change_phone(db: AsyncSession, user_id: str, payload: PhoneChangeRequest) -> UserRead:
+async def change_phone(db: AsyncSession, user_id: int, payload: PhoneChangeRequest) -> UserRead:
     user = await _get_user(db, user_id)
     if not user.phone:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="当前账号未绑定手机号")
@@ -548,7 +561,7 @@ async def change_phone(db: AsyncSession, user_id: str, payload: PhoneChangeReque
     return await bind_phone(db, user_id, PhoneBindRequest(phone=payload.new_phone, sms_code=payload.new_phone_sms_code))
 
 
-async def unbind_phone(db: AsyncSession, user_id: str, payload: PhoneUnbindRequest) -> UserRead:
+async def unbind_phone(db: AsyncSession, user_id: int, payload: PhoneUnbindRequest) -> UserRead:
     user = await _get_user(db, user_id)
     if not user.phone:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="当前账号未绑定手机号")
@@ -564,7 +577,7 @@ async def unbind_phone(db: AsyncSession, user_id: str, payload: PhoneUnbindReque
     return await _serialize_user(db, user)
 
 
-async def bind_wechat(db: AsyncSession, user_id: str, payload: WechatBindRequest) -> UserRead:
+async def bind_wechat(db: AsyncSession, user_id: int, payload: WechatBindRequest) -> UserRead:
     user = await _get_user(db, user_id)
     provider_user_id, union_id = _wechat_identity_from_code(payload)
     result = await db.execute(
@@ -598,7 +611,7 @@ async def bind_wechat(db: AsyncSession, user_id: str, payload: WechatBindRequest
     return await _serialize_user(db, user)
 
 
-async def change_wechat(db: AsyncSession, user_id: str, payload: WechatBindRequest) -> UserRead:
+async def change_wechat(db: AsyncSession, user_id: int, payload: WechatBindRequest) -> UserRead:
     await _get_user(db, user_id)
     identities = await db.execute(
         select(AccountAuthIdentity).where(
@@ -612,7 +625,7 @@ async def change_wechat(db: AsyncSession, user_id: str, payload: WechatBindReque
     return await bind_wechat(db, user_id, payload)
 
 
-async def unbind_wechat(db: AsyncSession, user_id: str, identity_id: str | None = None) -> UserRead:
+async def unbind_wechat(db: AsyncSession, user_id: int, identity_id: int | None = None) -> UserRead:
     user = await _get_user(db, user_id)
     query = select(AccountAuthIdentity).where(
         AccountAuthIdentity.user_id == user_id,
@@ -632,7 +645,7 @@ async def unbind_wechat(db: AsyncSession, user_id: str, identity_id: str | None 
     return await _serialize_user(db, user)
 
 
-async def assert_phone_bound(db: AsyncSession, user_id: str) -> None:
+async def assert_phone_bound(db: AsyncSession, user_id: int) -> None:
     user = await _get_user(db, user_id)
     if not user.phone:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="请先绑定手机号")

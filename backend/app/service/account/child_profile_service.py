@@ -3,51 +3,38 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.model.account import ChildProfile, ChildProfileStatus
-from app.schema.account import ChildProfileCreate, ChildProfileSummary, ChildProfileUpdate
-from app.service import entitlement_service
+from app.schema.account import ChildProfileCreate, ChildProfileUpdate
+from app.service import entitlement as entitlement_service
 from app.service.account.auth_service import _get_user
 
 
-async def assert_profile_belongs_to_user(db: AsyncSession, profile_id: str, user_id: str) -> None:
+async def assert_profile_belongs_to_user(db: AsyncSession, profile_id: int, user_id: int) -> None:
     profile = await db.get(ChildProfile, profile_id)
     if not profile or profile.user_id != user_id or profile.status != ChildProfileStatus.ACTIVE:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="儿童档案不存在")
 
 
-async def get_child_profile(db: AsyncSession, user_id: str, profile_id: str) -> ChildProfile:
+async def get_child_profile(db: AsyncSession, user_id: int, profile_id: int) -> ChildProfile:
     profile = await db.get(ChildProfile, profile_id)
     if not profile or profile.user_id != user_id or profile.status != ChildProfileStatus.ACTIVE:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="儿童档案不存在")
     return profile
 
 
-def _profile_summary(profile: ChildProfile) -> ChildProfileSummary:
-    return ChildProfileSummary(
-        id=profile.id,
-        nickname=profile.nickname,
-        age_range_label=profile.age_range_id,
-        reading_level_label=profile.reading_level_id,
-        is_default=profile.is_default,
-        default_character_id=profile.default_character_id,
-        default_voice_id=profile.default_voice_id,
-        default_art_style_id=profile.default_art_style_id,
-    )
-
-
-async def list_child_profiles(db: AsyncSession, user_id: str) -> list[ChildProfileSummary]:
+async def list_child_profiles(db: AsyncSession, user_id: int) -> list[ChildProfile]:
     result = await db.execute(
         select(ChildProfile)
         .where(ChildProfile.user_id == user_id, ChildProfile.status == ChildProfileStatus.ACTIVE)
         .order_by(ChildProfile.is_default.desc(), ChildProfile.created_at.desc())
     )
-    return [_profile_summary(profile) for profile in result.scalars().all()]
+    return list(result.scalars().all())
 
 
-async def create_child_profile(db: AsyncSession, user_id: str, payload: ChildProfileCreate) -> ChildProfile:
+async def create_child_profile(db: AsyncSession, user_id: int, payload: ChildProfileCreate) -> ChildProfile:
     await _get_user(db, user_id)
     assert_create = getattr(entitlement_service, "assert_can_create", None)
     if assert_create:
-        await assert_create(user_id, "child_profile")
+        await assert_create(db, user_id, "child_profile")
     count = (
         await db.execute(
             select(func.count(ChildProfile.id)).where(
@@ -69,8 +56,8 @@ async def create_child_profile(db: AsyncSession, user_id: str, payload: ChildPro
 
 async def update_child_profile(
     db: AsyncSession,
-    user_id: str,
-    profile_id: str,
+    user_id: int,
+    profile_id: int,
     payload: ChildProfileUpdate,
 ) -> ChildProfile:
     profile = await get_child_profile(db, user_id, profile_id)
@@ -81,7 +68,7 @@ async def update_child_profile(
     return profile
 
 
-async def delete_child_profile(db: AsyncSession, user_id: str, profile_id: str) -> None:
+async def delete_child_profile(db: AsyncSession, user_id: int, profile_id: int) -> None:
     profile = await get_child_profile(db, user_id, profile_id)
     profile.status = ChildProfileStatus.DELETED
     user = await _get_user(db, user_id)
@@ -103,7 +90,7 @@ async def delete_child_profile(db: AsyncSession, user_id: str, profile_id: str) 
     await db.commit()
 
 
-async def set_default_child_profile(db: AsyncSession, user_id: str, profile_id: str) -> ChildProfile:
+async def set_default_child_profile(db: AsyncSession, user_id: int, profile_id: int) -> ChildProfile:
     profile = await get_child_profile(db, user_id, profile_id)
     await db.execute(
         update(ChildProfile)

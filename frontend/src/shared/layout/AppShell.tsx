@@ -3,6 +3,7 @@ import { Search } from "lucide-react";
 
 import { type AppRoute, useRouter } from "@/app/router";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/features/auth";
 import { cn } from "@/lib/utils";
 import { AppLink } from "@/shared/ui/AppLink";
 
@@ -20,6 +21,7 @@ interface AppShellProps {
 
 export const AppShell: React.FC<AppShellProps> = ({ children, hideSearch = false }) => {
   const { path } = useRouter();
+  const { isAuthenticated, user } = useAuth();
 
   return (
     <div className="min-h-screen bg-[var(--warm-bg)] text-[var(--text-dark)]">
@@ -70,9 +72,20 @@ export const AppShell: React.FC<AppShellProps> = ({ children, hideSearch = false
             <Button asChild variant="ghost" className="max-sm:hidden">
               <AppLink to="/profile">我的档案</AppLink>
             </Button>
-            <Button asChild>
-              <AppLink to="/auth">登录</AppLink>
-            </Button>
+            {isAuthenticated ? (
+              <AppLink
+                to="/profile"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--sage),var(--sky))] text-sm font-black text-white no-underline shadow-[0_2px_8px_rgba(139,198,168,0.3)]"
+                aria-label={`当前账号：${user?.display_name ?? "已登录"}`}
+                title={user?.display_name ?? "已登录"}
+              >
+                {(user?.display_name ?? "家").slice(0, 1)}
+              </AppLink>
+            ) : (
+              <Button asChild>
+                <AppLink to="/auth">登录</AppLink>
+              </Button>
+            )}
           </div>
         </div>
       </nav>

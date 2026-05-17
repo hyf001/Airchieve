@@ -1,18 +1,17 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.model.account.enums import LoginMethod
-from app.model.account.utils import uuid_str
 from app.model.base import Base, TimestampMixin
 
 
 class AccountSession(TimestampMixin, Base):
     __tablename__ = "account_sessions"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     refresh_token_hash: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
     login_method: Mapped[LoginMethod] = mapped_column(Enum(LoginMethod), nullable=False)
     device_id: Mapped[str | None] = mapped_column(String(120), nullable=True)

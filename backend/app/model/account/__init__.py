@@ -4,6 +4,13 @@ from app.model.account.enums import (
     AuthIdentityStatus,
     AuthProvider,
     CaptchaProvider,
+    ChildProfileAgeRange,
+    ChildProfileDefaultArtStyle,
+    ChildProfileDefaultCharacter,
+    ChildProfileDefaultVoice,
+    ChildProfileEducationGoal,
+    ChildProfileInterestTag,
+    ChildProfileReadingLevel,
     ChildProfileStatus,
     ChildProfileVisibility,
     LoginMethod,
@@ -18,7 +25,6 @@ from app.model.account.risk import AccountRiskChallenge
 from app.model.account.session import AccountSession
 from app.model.account.sms import SmsVerificationCode
 from app.model.account.user import User
-from app.model.account.utils import uuid_str
 
 __all__ = [
     "AccountAuthIdentity",
@@ -27,6 +33,13 @@ __all__ = [
     "AuthIdentityStatus",
     "AuthProvider",
     "CaptchaProvider",
+    "ChildProfileAgeRange",
+    "ChildProfileDefaultArtStyle",
+    "ChildProfileDefaultCharacter",
+    "ChildProfileDefaultVoice",
+    "ChildProfileEducationGoal",
+    "ChildProfileInterestTag",
+    "ChildProfileReadingLevel",
     "ChildProfile",
     "ChildProfileStatus",
     "ChildProfileVisibility",
@@ -39,5 +52,4 @@ __all__ = [
     "User",
     "UserRole",
     "UserStatus",
-    "uuid_str",
 ]

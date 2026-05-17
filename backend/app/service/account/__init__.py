@@ -18,6 +18,7 @@ from app.service.account.auth_service import (
     unbind_phone,
     unbind_wechat,
     verify_access_token,
+    verify_active_session,
     verify_captcha,
 )
 from app.service.account.child_profile_service import (
@@ -57,5 +58,6 @@ __all__ = [
     "unbind_wechat",
     "update_child_profile",
     "verify_access_token",
+    "verify_active_session",
     "verify_captcha",
 ]

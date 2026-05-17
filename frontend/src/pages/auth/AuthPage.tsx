@@ -1,10 +1,10 @@
 import React from "react";
-import { LockKeyhole, MessageSquare, Phone, QrCode, User } from "lucide-react";
+import { Eye, EyeOff, LockKeyhole, MessageSquare, Phone, QrCode, User } from "lucide-react";
 
 import { useRouter } from "@/app/router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { authApi, saveAuthSession } from "@/shared/api/auth";
+import { authApi, saveAuthSession, useAuth } from "@/features/auth";
 import { AppShell } from "@/shared/layout/AppShell";
 import { useToast } from "@/shared/ui/toast";
 
@@ -18,21 +18,27 @@ export const AuthPage: React.FC = () => {
   const [sliderValue, setSliderValue] = React.useState(0);
   const [countdown, setCountdown] = React.useState(0);
   const [agreed, setAgreed] = React.useState(true);
+  const [showPassword, setShowPassword] = React.useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = React.useState(false);
   const [isSendingCode, setIsSendingCode] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const { navigate } = useRouter();
   const { showToast } = useToast();
+  const { refreshUser } = useAuth();
 
   const sliderVerified = sliderValue >= 100;
-  const canSendCode =
-    authMode === "register" &&
-    username.trim().length > 0 &&
-    phone.trim().length > 0 &&
-    password.length >= 8 &&
-    password === confirmPassword &&
-    sliderVerified &&
-    countdown === 0 &&
-    !isSendingCode;
+  const sendCodeDisabledReason = (() => {
+    if (authMode !== "register") return "";
+    if (!username.trim()) return "还差一步：请先填写用户名。";
+    if (!phone.trim()) return "还差一步：请先填写手机号。";
+    if (password.length < 8) return "还差一步：密码至少需要 8 位。";
+    if (password !== confirmPassword) return "还差一步：两次输入的密码需要一致。";
+    if (!sliderVerified) return "还差一步：请拖动滑块到最右侧。";
+    if (countdown > 0) return `验证码 ${countdown} 秒内有效，过期后可重新发送。`;
+    if (isSendingCode) return "验证码发送中。";
+    return "";
+  })();
+  const canSendCode = authMode === "register" && !sendCodeDisabledReason;
 
   React.useEffect(() => {
     if (countdown <= 0) return undefined;
@@ -57,12 +63,8 @@ export const AuthPage: React.FC = () => {
   };
 
   const handleSendCode = async () => {
-    if (!sliderVerified) {
-      showToast("请先完成滑块验证", "error");
-      return;
-    }
-    if (!username.trim() || !phone.trim() || password.length < 8 || password !== confirmPassword) {
-      showToast("请先完整填写注册信息", "error");
+    if (sendCodeDisabledReason) {
+      showToast(sendCodeDisabledReason, "error");
       return;
     }
 
@@ -106,8 +108,9 @@ export const AuthPage: React.FC = () => {
               password,
             });
       saveAuthSession(session);
+      await refreshUser();
       showToast(authMode === "register" ? "注册成功" : "登录成功", "success");
-      navigate("/");
+      navigate("/profile");
     } catch (error) {
       showToast(error instanceof Error ? error.message : authMode === "register" ? "注册失败" : "登录失败", "error");
     } finally {
@@ -247,12 +250,20 @@ export const AuthPage: React.FC = () => {
                 <LockKeyhole className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-light)]" />
                 <Input
                   id="auth-password"
-                  className="pl-10"
+                  className="pl-10 pr-11"
                   placeholder="请输入密码"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                 />
+                <button
+                  aria-label={showPassword ? "隐藏密码" : "查看密码"}
+                  className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[var(--text-light)] transition-colors hover:bg-[rgba(61,44,44,0.06)] hover:text-[var(--text-mid)]"
+                  type="button"
+                  onClick={() => setShowPassword((current) => !current)}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
 
               {authMode === "register" ? (
@@ -267,12 +278,20 @@ export const AuthPage: React.FC = () => {
                     <LockKeyhole className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-light)]" />
                     <Input
                       id="auth-confirm-password"
-                      className="pl-10"
+                      className="pl-10 pr-11"
                       placeholder="请再次输入密码"
-                      type="password"
+                      type={showConfirmPassword ? "text" : "password"}
                       value={confirmPassword}
                       onChange={(event) => setConfirmPassword(event.target.value)}
                     />
+                    <button
+                      aria-label={showConfirmPassword ? "隐藏确认密码" : "查看确认密码"}
+                      className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[var(--text-light)] transition-colors hover:bg-[rgba(61,44,44,0.06)] hover:text-[var(--text-mid)]"
+                      type="button"
+                      onClick={() => setShowConfirmPassword((current) => !current)}
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
 
                   <div className="mb-4 rounded-[var(--radius-md)] border border-[rgba(139,198,168,0.32)] bg-[rgba(139,198,168,0.08)] p-3">
@@ -322,6 +341,7 @@ export const AuthPage: React.FC = () => {
                     <Button
                       className="w-32 shrink-0 px-0"
                       disabled={!canSendCode}
+                      title={sendCodeDisabledReason || undefined}
                       type="button"
                       variant="sage"
                       onClick={handleSendCode}
@@ -329,12 +349,14 @@ export const AuthPage: React.FC = () => {
                       {isSendingCode ? "发送中" : countdown > 0 ? `${countdown}s` : "获取验证码"}
                     </Button>
                   </div>
-                  <p className="mb-5 text-xs text-[var(--text-light)]">
-                    {countdown > 0
-                      ? `验证码 ${countdown} 秒内有效，过期后可重新发送。`
-                      : sliderVerified
-                        ? "滑块验证已完成，可以发送短信验证码。"
-                        : "请先填写用户名、手机号、密码，并拖动滑块到最右侧。"}
+                  <p
+                    className={`mb-5 rounded-[var(--radius-sm)] px-3 py-2 text-xs leading-5 ${
+                      canSendCode
+                        ? "bg-[rgba(139,198,168,0.12)] text-[var(--sage-deep)]"
+                        : "bg-[rgba(212,114,92,0.08)] text-[var(--terracotta)]"
+                    }`}
+                  >
+                    {canSendCode ? "信息已填写完成，可以获取短信验证码。" : sendCodeDisabledReason}
                   </p>
                 </>
               ) : null}
