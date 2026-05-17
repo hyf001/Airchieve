@@ -1,8 +1,0 @@
-{
-  "dependencies": {
-    "html2canvas": "^1.4.1"
-  },
-  "devDependencies": {
-    "sharp": "^0.34.5"
-  }
-}

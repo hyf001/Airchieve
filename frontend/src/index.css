@@ -2,155 +2,110 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Global: Night Sky Base ── */
-body {
-  font-family: 'Inter', sans-serif;
-  color: #e2e8f0;
-  background-color: #061428;
-  background-attachment: fixed;
-  background-size: 100vw 100vh;
-  background-image:
-    /* ── 星云大气层晕染 ── */
-    radial-gradient(ellipse 90% 50% at 70% 10%, rgba(26, 82, 148, 0.30) 0%, transparent 65%),
-    radial-gradient(ellipse 60% 40% at 15% 60%, rgba(10, 40, 80, 0.22) 0%, transparent 55%),
-    radial-gradient(ellipse 40% 30% at 90% 75%, rgba(14, 52, 98, 0.18) 0%, transparent 50%),
-    /* ── 亮星 (1.5px) ── */
-    radial-gradient(1.5px 1.5px at  8.1%  6.7%, rgba(255,255,255,0.92), transparent),
-    radial-gradient(1.5px 1.5px at 64.3%  3.2%, rgba(255,255,255,0.88), transparent),
-    radial-gradient(1.5px 1.5px at 78.2% 21.8%, rgba(255,255,255,0.92), transparent),
-    radial-gradient(1.5px 1.5px at 33.5% 54.2%, rgba(255,255,255,0.88), transparent),
-    radial-gradient(1.5px 1.5px at 91.4% 43.1%, rgba(255,255,255,0.85), transparent),
-    radial-gradient(1.5px 1.5px at 14.9% 80.6%, rgba(255,255,255,0.82), transparent),
-    radial-gradient(1.5px 1.5px at 55.8% 70.4%, rgba(255,255,255,0.85), transparent),
-    radial-gradient(1.5px 1.5px at 41.6% 12.9%, rgba(255,255,255,0.90), transparent),
-    radial-gradient(1.5px 1.5px at 88.7% 76.5%, rgba(255,255,255,0.82), transparent),
-    /* ── 中等星 (1px) ── */
-    radial-gradient(1px 1px at  2.9% 17.4%, rgba(255,255,255,0.65), transparent),
-    radial-gradient(1px 1px at 21.3%  8.1%, rgba(255,255,255,0.62), transparent),
-    radial-gradient(1px 1px at 46.9% 22.3%, rgba(255,255,255,0.68), transparent),
-    radial-gradient(1px 1px at 83.1%  7.8%, rgba(255,255,255,0.62), transparent),
-    radial-gradient(1px 1px at 27.6% 31.4%, rgba(255,255,255,0.65), transparent),
-    radial-gradient(1px 1px at 59.3% 28.7%, rgba(255,255,255,0.60), transparent),
-    radial-gradient(1px 1px at  4.7% 44.5%, rgba(255,255,255,0.58), transparent),
-    radial-gradient(1px 1px at 71.5% 38.9%, rgba(255,255,255,0.65), transparent),
-    radial-gradient(1px 1px at 38.4% 49.2%, rgba(255,255,255,0.60), transparent),
-    radial-gradient(1px 1px at 93.8% 19.8%, rgba(255,255,255,0.62), transparent),
-    radial-gradient(1px 1px at 17.1% 52.6%, rgba(255,255,255,0.55), transparent),
-    radial-gradient(1px 1px at 50.2% 61.8%, rgba(255,255,255,0.62), transparent),
-    radial-gradient(1px 1px at 85.4% 55.7%, rgba(255,255,255,0.58), transparent),
-    radial-gradient(1px 1px at  6.8% 74.1%, rgba(255,255,255,0.60), transparent),
-    radial-gradient(1px 1px at 30.6% 68.3%, rgba(255,255,255,0.55), transparent),
-    radial-gradient(1px 1px at 62.9% 84.4%, rgba(255,255,255,0.58), transparent),
-    radial-gradient(1px 1px at 75.3% 91.8%, rgba(255,255,255,0.52), transparent),
-    radial-gradient(1px 1px at 43.1% 87.5%, rgba(255,255,255,0.55), transparent),
-    radial-gradient(1px 1px at 11.6% 95.7%, rgba(255,255,255,0.48), transparent),
-    radial-gradient(1px 1px at 96.4% 89.1%, rgba(255,255,255,0.52), transparent),
-    /* ── 淡星 (0.8px) ── */
-    radial-gradient(0.8px 0.8px at 12.5% 25.3%, rgba(255,255,255,0.40), transparent),
-    radial-gradient(0.8px 0.8px at 35.9%  4.6%, rgba(255,255,255,0.36), transparent),
-    radial-gradient(0.8px 0.8px at 52.6% 16.1%, rgba(255,255,255,0.38), transparent),
-    radial-gradient(0.8px 0.8px at 69.1% 32.8%, rgba(255,255,255,0.36), transparent),
-    radial-gradient(0.8px 0.8px at 79.7% 48.5%, rgba(255,255,255,0.40), transparent),
-    radial-gradient(0.8px 0.8px at 24.4% 57.6%, rgba(255,255,255,0.34), transparent),
-    radial-gradient(0.8px 0.8px at 47.3% 41.2%, rgba(255,255,255,0.36), transparent),
-    radial-gradient(0.8px 0.8px at  9.5% 63.1%, rgba(255,255,255,0.34), transparent),
-    radial-gradient(0.8px 0.8px at 66.2% 59.4%, rgba(255,255,255,0.38), transparent),
-    radial-gradient(0.8px 0.8px at 87.6% 65.8%, rgba(255,255,255,0.34), transparent),
-    radial-gradient(0.8px 0.8px at 19.9% 78.7%, rgba(255,255,255,0.36), transparent),
-    radial-gradient(0.8px 0.8px at 54.1% 93.4%, rgba(255,255,255,0.30), transparent),
-    radial-gradient(0.8px 0.8px at 39.5% 75.9%, rgba(255,255,255,0.34), transparent),
-    radial-gradient(0.8px 0.8px at 72.8% 81.7%, rgba(255,255,255,0.36), transparent),
-    radial-gradient(0.8px 0.8px at 95.5% 73.2%, rgba(255,255,255,0.30), transparent),
-    radial-gradient(0.8px 0.8px at 28.7% 92.6%, rgba(255,255,255,0.28), transparent),
-    radial-gradient(0.8px 0.8px at 81.9% 35.4%, rgba(255,255,255,0.34), transparent),
-    radial-gradient(0.8px 0.8px at 57.5% 50.7%, rgba(255,255,255,0.30), transparent),
-    radial-gradient(0.8px 0.8px at 16.2% 43.1%, rgba(255,255,255,0.36), transparent),
-    radial-gradient(0.8px 0.8px at 44.6% 68.2%, rgba(255,255,255,0.32), transparent);
-}
-
-.font-lexend {
-  font-family: 'Lexend', sans-serif;
-}
-
-/* ── Custom Scrollbar (dark theme) ── */
-::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: rgba(6, 20, 40, 0.8);
-}
-::-webkit-scrollbar-thumb {
-  background: rgba(71, 130, 180, 0.4);
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(71, 130, 180, 0.7);
-}
-
-/* ── 毛毛虫书法大标题 ── */
-.mao-title {
-  font-family: 'Ma Shan Zheng', 'STKaiti', 'KaiTi', cursive;
-  color: #f0e6ce;
-  text-shadow:
-    0 2px 12px rgba(0, 0, 0, 0.6),
-    0 0 40px rgba(77, 217, 192, 0.15);
-  letter-spacing: 0.12em;
-}
-
-/* ── 玻璃卡片通用 ── */
-.glass-card {
-  background: rgba(10, 30, 60, 0.55);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(100, 160, 220, 0.18);
-}
-
-/* ====== shadcn/ui CSS Variables ====== */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --honey: #f5a623;
+    --peach: #ff8a65;
+    --terracotta: #d4725c;
+    --sage: #8bc6a8;
+    --sage-deep: #5ea07a;
+    --sky: #7ec8e3;
+    --sky-deep: #4ba3c7;
+    --lavender: #b39ddb;
+    --cream: #fff8f0;
+    --warm-bg: #fffaf5;
+    --card-bg: #ffffff;
+    --text-dark: #3d2c2c;
+    --text-mid: #6b5555;
+    --text-light: #9e8b8b;
+    --shadow-soft: 0 2px 16px rgba(61, 44, 44, 0.08);
+    --shadow-hover: 0 6px 24px rgba(61, 44, 44, 0.14);
+    --radius-sm: 10px;
+    --radius-md: 16px;
+    --radius-lg: 24px;
+    --radius-xl: 32px;
+    --font-display: "ZCOOL KuaiLe", "Nunito", cursive;
+    --font-body: "Noto Sans SC", "Nunito", sans-serif;
+
+    --background: 30 100% 98%;
+    --foreground: 0 16% 21%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 0 16% 21%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 238.7 83.5% 66.7%;
+    --popover-foreground: 0 16% 21%;
+    --primary: 11 58% 60%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
+    --secondary: 15 100% 70%;
+    --secondary-foreground: 0 16% 21%;
+    --muted: 30 100% 97%;
+    --muted-foreground: 0 9% 58%;
+    --accent: 145 35% 66%;
+    --accent-foreground: 0 16% 21%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 238.7 83.5% 66.7%;
-    --radius: 0.5rem;
+    --border: 11 58% 60% / 0.12;
+    --input: 11 58% 60% / 0.14;
+    --ring: 14 100% 70%;
+    --radius: 1rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-body);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0.025;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
   }
 }
 
-/* ====== EditorView: Scrollbar & Page Flip ====== */
-.custom-scrollbar::-webkit-scrollbar { width: 8px; }
-.custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-.custom-scrollbar { scrollbar-width: thin; scrollbar-color: #cbd5e1 #f1f5f9; }
+@layer components {
+  .app-card {
+    background: var(--card-bg);
+    border: 1px solid rgba(212, 114, 92, 0.08);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-soft);
+  }
 
-@keyframes flipInLeft {
-  from { transform: translateX(-100%) rotateY(-90deg); opacity: 0; }
-  to { transform: translateX(0) rotateY(0); opacity: 1; }
-}
-@keyframes flipInRight {
-  from { transform: translateX(100%) rotateY(90deg); opacity: 0; }
-  to { transform: translateX(0) rotateY(0); opacity: 1; }
-}
-.page-enter-left { animation: flipInLeft 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
-.page-enter-right { animation: flipInRight 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+  .app-card-hover {
+    transition:
+      transform 0.3s,
+      box-shadow 0.3s,
+      border-color 0.3s;
+  }
 
-@keyframes indeterminate {
-  0%   { transform: translateX(-100%) scaleX(0.5); }
-  50%  { transform: translateX(60%)   scaleX(0.8); }
-  100% { transform: translateX(250%)  scaleX(0.5); }
+  .app-card-hover:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-hover);
+  }
+
+  .font-display {
+    font-family: var(--font-display);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
 }

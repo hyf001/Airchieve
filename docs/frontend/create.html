@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>毛毛虫绘本 - 创建绘本</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=ZCOOL+KuaiLe&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --honey: #F5A623; --peach: #FF8A65; --terracotta: #D4725C;
+  --sage: #8BC6A8; --sage-deep: #5EA07A; --sky: #7EC8E3; --sky-deep: #4BA3C7;
+  --lavender: #B39DDB; --cream: #FFF8F0; --warm-bg: #FFFAF5;
+  --card-bg: #FFFFFF; --text-dark: #3D2C2C; --text-mid: #6B5555; --text-light: #9E8B8B;
+  --shadow-soft: 0 2px 16px rgba(61,44,44,0.08);
+  --shadow-hover: 0 6px 24px rgba(61,44,44,0.14);
+  --radius-sm: 10px; --radius-md: 16px; --radius-lg: 24px; --radius-xl: 32px;
+  --font-display: 'ZCOOL KuaiLe', 'Nunito', cursive;
+  --font-body: 'Noto Sans SC', 'Nunito', sans-serif;
+}
+
+body { font-family: var(--font-body); background: var(--warm-bg); color: var(--text-dark); line-height: 1.6; min-height: 100vh; }
+
+/* TOP BAR */
+.top-bar { display: flex; align-items: center; padding: 14px 32px; background: rgba(255,248,240,0.95); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(212,114,92,0.08); gap: 16px; }
+.back-btn { display: flex; align-items: center; gap: 6px; padding: 8px 14px; border: none; background: rgba(212,114,92,0.08); border-radius: var(--radius-sm); font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--text-mid); cursor: pointer; text-decoration: none; transition: all 0.2s; }
+.back-btn:hover { background: rgba(212,114,92,0.15); color: var(--terracotta); }
+.top-title { font-family: var(--font-display); font-size: 20px; flex: 1; }
+.top-actions { display: flex; gap: 8px; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 20px; border-radius: var(--radius-sm); font-family: var(--font-body); font-size: 14px; font-weight: 600; text-decoration: none; border: none; cursor: pointer; transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.btn:active { transform: scale(0.96); }
+.btn-ghost { color: var(--text-mid); background: transparent; }
+.btn-ghost:hover { color: var(--terracotta); background: rgba(212,114,92,0.06); }
+.btn-primary { color: white; background: linear-gradient(135deg, var(--peach), var(--terracotta)); box-shadow: 0 3px 12px rgba(212,114,92,0.3); }
+.btn-primary:hover { box-shadow: 0 5px 20px rgba(212,114,92,0.4); transform: translateY(-1px); }
+.btn-secondary { color: var(--terracotta); background: rgba(212,114,92,0.08); border: 1.5px solid rgba(212,114,92,0.15); }
+.btn-secondary:hover { background: rgba(212,114,92,0.12); }
+.btn-lg { padding: 14px 32px; font-size: 15px; border-radius: var(--radius-md); }
+
+/* STEPPER */
+.stepper { max-width: 1320px; margin: 24px auto 0; padding: 0 32px; }
+.stepper-inner { display: flex; align-items: center; justify-content: center; gap: 0; background: var(--card-bg); border-radius: var(--radius-lg); padding: 20px 32px; box-shadow: var(--shadow-soft); }
+.step { display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-radius: var(--radius-sm); cursor: pointer; transition: all 0.2s; }
+.step-num { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; background: rgba(212,114,92,0.08); color: var(--text-light); transition: all 0.3s; }
+.step-label { font-size: 13px; font-weight: 600; color: var(--text-light); white-space: nowrap; }
+.step.active .step-num { background: linear-gradient(135deg, var(--peach), var(--terracotta)); color: white; box-shadow: 0 3px 12px rgba(212,114,92,0.3); }
+.step.active .step-label { color: var(--terracotta); }
+.step.done .step-num { background: var(--sage-deep); color: white; }
+.step.done .step-label { color: var(--sage-deep); }
+.step-arrow { width: 40px; display: flex; align-items: center; justify-content: center; color: var(--text-light); font-size: 18px; flex-shrink: 0; }
+
+/* LAYOUT */
+.create-layout { max-width: 1320px; margin: 24px auto; padding: 0 32px; display: flex; gap: 24px; align-items: flex-start; }
+.create-content { flex: 1; }
+.preview-panel { width: 320px; position: sticky; top: 100px; flex-shrink: 0; }
+
+/* STEP PANELS */
+.step-panel { display: none; animation: fadeIn 0.4s ease; }
+.step-panel.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+/* CARDS */
+.card { background: var(--card-bg); border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow-soft); margin-bottom: 20px; transition: all 0.3s; }
+.card:hover { box-shadow: var(--shadow-hover); }
+.card-title { font-weight: 700; font-size: 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+/* SOURCE GRID */
+.source-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 28px; }
+.source-card { padding: 28px 24px; border-radius: var(--radius-md); background: var(--card-bg); box-shadow: var(--shadow-soft); cursor: pointer; transition: all 0.3s; position: relative; overflow: hidden; border: 2px solid transparent; }
+.source-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; }
+.source-card:nth-child(1)::before { background: linear-gradient(90deg, var(--peach), var(--honey)); }
+.source-card:nth-child(2)::before { background: linear-gradient(90deg, var(--sage), var(--sage-deep)); }
+.source-card:hover { box-shadow: var(--shadow-hover); transform: translateY(-3px); border-color: rgba(212,114,92,0.15); }
+.source-card.selected { border-color: var(--terracotta); box-shadow: 0 0 0 4px rgba(212,114,92,0.1), var(--shadow-hover); }
+.source-icon { font-size: 40px; margin-bottom: 12px; display: block; }
+.source-title { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
+.source-desc { font-size: 13px; color: var(--text-light); line-height: 1.5; }
+
+/* STORY LIST ITEM */
+.story-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: rgba(212,114,92,0.06); border-radius: 10px; cursor: pointer; transition: all 0.2s; }
+.story-item:hover { background: rgba(212,114,92,0.1); }
+.story-item .emoji { font-size: 24px; }
+.story-item .info { flex: 1; }
+.story-item .name { font-size: 13px; font-weight: 600; }
+.story-item .meta { font-size: 11px; color: var(--text-light); }
+.story-item .pick { font-size: 11px; color: var(--peach); font-weight: 600; }
+
+/* CONFIG */
+.config-row { display: flex; gap: 16px; margin-bottom: 16px; }
+.config-group { flex: 1; }
+.config-label { font-size: 12px; font-weight: 600; color: var(--text-mid); margin-bottom: 8px; display: block; }
+.config-select, .config-input { width: 100%; padding: 10px 14px; border: 1.5px solid rgba(212,114,92,0.12); border-radius: var(--radius-sm); font-family: var(--font-body); font-size: 13px; color: var(--text-dark); background: var(--warm-bg); outline: none; transition: all 0.2s; }
+.config-select:focus, .config-input:focus { border-color: var(--peach); box-shadow: 0 0 0 3px rgba(255,138,101,0.1); }
+.tag-cloud { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag-option { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1.5px solid rgba(212,114,92,0.12); background: white; color: var(--text-mid); cursor: pointer; transition: all 0.2s; }
+.tag-option:hover { border-color: var(--peach); color: var(--terracotta); }
+.tag-option.selected { background: linear-gradient(135deg, var(--peach), var(--terracotta)); color: white; border-color: transparent; }
+
+/* CHARACTER GRID (Step 2) */
+.char-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.char-card { background: var(--warm-bg); border-radius: var(--radius-md); padding: 20px; text-align: center; cursor: pointer; border: 2px solid transparent; transition: all 0.3s; }
+.char-card:hover { border-color: rgba(212,114,92,0.15); transform: translateY(-2px); }
+.char-card.selected { border-color: var(--terracotta); background: rgba(212,114,92,0.04); box-shadow: 0 0 0 3px rgba(212,114,92,0.08); }
+.char-avatar { width: 64px; height: 64px; border-radius: 50%; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; font-size: 28px; }
+.ca1 { background: linear-gradient(135deg, #FFCDD2, #F48FB1); }
+.ca2 { background: linear-gradient(135deg, #C8E6C9, #81C784); }
+.ca3 { background: linear-gradient(135deg, #BBDEFB, #64B5F6); }
+.ca4 { background: linear-gradient(135deg, #FFF9C4, #FFD54F); }
+.ca5 { background: linear-gradient(135deg, #E1BEE7, #BA68C8); }
+.ca6 { background: linear-gradient(135deg, #FFE0B2, #FFB74D); }
+.ca7 { background: linear-gradient(135deg, #B2DFDB, #4DB6AC); }
+.ca8 { background: linear-gradient(135deg, #F8BBD0, #EC407A); }
+.char-name { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+.char-tag { font-size: 11px; color: var(--text-light); }
+.char-card .vip-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; background: linear-gradient(135deg, var(--honey), var(--peach)); color: white; margin-top: 4px; }
+.char-add { border: 2px dashed rgba(212,114,92,0.15); background: transparent; }
+.char-add:hover { border-color: var(--peach); }
+.char-add-icon { font-size: 28px; margin-bottom: 6px; color: var(--text-light); }
+.char-add-text { font-size: 12px; color: var(--text-light); font-weight: 600; }
+
+/* ART STYLE GRID (Step 3) */
+.style-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.style-card { border-radius: var(--radius-md); overflow: hidden; cursor: pointer; border: 2px solid transparent; transition: all 0.3s; background: var(--card-bg); box-shadow: var(--shadow-soft); }
+.style-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); }
+.style-card.selected { border-color: var(--terracotta); box-shadow: 0 0 0 3px rgba(212,114,92,0.1), var(--shadow-hover); }
+.style-preview { aspect-ratio: 4/3; position: relative; display: flex; align-items: center; justify-content: center; font-size: 48px; }
+.sp-watercolor { background: linear-gradient(160deg, #FFE8E8 0%, #FCE4EC 25%, #F3E5F5 50%, #E8EAF6 75%, #E1F5FE 100%); }
+.sp-crayon { background: linear-gradient(150deg, #FFCCBC, #FFF9C4, #C8E6C9, #B3E5FC); }
+.sp-cartoon { background: linear-gradient(150deg, #FFAB91, #FF8A65, #FF7043); }
+.sp-bedtime { background: linear-gradient(160deg, #1A237E, #283593, #3F51B5, #5C6BC0); }
+.sp-chinese { background: linear-gradient(160deg, #FDE8D0, #F5CBA7, #E8B960, #C0392B); }
+.sp-sketch { background: linear-gradient(150deg, #FAFAFA, #F5F5F5, #EEEEEE, #E0E0E0); }
+.style-info { padding: 14px; }
+.style-name { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+.style-desc { font-size: 12px; color: var(--text-light); line-height: 1.5; }
+.style-rec { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; background: var(--sage-deep); color: white; margin-top: 4px; }
+.style-vip { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; background: linear-gradient(135deg, var(--honey), var(--peach)); color: white; margin-top: 4px; }
+.custom-style { background: var(--card-bg); border-radius: var(--radius-lg); padding: 20px; box-shadow: var(--shadow-soft); margin-top: 16px; }
+.custom-input { width: 100%; padding: 12px 16px; border: 1.5px solid rgba(212,114,92,0.12); border-radius: var(--radius-sm); font-family: var(--font-body); font-size: 13px; background: var(--warm-bg); outline: none; transition: all 0.2s; }
+.custom-input:focus { border-color: var(--peach); box-shadow: 0 0 0 3px rgba(255,138,101,0.1); }
+
+/* STORYBOARD (Step 4) */
+.storyboard { display: flex; flex-direction: column; gap: 12px; }
+.sb-page { display: flex; gap: 16px; padding: 16px; background: var(--warm-bg); border-radius: var(--radius-md); border: 1px solid rgba(212,114,92,0.06); transition: all 0.2s; }
+.sb-page:hover { border-color: rgba(212,114,92,0.12); }
+.sb-thumb { width: 100px; height: 75px; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 28px; }
+.st1 { background: linear-gradient(135deg, #FFE0B2, #FFB74D); }
+.st2 { background: linear-gradient(135deg, #C8E6C9, #81C784); }
+.st3 { background: linear-gradient(135deg, #E1BEE7, #BA68C8); }
+.st4 { background: linear-gradient(135deg, #BBDEFB, #64B5F6); }
+.st5 { background: linear-gradient(135deg, #FFCDD2, #E57373); }
+.st6 { background: linear-gradient(135deg, #FFF9C4, #FFD54F); }
+.st7 { background: linear-gradient(135deg, #B2DFDB, #4DB6AC); }
+.st8 { background: linear-gradient(135deg, #F8BBD0, #EC407A); }
+.sb-content { flex: 1; }
+.sb-page-num { font-size: 11px; color: var(--text-light); font-weight: 600; margin-bottom: 2px; }
+.sb-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.sb-text { font-size: 12px; color: var(--text-mid); line-height: 1.5; margin-bottom: 6px; }
+.sb-scene { font-size: 11px; color: var(--text-light); font-style: italic; }
+.sb-dialog { display: inline-block; padding: 2px 8px; background: rgba(126,200,227,0.12); border-radius: 6px; font-size: 11px; color: var(--sky-deep); font-weight: 500; margin-top: 4px; }
+.sb-actions { display: flex; gap: 6px; align-self: center; }
+.sb-btn { padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; border: 1px solid rgba(212,114,92,0.1); background: white; color: var(--text-mid); cursor: pointer; font-family: var(--font-body); transition: all 0.2s; }
+.sb-btn:hover { border-color: var(--peach); color: var(--terracotta); }
+
+/* VOICE LIST (Step 5) */
+.voice-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.voice-card { display: flex; align-items: center; gap: 14px; padding: 16px; background: var(--warm-bg); border-radius: var(--radius-md); cursor: pointer; border: 2px solid transparent; transition: all 0.3s; }
+.voice-card:hover { border-color: rgba(212,114,92,0.15); }
+.voice-card.selected { border-color: var(--terracotta); background: rgba(212,114,92,0.04); box-shadow: 0 0 0 3px rgba(212,114,92,0.08); }
+.voice-icon { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+.vi1 { background: linear-gradient(135deg, #F8BBD0, #EC407A); }
+.vi2 { background: linear-gradient(135deg, #BBDEFB, #42A5F5); }
+.vi3 { background: linear-gradient(135deg, #FFE0B2, #FFB74D); }
+.vi4 { background: linear-gradient(135deg, #C8E6C9, #66BB6A); }
+.vi5 { background: linear-gradient(135deg, #E1BEE7, #AB47BC); }
+.vi6 { background: linear-gradient(135deg, #FFCDD2, #EF5350); }
+.voice-info { flex: 1; }
+.voice-name { font-size: 14px; font-weight: 700; margin-bottom: 2px; }
+.voice-meta { font-size: 11px; color: var(--text-light); }
+.voice-wave { display: flex; align-items: center; gap: 2px; height: 24px; }
+.voice-wave span { width: 3px; border-radius: 2px; background: var(--sage-deep); }
+.voice-card .vip-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; background: linear-gradient(135deg, var(--honey), var(--peach)); color: white; }
+
+/* PREVIEW (Step 6) */
+.preview-player { background: var(--card-bg); border-radius: var(--radius-xl); overflow: hidden; box-shadow: 0 8px 40px rgba(61,44,44,0.12); }
+.preview-illust { aspect-ratio: 16/9; background: linear-gradient(160deg, #FFECD2, #FCB69F, #F5A623); display: flex; align-items: center; justify-content: center; position: relative; font-size: 72px; }
+.preview-illust .page-num { position: absolute; top: 16px; left: 16px; background: rgba(255,255,255,0.8); backdrop-filter: blur(8px); padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; color: var(--text-mid); }
+.preview-text-area { padding: 24px; }
+.preview-story-text { font-size: 16px; line-height: 1.9; color: var(--text-dark); margin-bottom: 16px; }
+.preview-controls { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 16px 24px; background: var(--warm-bg); border-top: 1px solid rgba(212,114,92,0.06); }
+.ctrl-btn { width: 44px; height: 44px; border: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; cursor: pointer; background: rgba(212,114,92,0.06); transition: all 0.2s; }
+.ctrl-btn:hover { background: rgba(212,114,92,0.12); }
+.ctrl-btn.play { width: 52px; height: 52px; background: linear-gradient(135deg, var(--peach), var(--terracotta)); color: white; font-size: 20px; box-shadow: 0 4px 16px rgba(212,114,92,0.3); }
+.preview-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 20px; }
+.summary-card { background: var(--warm-bg); border-radius: var(--radius-sm); padding: 14px; text-align: center; }
+.summary-icon { font-size: 24px; margin-bottom: 4px; }
+.summary-label { font-size: 11px; color: var(--text-light); }
+.summary-val { font-size: 13px; font-weight: 700; }
+
+/* PREVIEW PANEL */
+.preview-card { background: var(--card-bg); border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow-soft); }
+.preview-panel-title { font-weight: 700; font-size: 15px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.preview-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(212,114,92,0.06); }
+.preview-item:last-child { border-bottom: none; }
+.preview-key { font-size: 12px; color: var(--text-light); }
+.preview-val { font-size: 13px; font-weight: 600; color: var(--text-dark); }
+.preview-empty { font-size: 12px; color: var(--text-light); font-style: italic; }
+.preview-cover { width: 100%; aspect-ratio: 4/3; border-radius: var(--radius-md); background: linear-gradient(135deg, #FFECD2, #FCB69F); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; position: relative; overflow: hidden; }
+.preview-cover-emoji { font-size: 56px; position: relative; z-index: 1; }
+.preview-cover-decor { position: absolute; border-radius: 50%; opacity: 0.2; }
+.preview-cover-decor:nth-child(1) { width: 100px; height: 100px; background: var(--sage); top: -20px; right: -20px; }
+.preview-cover-decor:nth-child(2) { width: 60px; height: 60px; background: var(--sky); bottom: -10px; left: -10px; }
+
+/* NAV */
+.nav-buttons { display: flex; justify-content: space-between; align-items: center; margin-top: 24px; padding-bottom: 32px; }
+
+/* RESPONSIVE */
+@media (max-width: 960px) { .preview-panel { display: none; } }
+@media (max-width: 768px) {
+  .source-grid { grid-template-columns: 1fr; }
+  .char-grid { grid-template-columns: repeat(2, 1fr); }
+  .style-grid { grid-template-columns: repeat(2, 1fr); }
+  .voice-grid { grid-template-columns: 1fr; }
+  .preview-summary { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .top-bar { padding: 12px 16px; }
+  .stepper, .create-layout { padding: 0 16px; }
+  .stepper-inner { padding: 16px; gap: 0; overflow-x: auto; }
+  .step-label { display: none; }
+  .config-row { flex-direction: column; }
+  .sb-page { flex-direction: column; }
+  .sb-thumb { width: 100%; height: 80px; }
+}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <a href="index.html" class="back-btn">← 返回首页</a>
+  <div class="top-title">✨ 创建绘本</div>
+  <div class="top-actions"><a href="auth.html" class="btn btn-ghost">登录后保存</a></div>
+</div>
+
+<div class="stepper">
+  <div class="stepper-inner" id="stepper">
+    <div class="step active" data-step="1"><span class="step-num">1</span><span class="step-label">选择故事</span></div>
+    <span class="step-arrow">›</span>
+    <div class="step" data-step="2"><span class="step-num">2</span><span class="step-label">选择形象</span></div>
+    <span class="step-arrow">›</span>
+    <div class="step" data-step="3"><span class="step-num">3</span><span class="step-label">确定画风</span></div>
+    <span class="step-arrow">›</span>
+    <div class="step" data-step="4"><span class="step-num">4</span><span class="step-label">编辑分镜</span></div>
+    <span class="step-arrow">›</span>
+    <div class="step" data-step="5"><span class="step-num">5</span><span class="step-label">选择声音</span></div>
+    <span class="step-arrow">›</span>
+    <div class="step" data-step="6"><span class="step-num">6</span><span class="step-label">预览</span></div>
+  </div>
+</div>
+
+<div class="create-layout">
+  <div class="create-content">
+
+    <!-- ==================== STEP 1: 选择故事 ==================== -->
+    <div class="step-panel active" id="step1">
+
+      <!-- 创建路径选择 -->
+      <div style="display:flex;gap:12px;margin-bottom:24px">
+        <button class="btn btn-primary" style="flex:1;padding:16px;font-size:15px;border-radius:var(--radius-md)" id="pathStory" onclick="switchPath('story')">📖 基于故事生成绘本</button>
+        <button class="btn btn-secondary" style="flex:1;padding:16px;font-size:15px;border-radius:var(--radius-md)" id="pathTemplate" onclick="switchPath('template')">🎯 基于绘本模板创作</button>
+      </div>
+
+      <!-- 路径A: 基于故事生成绘本 -->
+      <div id="pathStoryContent">
+      <h3 style="font-size:16px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px;">📖 选择故事来源</h3>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:24px">
+        <div class="source-card selected">
+          <span class="source-icon">📖</span>
+          <div class="source-title">系统故事</div>
+          <div class="source-desc">浏览平台精选故事，选择喜欢的故事作为蓝本</div>
+          <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px">
+            <div class="story-item"><span class="emoji">🐻</span><div class="info"><div class="name">小熊找月亮</div><div class="meta">3-6岁 · 睡前</div></div><span class="pick">选择</span></div>
+            <div class="story-item"><span class="emoji">🐰</span><div class="info"><div class="name">小兔子种花记</div><div class="meta">3-6岁 · 童话</div></div><span class="pick">选择</span></div>
+            <a href="stories.html" style="text-align:center;font-size:12px;color:var(--terracotta);font-weight:600;padding:6px;text-decoration:none">查看更多 →</a>
+          </div>
+        </div>
+        <div class="source-card">
+          <span class="source-icon">📝</span>
+          <div class="source-title">我的故事</div>
+          <div class="source-desc">使用你创建或上传的故事来生成绘本</div>
+          <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px">
+            <div class="story-item"><span class="emoji">🐸</span><div class="info"><div class="name">青蛙的冒险</div><div class="meta">5-8岁 · 冒险</div></div><span class="pick">选择</span></div>
+            <a href="stories.html" style="text-align:center;font-size:12px;color:var(--terracotta);font-weight:600;padding:6px;text-decoration:none">管理我的故事 →</a>
+          </div>
+        </div>
+        <div class="source-card">
+          <span class="source-icon">📋</span>
+          <div class="source-title">上传/粘贴故事</div>
+          <div class="source-desc">粘贴你写好的故事文本，最大支持 3000 字</div>
+        </div>
+        <div class="source-card">
+          <span class="source-icon">💡</span>
+          <div class="source-title">输入一个想法</div>
+          <div class="source-desc">输入关键词或简单想法，AI 帮你生成完整故事</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📖 已选系统故事</div>
+        <div style="display:flex;align-items:center;gap:16px;padding:16px;background:var(--warm-bg);border-radius:var(--radius-md)">
+          <div style="width:64px;height:80px;border-radius:10px;background:linear-gradient(135deg,#FFE0B2,#FFB74D);display:flex;align-items:center;justify-content:center;font-size:32px;flex-shrink:0">🐻</div>
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:15px;margin-bottom:2px">小熊找月亮</div>
+            <div style="font-size:12px;color:var(--text-light);margin-bottom:6px">3-6岁 · 睡前 · 好奇心与探索 · 8页</div>
+            <div style="font-size:13px;color:var(--text-mid);line-height:1.6">小熊每天晚上都会看到月亮挂在天空，有一天月亮突然不见了！小熊决定踏上寻找月亮的旅程……</div>
+          </div>
+          <button style="padding:8px 14px;border-radius:8px;border:1.5px solid rgba(212,114,92,0.12);background:white;font-size:12px;font-weight:600;color:var(--text-mid);cursor:pointer;font-family:var(--font-body)">更换</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">⚙️ 故事配置</div>
+        <div class="config-row">
+          <div class="config-group"><label class="config-label">目标年龄段</label><select class="config-select"><option>3-4岁</option><option selected>5-6岁</option><option>7-8岁</option><option>9-10岁</option></select></div>
+          <div class="config-group"><label class="config-label">故事长度</label><select class="config-select"><option>短篇 (6页)</option><option selected>中篇 (8页)</option><option>长篇 (12页)</option></select></div>
+          <div class="config-group"><label class="config-label">语言</label><select class="config-select"><option selected>中文</option><option>English</option><option>中英双语</option></select></div>
+        </div>
+        <div style="margin-bottom:16px"><label class="config-label" style="display:block;margin-bottom:8px">叙事风格</label>
+          <div class="tag-cloud"><span class="tag-option">🌙 睡前</span><span class="tag-option">⚔️ 冒险</span><span class="tag-option">🧚 童话</span><span class="tag-option">🔬 科普</span><span class="tag-option">😄 幽默</span><span class="tag-option selected">💚 情绪管理</span><span class="tag-option">📋 习惯养成</span></div>
+        </div>
+        <div><label class="config-label" style="display:block;margin-bottom:8px">教育目标</label>
+          <div class="tag-cloud"><span class="tag-option">💛 善良</span><span class="tag-option selected">🦁 勇气</span><span class="tag-option">🤝 分享</span><span class="tag-option">🔍 好奇心</span><span class="tag-option">💬 情绪表达</span><span class="tag-option">📏 规则意识</span></div>
+        </div>
+      </div>
+      <div class="nav-buttons"><a href="index.html" class="btn btn-ghost">取消</a><button class="btn btn-primary btn-lg" onclick="goStep(2)">下一步：选择形象 →</button></div>
+      </div><!-- end pathStoryContent -->
+
+      <!-- 路径B: 基于绘本模板创作 -->
+      <div id="pathTemplateContent" style="display:none">
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px;">🎯 选择绘本模板</h3>
+        <p style="font-size:13px;color:var(--text-light);margin-bottom:16px">选择一个绘本模板，替换角色头像和朗读声音，快速创建个性化绘本。模板的画风、文字和结构不可修改。</p>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:20px">
+          <div class="source-card selected">
+            <div style="width:100%;aspect-ratio:3/2;border-radius:10px;background:linear-gradient(135deg,#FFE0B2,#FFB74D);display:flex;align-items:center;justify-content:center;font-size:40px;margin-bottom:12px">🐻</div>
+            <div class="source-title">小熊找月亮</div>
+            <div class="source-desc">3-6岁 · 8页 · 可替换角色：主角、朋友</div>
+            <div style="margin-top:8px;display:flex;gap:4px;flex-wrap:wrap"><span class="tag-option" style="font-size:10px;padding:2px 8px">主角：可替换</span><span class="tag-option" style="font-size:10px;padding:2px 8px">朋友：可替换</span></div>
+          </div>
+          <div class="source-card">
+            <div style="width:100%;aspect-ratio:3/2;border-radius:10px;background:linear-gradient(135deg,#C8E6C9,#81C784);display:flex;align-items:center;justify-content:center;font-size:40px;margin-bottom:12px">🦁</div>
+            <div class="source-title">勇敢的小狮子</div>
+            <div class="source-desc">5-8岁 · 10页 · 可替换角色：主角、家长</div>
+            <div style="margin-top:8px;display:flex;gap:4px;flex-wrap:wrap"><span class="tag-option" style="font-size:10px;padding:2px 8px">主角：可替换</span><span class="tag-option" style="font-size:10px;padding:2px 8px">家长：可替换</span></div>
+            <span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;background:linear-gradient(135deg,var(--honey),var(--peach));color:white;margin-top:8px">VIP</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">🔄 替换角色头像/形象</div>
+          <p style="font-size:12px;color:var(--text-light);margin-bottom:12px">为模板中的可替换角色选择头像或形象（画风不可替换）</p>
+          <div style="display:flex;gap:16px;flex-wrap:wrap">
+            <div style="flex:1;min-width:200px;padding:14px;background:var(--warm-bg);border-radius:var(--radius-sm)">
+              <div style="font-size:12px;font-weight:700;color:var(--text-mid);margin-bottom:8px">主角（必填）</div>
+              <div style="display:flex;gap:8px">
+                <div class="char-card" style="padding:10px"><div class="char-avatar ca4" style="width:40px;height:40px;font-size:18px">👧</div><div class="char-name" style="font-size:11px">小星星</div></div>
+                <div class="char-card" style="padding:10px"><div class="char-avatar ca1" style="width:40px;height:40px;font-size:18px">🐻</div><div class="char-name" style="font-size:11px">保留默认</div></div>
+                <div class="char-card char-add" style="padding:10px"><div style="font-size:14px">+</div><div style="font-size:10px">其他</div></div>
+              </div>
+            </div>
+            <div style="flex:1;min-width:200px;padding:14px;background:var(--warm-bg);border-radius:var(--radius-sm)">
+              <div style="font-size:12px;font-weight:700;color:var(--text-mid);margin-bottom:8px">朋友（可选）</div>
+              <div style="display:flex;gap:8px">
+                <div class="char-card selected" style="padding:10px"><div class="char-avatar ca3" style="width:40px;height:40px;font-size:18px">🐰</div><div class="char-name" style="font-size:11px">保留默认</div></div>
+                <div class="char-card char-add" style="padding:10px"><div style="font-size:14px">+</div><div style="font-size:10px">替换</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="nav-buttons"><a href="index.html" class="btn btn-ghost">取消</a><a href="player.html" class="btn btn-primary btn-lg">✨ 保存到我的绘本库</a></div>
+      </div><!-- end pathTemplateContent -->
+
+    </div>
+
+    <!-- ==================== STEP 2: 选择形象 ==================== -->
+    <div class="step-panel" id="step2">
+      <h3 style="font-size:16px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px;">🎭 选择故事形象</h3>
+      <p style="font-size:13px;color:var(--text-light);margin-bottom:16px">选择故事中的主要形象，也可以用自己创建的形象替换故事角色</p>
+
+      <div class="card">
+        <div class="card-title">👤 我的作品形象</div>
+        <div class="char-grid">
+          <div class="char-card selected"><div class="char-avatar ca1">🐻</div><div class="char-name">小熊</div><div class="char-tag">主角</div></div>
+          <div class="char-card"><div class="char-avatar ca2">🌙</div><div class="char-name">月亮</div><div class="char-tag">配角</div></div>
+          <div class="char-card"><div class="char-avatar ca3">🐰</div><div class="char-name">小兔</div><div class="char-tag">朋友</div></div>
+          <div class="char-card char-add"><div class="char-add-icon">+</div><div class="char-add-text">创建新形象</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🎨 用个人形象替换</div>
+        <p style="font-size:12px;color:var(--text-light);margin-bottom:12px">选择你自己的形象来替换故事中的角色</p>
+        <div class="char-grid">
+          <div class="char-card"><div class="char-avatar ca4">👧</div><div class="char-name">小星星</div><div class="char-tag">我的女儿</div></div>
+          <div class="char-card"><div class="char-avatar ca5">👩</div><div class="char-name">妈妈</div><div class="char-tag">妈妈形象</div></div>
+          <div class="char-card"><div class="char-avatar ca6">🐱</div><div class="char-name">小花猫</div><div class="char-tag">宠物</div><span class="vip-badge">VIP</span></div>
+          <div class="char-card"><div class="char-avatar ca7">🧚</div><div class="char-name">小精灵</div><div class="char-tag">系统形象</div><span class="vip-badge">VIP</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📦 系统形象库</div>
+        <div class="char-grid">
+          <div class="char-card"><div class="char-avatar ca8">🐸</div><div class="char-name">青蛙</div><div class="char-tag">动物</div></div>
+          <div class="char-card"><div class="char-avatar ca1">🦊</div><div class="char-name">小狐狸</div><div class="char-tag">动物</div></div>
+          <div class="char-card"><div class="char-avatar ca2">🐧</div><div class="char-name">企鹅</div><div class="char-tag">动物</div></div>
+          <div class="char-card"><div class="char-avatar ca3">🐉</div><div class="char-name">小恐龙</div><div class="char-tag">奇幻</div><span class="vip-badge">VIP</span></div>
+        </div>
+      </div>
+
+      <div class="nav-buttons"><button class="btn btn-ghost" onclick="goStep(1)">← 上一步</button><button class="btn btn-primary btn-lg" onclick="goStep(3)">下一步：确定画风 →</button></div>
+    </div>
+
+    <!-- ==================== STEP 3: 确定画风 ==================== -->
+    <div class="step-panel" id="step3">
+      <h3 style="font-size:16px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px;">🎨 确定画风</h3>
+      <p style="font-size:13px;color:var(--text-light);margin-bottom:16px">选择你喜欢的画风，或输入自定义画风描述</p>
+
+      <div class="style-grid">
+        <div class="style-card selected">
+          <div class="style-preview sp-watercolor">🎨</div>
+          <div class="style-info"><div class="style-name">水彩画风</div><div class="style-desc">柔和的色彩晕染，温暖梦幻的氛围</div><span class="style-rec">✨ 推荐</span></div>
+        </div>
+        <div class="style-card">
+          <div class="style-preview sp-crayon">🖍️</div>
+          <div class="style-info"><div class="style-name">蜡笔画风</div><div class="style-desc">童趣的蜡笔质感，色彩鲜艳活泼</div></div>
+        </div>
+        <div class="style-card">
+          <div class="style-preview sp-cartoon">🐵</div>
+          <div class="style-info"><div class="style-name">卡通画风</div><div class="style-desc">简洁明快的线条，适合低龄儿童</div></div>
+        </div>
+        <div class="style-card">
+          <div class="style-preview sp-bedtime">🌙</div>
+          <div class="style-info"><div class="style-name">睡前温柔</div><div class="style-desc">深蓝夜空色调，柔和宁静，适合睡前故事</div><span class="style-vip">VIP</span></div>
+        </div>
+        <div class="style-card">
+          <div class="style-preview sp-chinese">🏯</div>
+          <div class="style-info"><div class="style-name">国风</div><div class="style-desc">传统中国水墨韵味，典雅大气</div><span class="style-vip">VIP</span></div>
+        </div>
+        <div class="style-card">
+          <div class="style-preview sp-sketch">✏️</div>
+          <div class="style-info"><div class="style-name">手绘线稿</div><div class="style-desc">简约黑白线条，注重结构与表情</div></div>
+        </div>
+      </div>
+
+      <div class="custom-style">
+        <div class="card-title">✏️ 自定义画风</div>
+        <input class="custom-input" placeholder="描述你想要的画风，例如：像宫崎骏动画的温暖风格…">
+        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+          <span class="tag-option">温暖粉色调</span>
+          <span class="tag-option">简约北欧风</span>
+          <span class="tag-option">复古胶片感</span>
+        </div>
+      </div>
+
+      <div class="nav-buttons"><button class="btn btn-ghost" onclick="goStep(2)">← 上一步</button><button class="btn btn-primary btn-lg" onclick="goStep(4)">下一步：编辑分镜 →</button></div>
+    </div>
+
+    <!-- ==================== STEP 4: 编辑分镜 ==================== -->
+    <div class="step-panel" id="step4">
+      <h3 style="font-size:16px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px;">🎬 编辑分镜</h3>
+      <p style="font-size:13px;color:var(--text-light);margin-bottom:16px">查看和编辑每一页的画面描述、文字和对白，确认后生成插图</p>
+
+      <div style="display:flex;gap:12px;margin-bottom:20px">
+        <button class="btn btn-primary" style="font-size:13px">✨ 生成全部插图</button>
+        <button class="btn btn-secondary" style="font-size:13px">🔄 重新生成分镜</button>
+        <button class="btn btn-ghost" style="font-size:13px">+ 添加页面</button>
+      </div>
+
+      <div class="storyboard">
+        <div class="sb-page">
+          <div class="sb-thumb st1">🏠</div>
+          <div class="sb-content">
+            <div class="sb-page-num">第 1 页</div>
+            <div class="sb-title">小熊的家</div>
+            <div class="sb-text">在森林的深处，有一座温暖的小木屋，那是小熊和妈妈的家。每天晚上，小熊都会坐在窗前看天上的星星。</div>
+            <div class="sb-scene">画面：温暖的森林小屋，窗户透出暖黄灯光，窗外星空</div>
+          </div>
+          <div class="sb-actions"><button class="sb-btn">编辑</button><button class="sb-btn">重绘</button></div>
+        </div>
+        <div class="sb-page">
+          <div class="sb-thumb st2">🌙</div>
+          <div class="sb-content">
+            <div class="sb-page-num">第 2 页</div>
+            <div class="sb-title">发现月亮</div>
+            <div class="sb-text">有一天晚上，小���发现月亮特别圆特别亮。她伸出小爪子，好像能碰到月亮一样。</div>
+            <div class="sb-scene">画面：小熊在窗台前，月光洒进来，小熊伸手</div>
+          </div>
+          <div class="sb-actions"><button class="sb-btn">编辑</button><button class="sb-btn">重绘</button></div>
+        </div>
+        <div class="sb-page">
+          <div class="sb-thumb st3">💬</div>
+          <div class="sb-content">
+            <div class="sb-page-num">第 3 页</div>
+            <div class="sb-title">与月亮对话</div>
+            <div class="sb-text">"月亮姐姐，你为什么总在天上呢？"小熊好奇地问。月亮微笑着没有回答。</div>
+            <div class="sb-scene">画面：小熊仰望天空中的月亮</div>
+            <div class="sb-dialog">💬 小熊：月亮姐姐，你为什么总在天上呢？</div>
+          </div>
+          <div class="sb-actions"><button class="sb-btn">编辑</button><button class="sb-btn">重绘</button></div>
+        </div>
+        <div class="sb-page">
+          <div class="sb-thumb st4">🎒</div>
+          <div class="sb-content">
+            <div class="sb-page-num">第 4 页</div>
+            <div class="sb-title">出发寻找</div>
+            <div class="sb-text">第二天晚上，月亮不见了。小熊背上小书包，决定去找月亮。"妈妈，我要去找月亮！"</div>
+            <div class="sb-scene">画面：小熊背着书包出门，森林小路延伸向远方</div>
+            <div class="sb-dialog">💬 小熊：妈妈，我要去找月亮！</div>
+          </div>
+          <div class="sb-actions"><button class="sb-btn">编辑</button><button class="sb-btn">重绘</button></div>
+        </div>
+        <div class="sb-page">
+          <div class="sb-thumb st5">🌲</div>
+          <div class="sb-content">
+            <div class="sb-page-num">第 5 页</div>
+            <div class="sb-title">森林探险</div>
+            <div class="sb-text">小熊穿过茂密的森林，遇到了小兔子。"小熊，你要去哪里呀？""我要去找月亮！"</div>
+            <div class="sb-scene">画面：森林中的小路，小熊遇到兔子</div>
+            <div class="sb-dialog">💬 小兔：小熊，你要去哪里呀？</div>
+          </div>
+          <div class="sb-actions"><button class="sb-btn">编辑</button><button class="sb-btn">重绘</button></div>
+        </div>
+        <div class="sb-page">
+          <div class="sb-thumb st6">🏔️</div>
+          <div class="sb-content">
+            <div class="sb-page-num">第 6 页</div>
+            <div class="sb-title">山顶的发现</div>
+            <div class="sb-text">小熊爬到了山顶，可是月亮还是不在。小熊伤心地坐在山顶，眼泪快要掉下来了。</div>
+            <div class="sb-scene">画面：山顶，小熊孤单地坐着，天空中没有月亮</div>
+          </div>
+          <div class="sb-actions"><button class="sb-btn">编辑</button><button class="sb-btn">重绘</button></div>
+        </div>
+        <div class="sb-page">
+          <div class="sb-thumb st7">🌙</div>
+          <div class="sb-content">
+            <div class="sb-page-num">第 7 页</div>
+            <div class="sb-title">月亮回来了</div>
+            <div class="sb-text">就在这时，一片云飘走了，月亮又出现了！"月亮姐姐，你一直都在呀！"</div>
+            <div class="sb-scene">画面：云开月明，月光照亮小熊开心的脸</div>
+            <div class="sb-dialog">💬 小熊：月亮姐姐，你一直都在呀！</div>
+          </div>
+          <div class="sb-actions"><button class="sb-btn">编辑</button><button class="sb-btn">重绘</button></div>
+        </div>
+        <div class="sb-page">
+          <div class="sb-thumb st8">🛏️</div>
+          <div class="sb-content">
+            <div class="sb-page-num">第 8 页</div>
+            <div class="sb-title">甜蜜的晚安</div>
+            <div class="sb-text">小熊回到了温暖的小屋，月光透过窗户洒在被子上。晚安，小熊。晚安，月亮。</div>
+            <div class="sb-scene">画面：小熊在床上安睡，窗外月光温柔</div>
+          </div>
+          <div class="sb-actions"><button class="sb-btn">编辑</button><button class="sb-btn">重绘</button></div>
+        </div>
+      </div>
+
+      <div class="nav-buttons"><button class="btn btn-ghost" onclick="goStep(3)">← 上一步</button><button class="btn btn-primary btn-lg" onclick="goStep(5)">下一步：选择声音 →</button></div>
+    </div>
+
+    <!-- ==================== STEP 5: 选择声音 ==================== -->
+    <div class="step-panel" id="step5">
+      <h3 style="font-size:16px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px;">🎙️ 选择朗读声音</h3>
+      <p style="font-size:13px;color:var(--text-light);margin-bottom:16px">选择朗读绘本的声音，支持系统声音和个人声音</p>
+
+      <div class="card">
+        <div class="card-title">👤 我的声音</div>
+        <div class="voice-grid">
+          <div class="voice-card">
+            <div class="voice-icon vi3">👩</div>
+            <div class="voice-info"><div class="voice-name">妈妈的声音</div><div class="voice-meta">中文 · 个人上传 · 可使用</div></div>
+            <div class="voice-wave"><span style="height:8px"></span><span style="height:14px"></span><span style="height:6px"></span><span style="height:18px"></span><span style="height:10px"></span></div>
+          </div>
+          <div class="voice-card">
+            <div class="voice-icon vi1">👧</div>
+            <div class="voice-info"><div class="voice-name">小星星的声音</div><div class="voice-meta">中文 · 处理中</div></div>
+            <div class="voice-wave"><span style="height:6px"></span><span style="height:8px"></span><span style="height:4px"></span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🔊 系统声音</div>
+        <div class="voice-grid">
+          <div class="voice-card selected">
+            <div class="voice-icon vi2">🎙️</div>
+            <div class="voice-info"><div class="voice-name">温柔姐姐</div><div class="voice-meta">中文 · 女声 · 温柔</div></div>
+            <div class="voice-wave"><span style="height:10px"></span><span style="height:16px"></span><span style="height:8px"></span><span style="height:20px"></span><span style="height:12px"></span></div>
+          </div>
+          <div class="voice-card">
+            <div class="voice-icon vi4">🎙️</div>
+            <div class="voice-info"><div class="voice-name">活泼哥哥</div><div class="voice-meta">中文 · 男声 · 活泼</div></div>
+            <div class="voice-wave"><span style="height:12px"></span><span style="height:18px"></span><span style="height:6px"></span><span style="height:14px"></span><span style="height:10px"></span></div>
+          </div>
+          <div class="voice-card">
+            <div class="voice-icon vi5">🎙️</div>
+            <div class="voice-info"><div class="voice-name">奶奶讲古</div><div class="voice-meta">中文 · 女声 · 慢速</div></div>
+            <div class="voice-wave"><span style="height:6px"></span><span style="height:10px"></span><span style="height:8px"></span><span style="height:12px"></span><span style="height:6px"></span></div>
+            <span class="vip-badge">VIP</span>
+          </div>
+          <div class="voice-card">
+            <div class="voice-icon vi6">🎙️</div>
+            <div class="voice-info"><div class="voice-name">儿童故事</div><div class="voice-meta">中文 · 童声 · 可爱</div></div>
+            <div class="voice-wave"><span style="height:8px"></span><span style="height:14px"></span><span style="height:10px"></span><span style="height:16px"></span><span style="height:8px"></span></div>
+            <span class="vip-badge">VIP</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">⚙️ 朗读设置</div>
+        <div class="config-row">
+          <div class="config-group"><label class="config-label">朗读语言</label><select class="config-select"><option selected>中文</option><option>English</option><option>中英双语</option></select></div>
+          <div class="config-group"><label class="config-label">语速</label><select class="config-select"><option>慢速</option><option selected>正常</option><option>快速</option></select></div>
+        </div>
+      </div>
+
+      <div class="nav-buttons"><button class="btn btn-ghost" onclick="goStep(4)">← 上一步</button><button class="btn btn-primary btn-lg" onclick="goStep(5)">🎙️ 生成语音</button></div>
+    </div>
+
+    <!-- ==================== STEP 6: 预览 ==================== -->
+    <div class="step-panel" id="step6">
+      <h3 style="font-size:16px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px;">👀 播放预览</h3>
+      <p style="font-size:13px;color:var(--text-light);margin-bottom:16px">预览生成的绘本效果，确认后保存到个人绘本库</p>
+
+      <div class="preview-player">
+        <div class="preview-illust">
+          <span class="page-num">第 3 / 8 页</span>
+          🐻
+        </div>
+        <div class="preview-text-area">
+          <div class="preview-story-text">
+            "月亮姐姐，你为什么总在天上呢？"小熊好奇地问。<br>月亮微笑着没有回答。
+          </div>
+        </div>
+        <div class="preview-controls">
+          <button class="ctrl-btn">⏮</button>
+          <button class="ctrl-btn">⏪</button>
+          <button class="ctrl-btn play">▶</button>
+          <button class="ctrl-btn">⏩</button>
+          <button class="ctrl-btn">⏭</button>
+        </div>
+      </div>
+
+      <div class="preview-summary">
+        <div class="summary-card"><div class="summary-icon">📖</div><div class="summary-val">小熊找月亮</div><div class="summary-label">故事</div></div>
+        <div class="summary-card"><div class="summary-icon">🐻</div><div class="summary-val">小熊 · 月亮</div><div class="summary-label">形象</div></div>
+        <div class="summary-card"><div class="summary-icon">🎨</div><div class="summary-val">水彩画风</div><div class="summary-label">画风</div></div>
+        <div class="summary-card"><div class="summary-icon">📄</div><div class="summary-val">8 页</div><div class="summary-label">页数</div></div>
+        <div class="summary-card"><div class="summary-icon">🎙️</div><div class="summary-val">温柔姐姐</div><div class="summary-label">声音</div></div>
+        <div class="summary-card"><div class="summary-icon">⏱️</div><div class="summary-val">约 8 分钟</div><div class="summary-label">时长</div></div>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-top:24px">
+        <button class="btn btn-secondary" style="font-size:13px">🔄 重新生成全部</button>
+        <button class="btn btn-ghost" style="font-size:13px">编辑分镜</button>
+        <button class="btn btn-ghost" style="font-size:13px">更换声音</button>
+      </div>
+
+      <div class="nav-buttons">
+        <button class="btn btn-ghost" onclick="goStep(5)">← 上一步</button>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-secondary btn-lg">保存草稿</button>
+          <a href="player.html" class="btn btn-primary btn-lg">✨ 保存到我的绘本库</a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- PREVIEW PANEL (sticky) -->
+  <div class="preview-panel">
+    <div class="preview-card">
+      <div class="preview-cover">
+        <div class="preview-cover-decor"></div>
+        <div class="preview-cover-decor"></div>
+        <span class="preview-cover-emoji">📖</span>
+      </div>
+      <div class="preview-panel-title">📋 生成配置预览</div>
+      <div class="preview-item"><span class="preview-key">故事来源</span><span class="preview-val">📖 系统故事</span></div>
+      <div class="preview-item"><span class="preview-key">故事</span><span class="preview-val">🐻 小熊找月亮</span></div>
+      <div class="preview-item"><span class="preview-key">形象</span><span class="preview-val" id="pv-char">🐻 小熊 · 🌙 月亮</span></div>
+      <div class="preview-item"><span class="preview-key">画风</span><span class="preview-val" id="pv-style">🎨 水彩画风</span></div>
+      <div class="preview-item"><span class="preview-key">页数</span><span class="preview-val">8 页</span></div>
+      <div class="preview-item"><span class="preview-key">声音</span><span class="preview-val" id="pv-voice">🎙️ 温柔姐姐</span></div>
+      <div class="preview-item"><span class="preview-key">目标年龄</span><span class="preview-val">5-6岁</span></div>
+      <div class="preview-item"><span class="preview-key">语言</span><span class="preview-val">中文</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+function goStep(n) {
+  document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('step' + n).classList.add('active');
+
+  document.querySelectorAll('#stepper .step').forEach(s => {
+    const sn = parseInt(s.dataset.step);
+    s.classList.remove('active', 'done');
+    if (sn === n) s.classList.add('active');
+    else if (sn < n) s.classList.add('done');
+  });
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+document.querySelectorAll('#stepper .step').forEach(s => {
+  s.addEventListener('click', () => goStep(parseInt(s.dataset.step)));
+});
+
+function switchPath(path) {
+  const storyBtn = document.getElementById('pathStory');
+  const templateBtn = document.getElementById('pathTemplate');
+  const storyContent = document.getElementById('pathStoryContent');
+  const templateContent = document.getElementById('pathTemplateContent');
+  if (path === 'story') {
+    storyBtn.className = 'btn btn-primary'; storyBtn.style.cssText = 'flex:1;padding:16px;font-size:15px;border-radius:var(--radius-md)';
+    templateBtn.className = 'btn btn-secondary'; templateBtn.style.cssText = 'flex:1;padding:16px;font-size:15px;border-radius:var(--radius-md)';
+    storyContent.style.display = 'block';
+    templateContent.style.display = 'none';
+  } else {
+    templateBtn.className = 'btn btn-primary'; templateBtn.style.cssText = 'flex:1;padding:16px;font-size:15px;border-radius:var(--radius-md)';
+    storyBtn.className = 'btn btn-secondary'; storyBtn.style.cssText = 'flex:1;padding:16px;font-size:15px;border-radius:var(--radius-md)';
+    storyContent.style.display = 'none';
+    templateContent.style.display = 'block';
+  }
+}
+</script>
+
+</body>
+</html>

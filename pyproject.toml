@@ -1,0 +1,38 @@
+[project]
+name = "airchieve-backend"
+version = "0.1.0"
+description = "AIrchieve FastAPI backend service"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.18.0",
+    "aiomysql>=0.3.0",
+    "aiosqlite>=0.22.0",
+    "alibabacloud-dysmsapi20170525>=3.1.0",
+    "alibabacloud-tea-openapi>=0.3.7",
+    "alibabacloud-tea-util>=0.3.13",
+    "fastapi>=0.128.0",
+    "pydantic-settings>=2.12.0",
+    "python-dotenv>=1.2.0",
+    "sqlalchemy[asyncio]>=2.0.0",
+    "uvicorn[standard]>=0.40.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx>=0.28.0",
+    "pytest>=9.0.0",
+    "pytest-asyncio>=1.3.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["backend"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+asyncio_mode = "auto"
+pythonpath = ["backend"]
+testpaths = ["tests"]
