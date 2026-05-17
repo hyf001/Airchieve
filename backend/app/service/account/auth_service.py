@@ -68,6 +68,10 @@ def _mask_phone(phone: str | None) -> str | None:
     return f"{phone[:3]}****{phone[-4:]}"
 
 
+def _mask_identifier(phone: str) -> str:
+    return _mask_phone(phone) or phone
+
+
 def _normal_phone(phone: str) -> str:
     return phone.strip().replace(" ", "").replace("-", "")
 
@@ -498,7 +502,7 @@ async def list_auth_bindings(db: AsyncSession, user_id: str) -> list[AuthBinding
     return [
         AuthBindingSummary(
             provider=row.provider,
-            masked_identifier=_mask_phone(row.provider_user_id)
+            masked_identifier=_mask_identifier(row.provider_user_id)
             if row.provider == AuthProvider.PHONE
             else f"{row.provider.value}:{row.provider_user_id[:8]}...",
             bound_at=row.bound_at,
