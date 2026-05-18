@@ -3,7 +3,6 @@ import React from "react";
 import { useAuth } from "@/features/auth";
 import { useToast } from "@/shared/ui/toast";
 import { profileApi } from "./api";
-import { demoProfiles } from "./demoData";
 import { type ChildProfile, type ChildProfilePayload } from "./types";
 
 interface ProfileContextValue {
@@ -67,9 +66,8 @@ export const ProfileProvider: React.FC<React.PropsWithChildren> = ({ children })
         window.localStorage.setItem(storageKey, String(normalized.find((profile) => profile.is_default)?.id ?? normalized[0].id));
       }
     } catch (requestError) {
-      const selectedId = Number(window.localStorage.getItem(storageKey)) || null;
-      setProfiles(normalizeProfiles(demoProfiles, selectedId));
-      setError(requestError instanceof Error ? requestError.message : "儿童档案加载失败，当前显示演示数据");
+      setProfiles([]);
+      setError(requestError instanceof Error ? requestError.message : "儿童档案加载失败");
     } finally {
       setIsLoading(false);
     }
@@ -85,19 +83,16 @@ export const ProfileProvider: React.FC<React.PropsWithChildren> = ({ children })
         const created = await profileApi.createProfile(payload);
         setProfiles((current) => normalizeProfiles([...current, created], created.id));
         window.localStorage.setItem(storageKey, String(created.id));
-      } catch {
-        const created: ChildProfile = {
-          ...payload,
-          id: -Date.now(),
-          is_default: profiles.length === 0,
-          status: "active",
-        };
-        setProfiles((current) => normalizeProfiles([...current, created], created.id));
-        window.localStorage.setItem(storageKey, String(created.id));
+        setError(null);
+        showToast("儿童档案已保存", "success");
+      } catch (requestError) {
+        const message = requestError instanceof Error ? requestError.message : "儿童档案保存失败";
+        setError(message);
+        showToast(message, "error");
+        throw requestError;
       }
-      showToast("儿童档案已保存", "success");
     },
-    [profiles.length, showToast],
+    [showToast],
   );
 
   const updateProfile = React.useCallback(
@@ -110,12 +105,14 @@ export const ProfileProvider: React.FC<React.PropsWithChildren> = ({ children })
             Number(window.localStorage.getItem(storageKey)) || null,
           ),
         );
-      } catch {
-        setProfiles((current) =>
-          current.map((profile) => (profile.id === profileId ? { ...profile, ...payload } : profile)),
-        );
+        setError(null);
+        showToast("档案信息已更新", "success");
+      } catch (requestError) {
+        const message = requestError instanceof Error ? requestError.message : "档案信息更新失败";
+        setError(message);
+        showToast(message, "error");
+        throw requestError;
       }
-      showToast("档案信息已更新", "success");
     },
     [showToast],
   );
@@ -124,8 +121,11 @@ export const ProfileProvider: React.FC<React.PropsWithChildren> = ({ children })
     async (profileId: number) => {
       try {
         await profileApi.deleteProfile(profileId);
-      } catch {
-        // Demo fallback mirrors the local deletion when the backend is unavailable.
+      } catch (requestError) {
+        const message = requestError instanceof Error ? requestError.message : "儿童档案删除失败";
+        setError(message);
+        showToast(message, "error");
+        throw requestError;
       }
 
       setProfiles((current) => {
@@ -138,6 +138,7 @@ export const ProfileProvider: React.FC<React.PropsWithChildren> = ({ children })
         }
         return normalizeProfiles(next, fallbackId);
       });
+      setError(null);
       showToast("儿童档案已删除", "success");
     },
     [showToast],
@@ -147,11 +148,15 @@ export const ProfileProvider: React.FC<React.PropsWithChildren> = ({ children })
     async (profileId: number) => {
       try {
         await profileApi.setDefaultProfile(profileId);
-      } catch {
-        // Local fallback keeps current profile capability available in prototype mode.
+      } catch (requestError) {
+        const message = requestError instanceof Error ? requestError.message : "当前儿童档案切换失败";
+        setError(message);
+        showToast(message, "error");
+        throw requestError;
       }
       window.localStorage.setItem(storageKey, String(profileId));
       setProfiles((current) => normalizeProfiles(current, profileId));
+      setError(null);
       showToast("已切换当前儿童档案", "success");
     },
     [showToast],

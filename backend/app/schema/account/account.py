@@ -6,9 +6,6 @@ from app.model.account import (
     AuthProvider,
     CaptchaProvider,
     ChildProfileAgeRange,
-    ChildProfileDefaultArtStyle,
-    ChildProfileDefaultCharacter,
-    ChildProfileDefaultVoice,
     ChildProfileEducationGoal,
     ChildProfileInterestTag,
     ChildProfileReadingLevel,
@@ -150,9 +147,9 @@ class ChildProfileCreate(BaseModel):
     reading_level: ChildProfileReadingLevel | None = None
     interest_tags: list[ChildProfileInterestTag] = Field(default_factory=list)
     education_goals: list[ChildProfileEducationGoal] = Field(default_factory=list)
-    default_character: ChildProfileDefaultCharacter | None = None
-    default_voice: ChildProfileDefaultVoice | None = None
-    default_art_style: ChildProfileDefaultArtStyle | None = None
+    default_character: str | None = Field(default=None, max_length=64)
+    default_voice: str | None = Field(default=None, max_length=64)
+    default_art_style: str | None = Field(default=None, max_length=64)
 
 
 class ChildProfileUpdate(BaseModel):
@@ -161,9 +158,9 @@ class ChildProfileUpdate(BaseModel):
     reading_level: ChildProfileReadingLevel | None = None
     interest_tags: list[ChildProfileInterestTag] | None = None
     education_goals: list[ChildProfileEducationGoal] | None = None
-    default_character: ChildProfileDefaultCharacter | None = None
-    default_voice: ChildProfileDefaultVoice | None = None
-    default_art_style: ChildProfileDefaultArtStyle | None = None
+    default_character: str | None = Field(default=None, max_length=64)
+    default_voice: str | None = Field(default=None, max_length=64)
+    default_art_style: str | None = Field(default=None, max_length=64)
 
 
 class ChildProfileRead(BaseModel):
@@ -176,9 +173,9 @@ class ChildProfileRead(BaseModel):
     reading_level: ChildProfileReadingLevel | None
     interest_tags: list[ChildProfileInterestTag]
     education_goals: list[ChildProfileEducationGoal]
-    default_character: ChildProfileDefaultCharacter | None
-    default_voice: ChildProfileDefaultVoice | None
-    default_art_style: ChildProfileDefaultArtStyle | None
+    default_character: str | None
+    default_voice: str | None
+    default_art_style: str | None
     visibility: ChildProfileVisibility
     is_default: bool
     status: ChildProfileStatus

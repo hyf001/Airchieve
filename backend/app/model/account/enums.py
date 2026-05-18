@@ -111,21 +111,3 @@ class ChildProfileEducationGoal(StrEnum):
     COURAGE = "courage"
     SOCIAL = "social"
     CREATIVITY = "creativity"
-
-
-class ChildProfileDefaultCharacter(StrEnum):
-    STAR_CHILD = "star-child"
-    FOREST_FRIEND = "forest-friend"
-    LITTLE_CAPTAIN = "little-captain"
-
-
-class ChildProfileDefaultVoice(StrEnum):
-    WARM_MOM = "warm-mom"
-    STORY_DAD = "story-dad"
-    CLEAR_TEACHER = "clear-teacher"
-
-
-class ChildProfileDefaultArtStyle(StrEnum):
-    WATERCOLOR = "watercolor"
-    CRAYON = "crayon"
-    BEDTIME = "bedtime"

@@ -1,22 +1,55 @@
 import React, { useEffect, useState } from "react";
 
 import { BookDetailPanel, BookGrid, type BookDetail } from "@/entities/book";
-import { demoBookDetail, discoveryApi } from "@/features/discovery";
+import { discoveryApi } from "@/features/discovery";
 import { AppShell } from "@/shared/layout/AppShell";
 import { useRouter } from "@/app/router";
+import { LoadingSpinner } from "@/shared/ui/loading";
 
 export const BookDetailPage: React.FC = () => {
   const { navigate } = useRouter();
-  const [book, setBook] = useState<BookDetail>(demoBookDetail);
+  const [book, setBook] = useState<BookDetail | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const bookId = Number(new URLSearchParams(window.location.search).get("bookId") ?? demoBookDetail.id);
+    const bookId = Number(new URLSearchParams(window.location.search).get("bookId"));
+    if (!Number.isFinite(bookId) || bookId <= 0) {
+      setError("缺少有效的绘本 ID，无法加载绘本详情。");
+      return;
+    }
+
     discoveryApi
-      .getBook(Number.isFinite(bookId) ? bookId : demoBookDetail.id)
-      .then(setBook)
-      .catch(() => undefined);
+      .getBook(bookId)
+      .then((response) => {
+        setBook(response);
+        setError(null);
+      })
+      .catch((requestError) => {
+        setBook(null);
+        setError(requestError instanceof Error ? requestError.message : "绘本详情加载失败");
+      });
   }, []);
+
+  if (error) {
+    return (
+      <AppShell>
+        <main className="mx-auto max-w-[1320px] px-8 py-10 max-sm:px-4">
+          <section className="app-card p-8 text-sm text-[var(--text-mid)]">{error}</section>
+        </main>
+      </AppShell>
+    );
+  }
+
+  if (!book) {
+    return (
+      <AppShell>
+        <main className="flex min-h-[360px] items-center justify-center">
+          <LoadingSpinner label="正在加载绘本详情" />
+        </main>
+      </AppShell>
+    );
+  }
 
   const handleStartSimilar = async () => {
     setMessage(null);
@@ -42,7 +75,11 @@ export const BookDetailPage: React.FC = () => {
       ) : null}
       <section className="mx-auto mt-6 max-w-[1320px] px-8 pb-10 max-sm:px-4">
         <h2 className="font-display mb-4 text-2xl">相关绘本</h2>
-        <BookGrid books={book.related_books.length ? book.related_books : demoBookDetail.related_books} compact />
+        {book.related_books.length > 0 ? (
+          <BookGrid books={book.related_books} compact />
+        ) : (
+          <div className="app-card p-6 text-sm text-[var(--text-light)]">暂无相关绘本。</div>
+        )}
       </section>
     </AppShell>
   );

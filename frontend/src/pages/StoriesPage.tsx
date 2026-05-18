@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 import { StoryCard, StoryEditor, type StoryPayload, type StorySummary } from "@/entities/story";
-import { demoStories, storyLibraryApi } from "@/features/story-library";
+import { storyLibraryApi } from "@/features/story-library";
 import { useRouter } from "@/app/router";
 import { AppShell } from "@/shared/layout/AppShell";
 
@@ -9,20 +9,26 @@ type StoryTab = "all" | "system" | "user";
 
 export const StoriesPage: React.FC = () => {
   const { navigate } = useRouter();
-  const [stories, setStories] = useState<StorySummary[]>(demoStories);
+  const [stories, setStories] = useState<StorySummary[]>([]);
   const [tab, setTab] = useState<StoryTab>("all");
-  const [activeStory, setActiveStory] = useState<StorySummary | null>(demoStories[0]);
+  const [activeStory, setActiveStory] = useState<StorySummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     storyLibraryApi
       .listStories()
       .then((response) => {
-        if (response.items.length > 0) {
-          setStories(response.items);
-          setActiveStory(response.items[0]);
-        }
+        setStories(response.items);
+        setActiveStory(response.items[0] ?? null);
+        setError(null);
       })
-      .catch(() => undefined);
+      .catch((requestError) => {
+        setStories([]);
+        setActiveStory(null);
+        setError(requestError instanceof Error ? requestError.message : "故事列表加载失败");
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const visibleStories = useMemo(
@@ -35,26 +41,10 @@ export const StoriesPage: React.FC = () => {
       const created = await storyLibraryApi.createStory(payload);
       setStories((current) => [created, ...current]);
       setActiveStory(created);
-    } catch {
-      const fallback: StorySummary = {
-        id: Date.now(),
-        owner_user_id: 1,
-        source_type: "uploaded",
-        title: payload.title,
-        summary: payload.summary,
-        cover_url: null,
-        age_range_codes: payload.age_range_codes ?? [],
-        theme_codes: payload.theme_codes ?? [],
-        education_goal_codes: payload.education_goal_codes ?? [],
-        language: payload.language ?? "zh",
-        access_level: "free",
-        publish_status: "published",
-        view_count: 0,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      setStories((current) => [fallback, ...current]);
-      setActiveStory(fallback);
+      setError(null);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "故事保存失败");
+      throw requestError;
     }
   };
 
@@ -94,11 +84,26 @@ export const StoriesPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4 max-xl:grid-cols-2 max-sm:grid-cols-1">
-            {visibleStories.map((story) => (
-              <StoryCard key={story.id} story={story} onOpen={setActiveStory} onStartCreation={handleStartCreation} />
-            ))}
-          </div>
+          {error ? (
+            <div className="mb-4 rounded-[var(--radius-md)] border border-[rgba(212,114,92,0.18)] bg-white px-4 py-3 text-sm text-[var(--text-mid)]">
+              {error}
+            </div>
+          ) : null}
+
+          {loading ? (
+            <div className="app-card p-8 text-sm text-[var(--text-light)]">正在加载故事...</div>
+          ) : visibleStories.length > 0 ? (
+            <div className="grid grid-cols-3 gap-4 max-xl:grid-cols-2 max-sm:grid-cols-1">
+              {visibleStories.map((story) => (
+                <StoryCard key={story.id} story={story} onOpen={setActiveStory} onStartCreation={handleStartCreation} />
+              ))}
+            </div>
+          ) : (
+            <section className="app-card p-8 text-center">
+              <h2 className="font-display mb-2 text-2xl">暂无故事</h2>
+              <p className="text-sm text-[var(--text-light)]">当前筛选下暂无故事。</p>
+            </section>
+          )}
         </section>
 
         <aside className="space-y-5">

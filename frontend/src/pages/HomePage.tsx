@@ -4,7 +4,7 @@ import { BookOpen, PenLine, Search, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BookGrid, type BookSummary } from "@/entities/book";
 import { RecommendationSlot } from "@/entities/recommendation";
-import { demoBooks, discoveryApi } from "@/features/discovery";
+import { discoveryApi } from "@/features/discovery";
 import { useAuth } from "@/features/auth";
 import { AppShell } from "@/shared/layout/AppShell";
 import { AppLink } from "@/shared/ui/AppLink";
@@ -13,17 +13,24 @@ const scenes = ["睡前", "亲子共读", "课堂播放", "情绪引导", "习�
 
 export const HomePage: React.FC = () => {
   const { isAuthenticated } = useAuth();
-  const [books, setBooks] = useState<BookSummary[]>(demoBooks);
+  const [books, setBooks] = useState<BookSummary[]>([]);
   const [query, setQuery] = useState("");
   const [activeScene, setActiveScene] = useState("全部");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     discoveryApi
       .listBooks({ sort: "featured", limit: 12 })
       .then((response) => {
-        if (response.items.length > 0) setBooks(response.items);
+        setBooks(response.items);
+        setError(null);
       })
-      .catch(() => undefined);
+      .catch((requestError) => {
+        setBooks([]);
+        setError(requestError instanceof Error ? requestError.message : "绘本列表加载失败");
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const filteredBooks = useMemo(() => {
@@ -65,16 +72,18 @@ export const HomePage: React.FC = () => {
         <aside className="grid gap-4">
           <div className="app-card p-5">
             <h2 className="font-display text-2xl">继续阅读</h2>
-            {books.slice(0, 3).map((book, index) => (
+            {loading ? <p className="mt-4 text-sm text-[var(--text-light)]">正在加载绘本...</p> : null}
+            {!loading && books.length === 0 ? (
+              <p className="mt-4 text-sm text-[var(--text-light)]">暂无可继续阅读的绘本。</p>
+            ) : null}
+            {books.slice(0, 3).map((book) => (
               <AppLink key={book.id} to="/player" className="mt-4 flex items-center gap-3 text-inherit no-underline">
-                <span className="flex h-14 w-14 items-center justify-center rounded-[var(--radius-sm)] bg-[rgba(126,200,227,0.16)] font-bold text-[var(--sky-deep)]">
-                  {index + 1}
+                <span className="flex h-14 w-14 items-center justify-center rounded-[var(--radius-sm)] bg-[rgba(126,200,227,0.16)]">
+                  <BookOpen className="h-5 w-5 text-[var(--sky-deep)]" />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-bold">{book.title}</span>
-                  <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-[rgba(212,114,92,0.12)]">
-                    <span className="block h-full rounded-full bg-[var(--terracotta)]" style={{ width: `${38 + index * 18}%` }} />
-                  </span>
+                  <span className="mt-1 block text-xs text-[var(--text-light)]">{book.page_count} 页</span>
                 </span>
               </AppLink>
             ))}
@@ -115,6 +124,7 @@ export const HomePage: React.FC = () => {
       <RecommendationSlot
         title="精选绘本"
         books={filteredBooks}
+        emptyMessage={loading ? "正在加载绘本..." : (error ?? "暂无可展示的绘本。")}
         action={
           <AppLink to="/stories" className="text-sm font-semibold text-[var(--terracotta)] no-underline">
             从故事开始
@@ -129,7 +139,11 @@ export const HomePage: React.FC = () => {
             进入故事库
           </AppLink>
         </div>
-        <BookGrid books={[...books].sort((a, b) => b.play_count - a.play_count).slice(0, 5)} compact />
+        {books.length > 0 ? (
+          <BookGrid books={[...books].sort((a, b) => b.play_count - a.play_count).slice(0, 5)} compact />
+        ) : (
+          <div className="app-card p-6 text-sm text-[var(--text-light)]">{error ?? "暂无可展示的绘本。"}</div>
+        )}
       </section>
 
       <section className="mx-auto mt-9 grid max-w-[1320px] grid-cols-4 gap-4 px-8 pb-10 max-md:grid-cols-2 max-sm:px-4">

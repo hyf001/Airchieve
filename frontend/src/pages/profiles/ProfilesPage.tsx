@@ -21,13 +21,13 @@ import { Modal } from "@/shared/ui/modal";
 
 const emptyPayload: ChildProfilePayload = {
   nickname: "",
-  age_range: "age_3_4",
-  reading_level: "starter",
-  interest_tags: ["animals"],
-  education_goals: ["language"],
-  default_character: "star-child",
-  default_voice: "warm-mom",
-  default_art_style: "watercolor",
+  age_range: null,
+  reading_level: null,
+  interest_tags: [],
+  education_goals: [],
+  default_character: null,
+  default_voice: null,
+  default_art_style: null,
 };
 
 export const ProfilesPage: React.FC = () => (
@@ -99,7 +99,7 @@ const ProfilesContent: React.FC = () => {
         <div>
           {error ? (
             <div className="mb-5 rounded-[var(--radius-md)] border border-[rgba(245,166,35,0.22)] bg-[rgba(245,166,35,0.08)] px-4 py-3 text-sm text-[var(--text-mid)]">
-              {error}，当前可继续预览和编辑本地演示档案。
+              {error}
             </div>
           ) : null}
 
@@ -150,7 +150,7 @@ const ProfilesContent: React.FC = () => {
         open={modalOpen}
         profile={editingProfile}
         onClose={() => setModalOpen(false)}
-        onSubmit={(payload) => void handleSaveProfile(payload)}
+        onSubmit={(payload) => void handleSaveProfile(payload).catch(() => undefined)}
       />
     </main>
   );
@@ -248,11 +248,11 @@ const ProfileDetailPanel: React.FC<{
 
           <div className="p-9 max-md:p-5">
             <DetailSection icon={<BookOpen className="h-5 w-5" />} title="阅读历史">
-              <EmptyFactState message="当前没有可展示的真实阅读历史数据。" />
+              <EmptyFactState message="当前没有可展示的阅读历史。" />
             </DetailSection>
 
             <DetailSection icon={<Heart className="h-5 w-5" />} title="收藏绘本">
-              <EmptyFactState message="当前没有可展示的真实收藏绘本数据。" />
+              <EmptyFactState message="当前没有可展示的收藏绘本。" />
             </DetailSection>
           </div>
         </div>
@@ -371,7 +371,7 @@ const ProfileFormModal: React.FC<{
         <Input
           id="profile-name"
           className="mb-4"
-          placeholder="例如：小星星"
+          placeholder="请输入昵称"
           value={form.nickname}
           onChange={(event) => setForm((current) => ({ ...current, nickname: event.target.value }))}
         />
@@ -467,10 +467,7 @@ const ProfileFormModal: React.FC<{
               value={form.default_character ?? ""}
               onChange={(event) => setForm((current) => ({ ...current, default_character: (event.target.value || null) as ChildProfilePayload["default_character"] }))}
             >
-              <option value="">请选择</option>
-              <option value="star-child">星星主角</option>
-              <option value="forest-friend">森林伙伴</option>
-              <option value="little-captain">小船长</option>
+              <option value="">暂无可选择的形象</option>
             </select>
           </div>
           <div className="block text-[13px] font-bold text-[var(--text-mid)]">
@@ -480,7 +477,7 @@ const ProfileFormModal: React.FC<{
               value={form.default_voice ?? ""}
               onChange={(event) => setForm((current) => ({ ...current, default_voice: (event.target.value || null) as ChildProfilePayload["default_voice"] }))}
             >
-              <option value="">请选择</option>
+              <option value="">{voiceStyleItems.length === 0 ? "暂无可选择的声音" : "请选择"}</option>
               {voiceStyleItems.map((item) => (
                 <option key={item.code} value={item.code}>
                   {item.name}
@@ -495,10 +492,7 @@ const ProfileFormModal: React.FC<{
               value={form.default_art_style ?? ""}
               onChange={(event) => setForm((current) => ({ ...current, default_art_style: (event.target.value || null) as ChildProfilePayload["default_art_style"] }))}
             >
-              <option value="">请选择</option>
-              <option value="watercolor">柔和水彩</option>
-              <option value="crayon">蜡笔童趣</option>
-              <option value="bedtime">睡前暖光</option>
+              <option value="">暂无可选择的画风</option>
             </select>
           </div>
         </div>

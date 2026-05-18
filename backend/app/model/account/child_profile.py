@@ -3,9 +3,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.model.account.enums import (
     ChildProfileAgeRange,
-    ChildProfileDefaultArtStyle,
-    ChildProfileDefaultCharacter,
-    ChildProfileDefaultVoice,
     ChildProfileEducationGoal,
     ChildProfileInterestTag,
     ChildProfileReadingLevel,
@@ -26,9 +23,9 @@ class ChildProfile(TimestampMixin, Base):
     reading_level: Mapped[ChildProfileReadingLevel | None] = mapped_column(String(64), nullable=True)
     interest_tags: Mapped[list[ChildProfileInterestTag]] = mapped_column(JSON, default=list, nullable=False)
     education_goals: Mapped[list[ChildProfileEducationGoal]] = mapped_column(JSON, default=list, nullable=False)
-    default_character: Mapped[ChildProfileDefaultCharacter | None] = mapped_column(String(64), nullable=True)
-    default_voice: Mapped[ChildProfileDefaultVoice | None] = mapped_column(String(64), nullable=True)
-    default_art_style: Mapped[ChildProfileDefaultArtStyle | None] = mapped_column(String(64), nullable=True)
+    default_character: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    default_voice: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    default_art_style: Mapped[str | None] = mapped_column(String(64), nullable=True)
     visibility: Mapped[ChildProfileVisibility] = mapped_column(
         Enum(ChildProfileVisibility),
         default=ChildProfileVisibility.PRIVATE,

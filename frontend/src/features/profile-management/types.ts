@@ -10,9 +10,9 @@ export type ChildProfileInterestTag =
   | "science"
   | "adventure";
 export type ChildProfileEducationGoal = "emotion" | "habit" | "language" | "courage" | "social" | "creativity";
-export type ChildProfileDefaultCharacter = "star-child" | "forest-friend" | "little-captain";
-export type ChildProfileDefaultVoice = "warm-mom" | "story-dad" | "clear-teacher";
-export type ChildProfileDefaultArtStyle = "watercolor" | "crayon" | "bedtime";
+export type ChildProfileDefaultCharacter = string;
+export type ChildProfileDefaultVoice = string;
+export type ChildProfileDefaultArtStyle = string;
 
 export interface ChildProfile {
   id: number;

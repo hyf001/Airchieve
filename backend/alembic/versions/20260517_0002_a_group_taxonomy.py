@@ -67,10 +67,6 @@ SEED_DATA = [
     ("scene", "parent_child", "亲子共读", "Parent-Child", 2),
     ("scene", "classroom", "课堂", "Classroom", 3),
     ("scene", "travel", "旅途", "Travel", 4),
-    # voice_style
-    ("voice_style", "warm_mom", "温柔妈妈", "Warm Mom", 1),
-    ("voice_style", "story_dad", "故事爸爸", "Story Dad", 2),
-    ("voice_style", "clear_teacher", "清亮老师", "Clear Teacher", 3),
     # asset_category
     ("asset_category", "character", "形象", "Character", 1),
     ("asset_category", "voice", "声音", "Voice", 2),
