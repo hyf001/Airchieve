@@ -1,3 +1,31 @@
-from app.model.book.book import Book, BookAccessLevel, BookLanguage, BookPublishStatus
+from app.model.book.book import (
+    Book,
+    BookAccessLevel,
+    BookContentStatus,
+    BookDialogue,
+    BookLanguage,
+    BookLearningCard,
+    BookLipSyncStatus,
+    BookModerationStatus,
+    BookPage,
+    BookPromptType,
+    BookPublishStatus,
+    BookReadingPrompt,
+    BookSourceType,
+)
 
-__all__ = ["Book", "BookAccessLevel", "BookLanguage", "BookPublishStatus"]
+__all__ = [
+    "Book",
+    "BookAccessLevel",
+    "BookContentStatus",
+    "BookDialogue",
+    "BookLanguage",
+    "BookLearningCard",
+    "BookLipSyncStatus",
+    "BookModerationStatus",
+    "BookPage",
+    "BookPromptType",
+    "BookPublishStatus",
+    "BookReadingPrompt",
+    "BookSourceType",
+]

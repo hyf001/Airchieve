@@ -2,12 +2,15 @@ import React, { useEffect, useState } from "react";
 
 import { BookDetailPanel, BookGrid, type BookDetail } from "@/entities/book";
 import { discoveryApi } from "@/features/discovery";
+import { FavoriteButton } from "@/features/reading";
+import { useProfiles } from "@/features/profile-management";
 import { AppShell } from "@/shared/layout/AppShell";
 import { useRouter } from "@/app/router";
 import { LoadingSpinner } from "@/shared/ui/loading";
 
 export const BookDetailPage: React.FC = () => {
   const { navigate } = useRouter();
+  const { currentProfile } = useProfiles();
   const [book, setBook] = useState<BookDetail | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +68,17 @@ export const BookDetailPage: React.FC = () => {
 
   return (
     <AppShell>
-      <BookDetailPanel book={book} onStartSimilar={handleStartSimilar} />
+      <BookDetailPanel
+        book={book}
+        onStartReading={() => {
+          window.sessionStorage.setItem("airchieve.current_book_id", String(book.id));
+          navigate("/player");
+        }}
+        onStartSimilar={handleStartSimilar}
+      />
+      <div className="mx-auto max-w-[1320px] px-8 max-sm:px-4">
+        <FavoriteButton bookId={book.id} childProfileId={currentProfile?.id ?? null} />
+      </div>
       {message ? (
         <div className="mx-auto max-w-[1320px] px-8 max-sm:px-4">
           <div className="rounded-[var(--radius-md)] bg-[rgba(94,160,122,0.12)] px-4 py-3 text-sm font-semibold text-[var(--sage-deep)]">

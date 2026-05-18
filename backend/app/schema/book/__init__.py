@@ -1,17 +1,31 @@
 from app.schema.book.book import (
     BookDetailRead,
+    BookDialogueRead,
     BookListRead,
+    BookLearningCardRead,
+    BookPageRead,
+    BookPlayerOptions,
+    BookPlayerPayload,
+    BookReadingPromptRead,
     BookSimilarCreationRequest,
     BookSort,
+    BookVoiceOption,
     BookSummary,
     SimilarCreationSessionRead,
 )
 
 __all__ = [
     "BookDetailRead",
+    "BookDialogueRead",
     "BookListRead",
+    "BookLearningCardRead",
+    "BookPageRead",
+    "BookPlayerOptions",
+    "BookPlayerPayload",
+    "BookReadingPromptRead",
     "BookSimilarCreationRequest",
     "BookSort",
+    "BookVoiceOption",
     "BookSummary",
     "SimilarCreationSessionRead",
 ]

@@ -2,15 +2,15 @@ import React from "react";
 import { BookOpen, Clock, CopyPlus, Play, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { AppLink } from "@/shared/ui/AppLink";
 import { type BookDetail } from "./types";
 
 interface BookDetailPanelProps {
   book: BookDetail;
+  onStartReading?: () => void;
   onStartSimilar?: () => void;
 }
 
-export const BookDetailPanel: React.FC<BookDetailPanelProps> = ({ book, onStartSimilar }) => {
+export const BookDetailPanel: React.FC<BookDetailPanelProps> = ({ book, onStartReading, onStartSimilar }) => {
   const durationMinutes = Math.max(1, Math.round(book.duration_seconds / 60));
 
   return (
@@ -48,11 +48,9 @@ export const BookDetailPanel: React.FC<BookDetailPanelProps> = ({ book, onStartS
         </div>
 
         <div className="mt-8 flex flex-wrap gap-3">
-          <Button asChild size="lg">
-            <AppLink to="/player">
-              <Play className="h-4 w-4" />
-              开始阅读
-            </AppLink>
+          <Button size="lg" onClick={onStartReading}>
+            <Play className="h-4 w-4" />
+            开始阅读
           </Button>
           <Button size="lg" variant="sage" onClick={onStartSimilar}>
             <CopyPlus className="h-4 w-4" />

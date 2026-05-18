@@ -3,6 +3,7 @@ import React from "react";
 import { useRouter } from "@/app/router";
 import { HomePage } from "@/pages/HomePage";
 import { BookDetailPage } from "@/pages/BookDetailPage";
+import { PlayerPage } from "@/pages/PlayerPage";
 import { StoriesPage } from "@/pages/StoriesPage";
 import { AuthPage } from "@/pages/auth/AuthPage";
 import { ProfilesPage } from "@/pages/profiles/ProfilesPage";
@@ -25,6 +26,10 @@ const App: React.FC = () => {
 
   if (path === "/book-detail") {
     return <BookDetailPage />;
+  }
+
+  if (path === "/player") {
+    return <PlayerPage />;
   }
 
   if (path === "/profile") {

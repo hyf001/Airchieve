@@ -3,7 +3,15 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.model.book import BookAccessLevel, BookLanguage, BookPublishStatus
+from app.model.book import (
+    BookAccessLevel,
+    BookContentStatus,
+    BookLanguage,
+    BookLipSyncStatus,
+    BookPromptType,
+    BookPublishStatus,
+)
+from app.schema.entitlement import AccessDecision
 
 
 class BookSort(StrEnum):
@@ -42,6 +50,79 @@ class BookDetailRead(BookSummary):
     created_at: datetime
     updated_at: datetime
     related_books: list[BookSummary] = Field(default_factory=list)
+
+
+class BookDialogueRead(BaseModel):
+    id: int
+    character_ref: str
+    text: str
+    audio_url: str | None = None
+    start_ms: int | None = None
+    end_ms: int | None = None
+    lip_sync_url: str | None = None
+    sort_order: int
+
+
+class BookPageRead(BaseModel):
+    id: int
+    page_no: int
+    title: str | None = None
+    text_zh: str | None = None
+    text_en: str | None = None
+    narration_text: str | None = None
+    visual_prompt: str | None = None
+    image_url: str | None = None
+    video_url: str | None = None
+    audio_url: str | None = None
+    background_music_url: str | None = None
+    sound_effect_urls: list[str] = Field(default_factory=list)
+    duration_seconds: int | None = None
+    lip_sync_status: BookLipSyncStatus
+    dialogues: list[BookDialogueRead] = Field(default_factory=list)
+
+
+class BookReadingPromptRead(BaseModel):
+    id: int
+    prompt_type: BookPromptType
+    content: str
+    page_no: int | None = None
+    status: BookContentStatus
+    sort_order: int
+
+
+class BookLearningCardRead(BaseModel):
+    id: int
+    theme: str | None = None
+    education_goals: list[str] = Field(default_factory=list)
+    vocabulary: list[str] = Field(default_factory=list)
+    discussion_questions: list[str] = Field(default_factory=list)
+    status: BookContentStatus
+    sort_order: int
+
+
+class BookVoiceOption(BaseModel):
+    id: int | None = None
+    name: str
+    source: str = "system"
+
+
+class BookPlayerOptions(BaseModel):
+    child_profile_id: int | None = None
+    text_mode: BookLanguage | None = None
+    voice_id: int | None = None
+
+
+class BookPlayerPayload(BaseModel):
+    book: BookDetailRead
+    pages: list[BookPageRead]
+    reading_prompts: list[BookReadingPromptRead] = Field(default_factory=list)
+    learning_cards: list[BookLearningCardRead] = Field(default_factory=list)
+    access_decision: AccessDecision | None = None
+    can_read_full_book: bool = True
+    preview_page_count: int | None = None
+    default_text_mode: BookLanguage
+    default_voice: BookVoiceOption | None = None
+    voice_options: list[BookVoiceOption] = Field(default_factory=list)
 
 
 class BookListRead(BaseModel):
