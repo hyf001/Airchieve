@@ -102,13 +102,13 @@
 | summary | text nullable | 简介 |
 | cover_asset_id | int nullable | 封面 |
 | author_name | string nullable | 作者/来源 |
-| age_range_ids | JSON array | 适龄 |
-| theme_ids | JSON array | 主题 |
-| education_goal_ids | JSON array | 教育目标 |
+| age_range_codes | JSON array | 适龄 |
+| theme_codes | JSON array | 主题 |
+| education_goal_codes | JSON array | 教育目标 |
 | language | enum(`zh`,`en`,`bilingual`) | 语言 |
-| reading_level_id | int nullable | 阅读水平 |
-| narrative_style_id | int nullable | 叙事风格 |
-| art_style_id | int nullable | 系统画风 |
+| reading_level_code | string nullable | 阅读水平 code |
+| narrative_style_code | string nullable | 叙事风格 code |
+| art_style_code | string nullable | 系统画风 code |
 | custom_art_style_prompt | text nullable | 自定义画风描述 |
 | default_voice_id | int nullable | 默认朗读声音 |
 | estimated_duration_seconds | integer | 预计播放时长 |

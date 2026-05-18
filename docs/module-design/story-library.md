@@ -81,11 +81,11 @@
 | summary | text nullable | 简介 |
 | body | text | 正文，MVP 上传最大 3000 中文字 |
 | cover_asset_id | int nullable | 封面引用 |
-| age_range_ids | JSON array | 适龄范围 |
-| theme_ids | JSON array | 主题 |
-| education_goal_ids | JSON array | 教育目标 |
+| age_range_codes | JSON array | 适龄范围 |
+| theme_codes | JSON array | 主题 |
+| education_goal_codes | JSON array | 教育目标 |
 | language | enum(`zh`,`en`,`bilingual`) | 语言 |
-| narrative_style_id | int nullable | 叙事风格 |
+| narrative_style_code | string nullable | 叙事风格 code |
 | access_level | enum(`free`,`preview`,`vip`) | 权益等级 |
 | moderation_status | enum(`pending`,`approved`,`rejected`,`hidden`) | 审核状态 |
 | publish_status | enum(`draft`,`published`,`unpublished`,`deleted`) | 发布状态 |

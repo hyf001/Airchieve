@@ -3,6 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.model.taxonomy import TaxonomyType
 from app.model.recommendation import RecommendationItem, RecommendationSlot, RecommendationStatus
 from app.schema.recommendation import (
     RecommendationItemRead,
@@ -14,6 +15,7 @@ from app.schema.recommendation import (
     RecommendationTargetRead,
 )
 from app.service.recommendation.recommendation_service import _resolve_target, _slot_read
+from app.service.taxonomy import validate_taxonomy_codes
 
 
 async def create_recommendation_slot(db: AsyncSession, payload: RecommendationSlotCreate) -> RecommendationSlotRead:
@@ -57,6 +59,8 @@ async def update_recommendation_items(
     slot = result.scalar_one_or_none()
     if slot is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="推荐位不存在")
+    scene_codes = [code for payload in items for code in payload.scene_codes]
+    await validate_taxonomy_codes(db, TaxonomyType.SCENE, scene_codes)
     slot.items.clear()
     for payload in items:
         slot.items.append(RecommendationItem(**payload.model_dump()))
@@ -83,7 +87,7 @@ async def set_recommendation_item_status(
         target_id=item.target_id,
         title_override=item.title_override,
         image_asset_id_override=item.image_asset_id_override,
-        scene_ids=item.scene_ids or [],
+        scene_codes=item.scene_codes or [],
         min_age=item.min_age,
         max_age=item.max_age,
         access_level_filter=item.access_level_filter,

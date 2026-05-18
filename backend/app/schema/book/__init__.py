@@ -1,4 +1,4 @@
-from app.schema.book.schemas import (
+from app.schema.book.book import (
     BookDetailRead,
     BookListRead,
     BookSimilarCreationRequest,

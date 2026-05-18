@@ -3,14 +3,15 @@
 为 AIrchieve 项目生成 pytest 测试文件骨架。
 
 约定：
-- 被测代码默认位于 app/
-- 测试文件默认位于 tests/
-- 测试目录保持与 app/ 一致的相对结构
-- 此脚本只创建测试文件，不修改项目依赖或打包配置
+- 被测代码位于 backend/app/
+- 测试文件位于 tests/（仓库根目录下）
+- 测试目录与 backend/app/ 保持镜像结构
+- pyproject.toml 中 pythonpath = ["backend"] 保证 from app... 导入正常
+- asyncio_mode = "auto"，异步测试无需 @pytest.mark.asyncio 装饰器
 
 示例：
-    .venv/bin/python .codex/skills/python-unit-test/scripts/create_test_file.py app/main.py
-    .venv/bin/python .codex/skills/python-unit-test/scripts/create_test_file.py app/services/storybook_service.py
+    .venv/bin/python .codex/skills/python-unit-test/scripts/create_test_file.py backend/app/main.py
+    .venv/bin/python .codex/skills/python-unit-test/scripts/create_test_file.py backend/app/service/book/book_service.py
 """
 
 from __future__ import annotations
@@ -19,33 +20,46 @@ import sys
 from pathlib import Path
 
 
-def find_project_root(source_path: Path) -> Path:
-    """向上查找包含 app/ 的项目根目录。"""
+def find_repo_root(source_path: Path) -> Path:
+    """向上查找包含 backend/app/ 的仓库根目录。"""
     current = source_path.resolve().parent
     for candidate in [current, *current.parents]:
-        if (candidate / "app").is_dir():
+        if (candidate / "backend" / "app").is_dir():
             return candidate
-    raise ValueError(f"未找到项目根目录（缺少 app/ 目录）: {source_path}")
+    raise ValueError(f"未找到仓库根目录（缺少 backend/app/ 目录）: {source_path}")
 
 
-def build_test_path(source_path: Path, project_root: Path) -> Path:
-    """将 app/foo/bar.py 映射为 tests/foo/test_bar.py。"""
+def build_test_path(source_path: Path, repo_root: Path) -> Path:
+    """将 backend/app/foo/bar.py 映射为 tests/foo/test_bar.py。"""
     try:
-        relative_path = source_path.resolve().relative_to(project_root.resolve())
+        relative_path = source_path.resolve().relative_to(repo_root.resolve())
     except ValueError as exc:
-        raise ValueError(f"源文件不在项目根目录下: {source_path}") from exc
+        raise ValueError(f"源文件不在仓库根目录下: {source_path}") from exc
 
-    if not relative_path.parts or relative_path.parts[0] != "app":
-        raise ValueError("当前脚本只支持为 app/ 目录下的 Python 文件生成测试")
+    parts = relative_path.parts
+    if len(parts) < 3 or parts[0] != "backend" or parts[1] != "app":
+        raise ValueError("当前脚本只支持为 backend/app/ 目录下的 Python 文件生成测试")
 
-    test_dir = project_root / "tests" / Path(*relative_path.parts[1:-1])
+    # backend/app/foo/bar.py → tests/foo/test_bar.py
+    test_dir = repo_root / "tests" / Path(*parts[2:-1])
     return test_dir / f"test_{source_path.stem}.py"
 
 
-def module_import_path(source_path: Path, project_root: Path) -> str:
-    """将文件路径转换为 Python 导入路径。"""
-    relative_path = source_path.resolve().relative_to(project_root.resolve())
-    return ".".join(relative_path.with_suffix("").parts)
+def module_import_path(source_path: Path, repo_root: Path) -> str:
+    """将文件路径转换为 Python 导入路径（从 app 开始）。
+
+    backend/app/service/book/book_service.py → app.service.book.book_service
+    """
+    try:
+        relative_path = source_path.resolve().relative_to(repo_root.resolve())
+    except ValueError as exc:
+        raise ValueError(f"源文件不在仓库根目录下: {source_path}") from exc
+
+    parts = relative_path.with_suffix("").parts
+    # 去掉 backend/ 前缀，保留 app.foo.bar
+    if parts[0] == "backend":
+        parts = parts[1:]
+    return ".".join(parts)
 
 
 def class_name_from_stem(stem: str) -> str:
@@ -53,26 +67,28 @@ def class_name_from_stem(stem: str) -> str:
     return "".join(part.capitalize() for part in stem.split("_") if part) or "Module"
 
 
-def ensure_conftest(project_root: Path) -> Path:
-    """确保 tests/conftest.py 存在，并提供稳定的测试导入环境。"""
-    tests_dir = project_root / "tests"
+def ensure_conftest(repo_root: Path) -> Path:
+    """确保 tests/conftest.py 存在。pythonpath 配置已处理导入，这里只提供 fixture 基础设施。"""
+    tests_dir = repo_root / "tests"
     tests_dir.mkdir(parents=True, exist_ok=True)
 
     conftest_path = tests_dir / "conftest.py"
     if not conftest_path.exists():
         conftest_path.write_text(
-            '''import os
-import sys
-from pathlib import Path
+            """import os
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.main import app
+
+os.environ.setdefault("DEBUG", "false")
 
 
-ROOT = Path(__file__).resolve().parents[1]
-
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
-os.environ["DEBUG"] = "false"
-''',
+@pytest.fixture
+def client():
+    return TestClient(app)
+""",
             encoding="utf-8",
         )
 
@@ -96,11 +112,13 @@ from {import_path} import app
 client = TestClient(app)
 
 
-def test_health_check_returns_healthy_status():
+def test_health_check_returns_ok_status():
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {{"status": "healthy"}}
+    data = response.json()
+    assert data["status"] == "ok"
+    assert "service" in data
 '''
 
     if "api" in source_path.parts:
@@ -122,22 +140,18 @@ def test_{stem}_placeholder():
     assert client is not None
 '''
 
-    async_hint = "services" in source_path.parts
-    if async_hint:
+    if "service" in source_path.parts:
         return f'''"""
 {stem} 的单元测试
 """
 
-import pytest
-
 # TODO: 按需导入被测对象
-# from {import_path} import your_function, YourClass
+# from {import_path} import YourService
 
 
 class Test{class_name_from_stem(stem)}:
-    @pytest.mark.asyncio
     async def test_placeholder(self):
-        """根据真实业务补充异步测试。"""
+        """根据真实业务补充异步测试（asyncio_mode=auto 无需装饰器）。"""
         # TODO: mock 外部依赖后补充断言
         assert True
 '''
@@ -167,9 +181,9 @@ def create_test_file(source_file: str) -> dict[str, str | bool]:
         return {"success": False, "message": f"源文件不是 Python 文件: {source_file}"}
 
     try:
-        project_root = find_project_root(source_path)
-        test_file_path = build_test_path(source_path, project_root)
-        import_path = module_import_path(source_path, project_root)
+        repo_root = find_repo_root(source_path)
+        test_file_path = build_test_path(source_path, repo_root)
+        import_path = module_import_path(source_path, repo_root)
     except ValueError as exc:
         return {"success": False, "message": str(exc)}
 
@@ -180,7 +194,7 @@ def create_test_file(source_file: str) -> dict[str, str | bool]:
             "test_file_path": str(test_file_path),
         }
 
-    conftest_path = ensure_conftest(project_root)
+    conftest_path = ensure_conftest(repo_root)
     test_file_path.parent.mkdir(parents=True, exist_ok=True)
     test_file_path.write_text(build_template(source_path, import_path), encoding="utf-8")
 
@@ -195,8 +209,8 @@ def create_test_file(source_file: str) -> dict[str, str | bool]:
 
 def main() -> None:
     if len(sys.argv) != 2:
-        print("用法: .venv/bin/python create_test_file.py <app 下的源文件路径>")
-        print("示例: .venv/bin/python create_test_file.py app/services/storybook_service.py")
+        print("用法: .venv/bin/python create_test_file.py <backend/app 下的源文件路径>")
+        print("示例: .venv/bin/python create_test_file.py backend/app/service/book/book_service.py")
         sys.exit(1)
 
     result = create_test_file(sys.argv[1])

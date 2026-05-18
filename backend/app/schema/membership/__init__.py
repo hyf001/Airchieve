@@ -1,1 +1,1 @@
-from app.schema.membership.schemas import *
+from app.schema.membership.membership import *

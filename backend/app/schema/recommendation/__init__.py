@@ -1,4 +1,4 @@
-from app.schema.recommendation.schemas import (
+from app.schema.recommendation.recommendation import (
     RecommendationHomeRead,
     RecommendationItemRead,
     RecommendationItemStatusUpdate,

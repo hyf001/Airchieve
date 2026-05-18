@@ -11,9 +11,9 @@ export interface StorySummary {
   title: string;
   summary?: string | null;
   cover_url?: string | null;
-  age_range_ids: number[];
-  theme_ids: number[];
-  education_goal_ids: number[];
+  age_range_codes: string[];
+  theme_codes: string[];
+  education_goal_codes: string[];
   language: StoryLanguage;
   access_level: StoryAccessLevel;
   publish_status: "draft" | "published" | "unpublished" | "deleted";
@@ -24,7 +24,7 @@ export interface StorySummary {
 
 export interface StoryDetail extends StorySummary {
   body: string;
-  narrative_style_id?: number | null;
+  narrative_style_code?: string | null;
   moderation_status: "pending" | "approved" | "rejected" | "hidden";
   generated_books: BookSummary[];
 }
@@ -41,9 +41,9 @@ export interface StoryPayload {
   summary?: string | null;
   body: string;
   source_type?: StorySourceType;
-  age_range_ids?: number[];
-  theme_ids?: number[];
-  education_goal_ids?: number[];
+  age_range_codes?: string[];
+  theme_codes?: string[];
+  education_goal_codes?: string[];
   language?: StoryLanguage;
-  narrative_style_id?: number | null;
+  narrative_style_code?: string | null;
 }

@@ -19,8 +19,8 @@ router = APIRouter()
 @router.get("", response_model=BookListRead)
 async def list_books(
     q: str | None = None,
-    theme_id: int | None = None,
-    age_range_id: int | None = None,
+    theme_code: str | None = None,
+    age_range_code: str | None = None,
     language: str | None = None,
     access_level: BookAccessLevel | None = None,
     sort: BookSort = BookSort.FEATURED,
@@ -31,8 +31,8 @@ async def list_books(
     return await book.list_books(
         db,
         q=q,
-        theme_id=theme_id,
-        age_range_id=age_range_id,
+        theme_code=theme_code,
+        age_range_code=age_range_code,
         language=language,
         access_level=access_level,
         sort=sort,

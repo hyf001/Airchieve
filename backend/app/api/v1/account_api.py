@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, Header, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
+from app.model.account import User, UserRole
 from app.schema.account import (
     AccountRegisterRequest,
     AuthBindingSummary,
@@ -33,14 +34,22 @@ async def current_session(
     db: AsyncSession = Depends(get_db),
 ) -> tuple[int, int]:
     if not authorization or not authorization.lower().startswith("bearer "):
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="请先登录")
     return await account_service.verify_active_session(db, authorization.split(" ", 1)[1])
 
 
 async def current_user_id(session: tuple[int, int] = Depends(current_session)) -> int:
     return session[0]
+
+
+async def current_admin_user_id(
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(current_user_id),
+) -> int:
+    user = await db.get(User, user_id)
+    if user is None or user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要管理员权限")
+    return user_id
 
 
 @router.post("/auth/register", response_model=AuthTokenRead, status_code=status.HTTP_201_CREATED)

@@ -1,4 +1,4 @@
-from app.schema.story.schemas import (
+from app.schema.story.story import (
     StartCreationFromStoryRequest,
     StoryCreate,
     StoryCreationSessionRead,

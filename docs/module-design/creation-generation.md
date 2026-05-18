@@ -104,10 +104,10 @@
 | reference_book_id | int nullable | 创建类似作品时必填 |
 | language | enum(`zh`,`en`,`bilingual`) | 生成语言 |
 | target_page_count | integer | MVP 必须在 6-12 页 |
-| age_range_ids | string[] | 适龄范围 |
-| theme_ids | string[] | 主题 |
-| education_goal_ids | string[] | 教育目标 |
-| narrative_style_id | int nullable | 叙事风格 |
+| age_range_codes | string[] | 适龄范围 |
+| theme_codes | string[] | 主题 |
+| education_goal_codes | string[] | 教育目标 |
+| narrative_style_code | string nullable | 叙事风格 code |
 
 校验：
 
@@ -142,7 +142,7 @@
 
 `CharacterRef` 字段：`source` enum(`story_original`,`child_profile_default`,`user_character`,`system_character`,`upload`,`generated`)、`character_id` nullable、`role_code` nullable、`display_name` nullable。
 
-`ArtStyleRef` 字段：`source` enum(`system`,`custom`)、`art_style_id` nullable、`custom_prompt` nullable。
+`ArtStyleRef` 字段：`source` enum(`system`,`custom`)、`art_style_code` nullable、`custom_prompt` nullable。
 
 `VoiceRef` 字段：`source` enum(`template_default`,`system`,`user`)、`voice_id` nullable、`display_name` nullable。
 
@@ -245,10 +245,10 @@
 | reference_book_id | int nullable | 类似作品参考绘本 |
 | language | enum(`zh`,`en`,`bilingual`) | 生成语言 |
 | target_page_count | integer | 目标页数，MVP 6-12 |
-| age_range_ids | JSON array | 适龄 |
-| theme_ids | JSON array | 主题 |
-| education_goal_ids | JSON array | 教育目标 |
-| narrative_style_id | int nullable | 叙事风格 |
+| age_range_codes | JSON array | 适龄 |
+| theme_codes | JSON array | 主题 |
+| education_goal_codes | JSON array | 教育目标 |
+| narrative_style_code | string nullable | 叙事风格 code |
 | character_refs | JSON array | 选择的形象 |
 | art_style_ref | JSON nullable | 系统画风或自定义画风 |
 | voice_ref | JSON nullable | 声音 |

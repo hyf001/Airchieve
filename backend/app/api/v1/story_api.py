@@ -21,8 +21,8 @@ router = APIRouter()
 async def list_stories(
     source_type: StorySourceType | None = None,
     q: str | None = None,
-    theme_id: int | None = None,
-    age_range_id: int | None = None,
+    theme_code: str | None = None,
+    age_range_code: str | None = None,
     limit: int = Query(default=20, ge=1, le=50),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
@@ -31,8 +31,8 @@ async def list_stories(
         db,
         source_type=source_type,
         q=q,
-        theme_id=theme_id,
-        age_range_id=age_range_id,
+        theme_code=theme_code,
+        age_range_code=age_range_code,
         limit=limit,
         offset=offset,
     )

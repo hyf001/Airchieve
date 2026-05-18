@@ -55,7 +55,7 @@
 
 - `list_taxonomy(type, include_disabled=False) -> list[TaxonomyItemRead]`
 - `get_taxonomy_item(id) -> TaxonomyItemRead`
-- `validate_taxonomy_ids(type, ids) -> None`
+- `validate_taxonomy_codes(type, codes) -> None`
 - `upsert_taxonomy_item(payload) -> TaxonomyItemRead`
 - `set_taxonomy_status(item_id, status) -> TaxonomyItemRead`
 

@@ -1,4 +1,4 @@
-from app.model.story.models import (
+from app.model.story.story import (
     Story,
     StoryAccessLevel,
     StoryLanguage,

@@ -1,4 +1,4 @@
-from app.model.entitlement.models import EntitlementQuotaReservation, QuotaReservationStatus
+from app.model.entitlement.entitlement import EntitlementQuotaReservation, QuotaReservationStatus
 
 __all__ = [
     "EntitlementQuotaReservation",

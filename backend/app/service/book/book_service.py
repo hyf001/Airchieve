@@ -3,6 +3,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.model.book import Book, BookAccessLevel, BookPublishStatus
+from app.model.taxonomy import TaxonomyType
 from app.schema.book import (
     BookDetailRead,
     BookListRead,
@@ -11,6 +12,7 @@ from app.schema.book import (
     BookSummary,
     SimilarCreationSessionRead,
 )
+from app.service.taxonomy import validate_taxonomy_codes
 
 
 def _book_summary(book: Book) -> BookSummary:
@@ -21,8 +23,8 @@ async def list_books(
     db: AsyncSession,
     *,
     q: str | None = None,
-    theme_id: int | None = None,
-    age_range_id: int | None = None,
+    theme_code: str | None = None,
+    age_range_code: str | None = None,
     language: str | None = None,
     access_level: BookAccessLevel | None = None,
     sort: BookSort = BookSort.FEATURED,
@@ -37,14 +39,16 @@ async def list_books(
         conditions.append(Book.language == language)
     if access_level:
         conditions.append(Book.access_level == access_level)
+    await validate_taxonomy_codes(db, TaxonomyType.AGE_RANGE, [age_range_code] if age_range_code else [])
+    await validate_taxonomy_codes(db, TaxonomyType.THEME, [theme_code] if theme_code else [])
 
     stmt = select(Book).where(*conditions)
     count_stmt = select(func.count()).select_from(Book).where(*conditions)
 
-    if theme_id is not None:
+    if theme_code is not None:
         # JSON array containment differs per database; filtering in memory keeps MVP portable.
         stmt = stmt.order_by(Book.is_featured.desc())
-    if age_range_id is not None:
+    if age_range_code is not None:
         stmt = stmt.order_by(Book.is_featured.desc())
 
     if sort == BookSort.NEWEST:
@@ -56,10 +60,10 @@ async def list_books(
 
     result = await db.execute(stmt.offset(offset).limit(limit))
     rows = result.scalars().all()
-    if theme_id is not None:
-        rows = [book for book in rows if theme_id in (book.theme_ids or [])]
-    if age_range_id is not None:
-        rows = [book for book in rows if age_range_id in (book.age_range_ids or [])]
+    if theme_code is not None:
+        rows = [book for book in rows if theme_code in (book.theme_codes or [])]
+    if age_range_code is not None:
+        rows = [book for book in rows if age_range_code in (book.age_range_codes or [])]
     total = await db.scalar(count_stmt)
     return BookListRead(items=[_book_summary(book) for book in rows], total=total or 0, limit=limit, offset=offset)
 
@@ -72,8 +76,8 @@ async def get_book_detail(db: AsyncSession, book_id: int, user_id: int | None = 
     return BookDetailRead(
         **_book_summary(book).model_dump(),
         source_story_id=book.source_story_id,
-        narrative_style_id=book.narrative_style_id,
-        art_style_id=book.art_style_id,
+        narrative_style_code=book.narrative_style_code,
+        art_style_code=book.art_style_code,
         publish_status=book.publish_status,
         is_featured=book.is_featured,
         created_at=book.created_at,
@@ -93,10 +97,10 @@ async def list_related_books(db: AsyncSession, book_id: int, *, limit: int = 8) 
         .limit(limit * 2)
     )
     books = result.scalars().all()
-    if book.theme_ids:
+    if book.theme_codes:
         prioritized = sorted(
             books,
-            key=lambda item: len(set(item.theme_ids or []).intersection(book.theme_ids or [])),
+            key=lambda item: len(set(item.theme_codes or []).intersection(book.theme_codes or [])),
             reverse=True,
         )
     else:
@@ -117,10 +121,10 @@ async def create_session_from_book_reference(
     return SimilarCreationSessionRead(
         source_book_id=book.id,
         source_title=book.title,
-        prefilled_theme_ids=book.theme_ids or [],
-        prefilled_age_range_ids=book.age_range_ids or [],
-        prefilled_education_goal_ids=book.education_goal_ids or [],
+        prefilled_theme_codes=book.theme_codes or [],
+        prefilled_age_range_codes=book.age_range_codes or [],
+        prefilled_education_goal_codes=book.education_goal_codes or [],
         prefilled_page_count=book.page_count,
-        prefilled_art_style_id=book.art_style_id,
+        prefilled_art_style_code=book.art_style_code,
         guidance="已带入主题、适龄、页数和画风作为参考；后续生成不会复制原绘本文字和图片。",
     )

@@ -1,4 +1,4 @@
-from app.model.membership.models import (
+from app.model.membership.membership import (
     BillingPeriod,
     MembershipPlan,
     MembershipPlanStatus,

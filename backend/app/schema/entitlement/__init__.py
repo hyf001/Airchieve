@@ -1,1 +1,1 @@
-from app.schema.entitlement.schemas import *
+from app.schema.entitlement.entitlement import *

@@ -5,16 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AccountSummary } from "@/entities/account";
 import { ChildProfileCard } from "@/entities/child-profile";
+import { useTaxonomyGroup } from "@/entities/taxonomy/useTaxonomyGroup";
 import { RequireAuth } from "@/features/auth";
 import {
-  ageRanges,
-  defaultArtStyles,
-  defaultCharacters,
-  defaultVoices,
-  educationGoals,
-  getOptionLabel,
-  interestTags,
-  readingLevels,
   useProfiles,
   type ChildProfile,
   type ChildProfileEducationGoal,
@@ -140,19 +133,7 @@ const ProfilesContent: React.FC = () => {
 
         <aside className="space-y-5">
           <AccountSummary />
-          <section className="app-card p-6">
-            <h2 className="font-display mb-3 text-xl">当前儿童档案</h2>
-            {currentProfile ? (
-              <div className="space-y-3 text-sm text-[var(--text-mid)]">
-                <strong className="block text-lg text-[var(--text-dark)]">{currentProfile.nickname}</strong>
-                <p>年龄：{getOptionLabel(ageRanges, currentProfile.age_range, currentProfile.age_range_label ?? "未设置")}</p>
-                <p>阅读：{getOptionLabel(readingLevels, currentProfile.reading_level, currentProfile.reading_level_label ?? "未设置")}</p>
-                <p>兴趣：{currentProfile.interest_tags.map((tagId) => getOptionLabel(interestTags, tagId)).join("、")}</p>
-              </div>
-            ) : (
-              <p className="text-sm text-[var(--text-light)]">暂无当前档案</p>
-            )}
-          </section>
+          <CurrentProfileSummary profile={currentProfile} />
         </aside>
       </section>
 
@@ -175,64 +156,110 @@ const ProfilesContent: React.FC = () => {
   );
 };
 
+const CurrentProfileSummary: React.FC<{ profile: ChildProfile | null }> = ({ profile }) => {
+  const { labelMap: ageLabels } = useTaxonomyGroup("age_range");
+  const { labelMap: readingLabels } = useTaxonomyGroup("reading_level");
+  const { items: interestItems } = useTaxonomyGroup("interest_tag");
+
+  if (!profile) {
+    return (
+      <section className="app-card p-6">
+        <h2 className="font-display mb-3 text-xl">当前儿童档案</h2>
+        <p className="text-sm text-[var(--text-light)]">暂无当前档案</p>
+      </section>
+    );
+  }
+
+  const ageLabel = profile.age_range ? ageLabels[profile.age_range] ?? profile.age_range_label : undefined;
+  const readingLabel = profile.reading_level ? readingLabels[profile.reading_level] ?? profile.reading_level_label : undefined;
+  const interestLabel = profile.interest_tags
+    .map((code) => interestItems.find((item) => item.code === code)?.name ?? code)
+    .join("、");
+
+  return (
+    <section className="app-card p-6">
+      <h2 className="font-display mb-3 text-xl">当前儿童档案</h2>
+      <div className="space-y-3 text-sm text-[var(--text-mid)]">
+        <strong className="block text-lg text-[var(--text-dark)]">{profile.nickname}</strong>
+        <p>年龄：{ageLabel ?? profile.age_range_label ?? "未设置"}</p>
+        <p>阅读：{readingLabel ?? profile.reading_level_label ?? "未设置"}</p>
+        <p>兴趣：{interestLabel || "未设置"}</p>
+      </div>
+    </section>
+  );
+};
+
 const ProfileDetailPanel: React.FC<{
   profile: ChildProfile;
   onClose: () => void;
   onDelete: (profile: ChildProfile) => void;
   onEdit: (profile: ChildProfile) => void;
-}> = ({ profile, onClose, onDelete, onEdit }) => (
-  <section className="mx-auto max-w-[1320px] px-8 pb-16 max-sm:px-4">
-    <div className="app-card overflow-hidden rounded-[var(--radius-xl)]">
-      <header className="flex items-center justify-between gap-4 border-b border-[rgba(212,114,92,0.08)] bg-[linear-gradient(135deg,#FFF8F0,#FFF0E5)] px-9 py-8 max-md:px-5">
-        <div className="flex min-w-0 items-center gap-5">
-          <span className="flex h-[88px] w-[88px] shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,#FFE082,var(--honey),var(--peach))] text-4xl shadow-[0_6px_24px_rgba(245,166,35,0.3)]">
-            🌟
-          </span>
-          <div className="min-w-0">
-            <h2 className="font-display truncate text-[28px]">{profile.nickname}</h2>
-            <p className="mt-1 text-sm text-[var(--text-light)]">
-              {getOptionLabel(ageRanges, profile.age_range, profile.age_range_label ?? "未设置年龄")}
-            </p>
-          </div>
-        </div>
-        <Button aria-label="关闭详情" size="icon" variant="ghost" onClick={onClose}>
-          <X className="h-5 w-5" />
-        </Button>
-      </header>
+}> = ({ profile, onClose, onDelete, onEdit }) => {
+  const { labelMap: ageLabels } = useTaxonomyGroup("age_range");
+  const { items: interestItems } = useTaxonomyGroup("interest_tag");
+  const { items: educationItems } = useTaxonomyGroup("education_goal");
+  const { items: characterItems } = useTaxonomyGroup("asset_category");
+  const { items: voiceStyleItems } = useTaxonomyGroup("voice_style");
 
-      <div className="grid grid-cols-2 max-lg:grid-cols-1">
-        <div className="border-r border-[rgba(212,114,92,0.08)] p-9 max-lg:border-b max-lg:border-r-0 max-md:p-5">
-          <DetailSection icon={<Wand2 className="h-5 w-5" />} title="偏好配置">
-            <TagList ids={profile.interest_tags} options={interestTags} />
-            <TagList ids={profile.education_goals} options={educationGoals} />
-            <div className="mt-5 grid grid-cols-3 gap-3 max-sm:grid-cols-1">
-              <ResourceTile icon={<UserRound />} label="默认形象" value={getOptionLabel(defaultCharacters, profile.default_character)} />
-              <ResourceTile icon={<Volume2 />} label="默认声音" value={getOptionLabel(defaultVoices, profile.default_voice)} />
-              <ResourceTile icon={<Palette />} label="默认画风" value={getOptionLabel(defaultArtStyles, profile.default_art_style)} />
+  const ageLabel = profile.age_range ? ageLabels[profile.age_range] ?? profile.age_range_label : undefined;
+  const characterLabel = characterItems.find((item) => item.code === profile.default_character)?.name ?? profile.default_character;
+  const voiceLabel = voiceStyleItems.find((item) => item.code === profile.default_voice)?.name ?? profile.default_voice;
+  const artStyleLabel = characterItems.find((item) => item.code === profile.default_art_style)?.name ?? profile.default_art_style;
+
+  return (
+    <section className="mx-auto max-w-[1320px] px-8 pb-16 max-sm:px-4">
+      <div className="app-card overflow-hidden rounded-[var(--radius-xl)]">
+        <header className="flex items-center justify-between gap-4 border-b border-[rgba(212,114,92,0.08)] bg-[linear-gradient(135deg,#FFF8F0,#FFF0E5)] px-9 py-8 max-md:px-5">
+          <div className="flex min-w-0 items-center gap-5">
+            <span className="flex h-[88px] w-[88px] shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,#FFE082,var(--honey),var(--peach))] text-4xl shadow-[0_6px_24px_rgba(245,166,35,0.3)]">
+              🌟
+            </span>
+            <div className="min-w-0">
+              <h2 className="font-display truncate text-[28px]">{profile.nickname}</h2>
+              <p className="mt-1 text-sm text-[var(--text-light)]">
+                {ageLabel ?? profile.age_range_label ?? "未设置年龄"}
+              </p>
             </div>
-          </DetailSection>
-          <div className="mt-6 flex flex-wrap gap-2.5">
-            <Button onClick={() => onEdit(profile)}>编辑档案</Button>
-            <Button variant="outline" onClick={() => onDelete(profile)}>
-              <Trash2 className="h-4 w-4" />
-              删除档案
-            </Button>
           </div>
-        </div>
+          <Button aria-label="关闭详情" size="icon" variant="ghost" onClick={onClose}>
+            <X className="h-5 w-5" />
+          </Button>
+        </header>
 
-        <div className="p-9 max-md:p-5">
-          <DetailSection icon={<BookOpen className="h-5 w-5" />} title="阅读历史">
-            <EmptyFactState message="当前没有可展示的真实阅读历史数据。" />
-          </DetailSection>
+        <div className="grid grid-cols-2 max-lg:grid-cols-1">
+          <div className="border-r border-[rgba(212,114,92,0.08)] p-9 max-lg:border-b max-lg:border-r-0 max-md:p-5">
+            <DetailSection icon={<Wand2 className="h-5 w-5" />} title="偏好配置">
+              <TaxonomyTagList codes={profile.interest_tags} items={interestItems} />
+              <TaxonomyTagList codes={profile.education_goals} items={educationItems} />
+              <div className="mt-5 grid grid-cols-3 gap-3 max-sm:grid-cols-1">
+                <ResourceTile icon={<UserRound />} label="默认形象" value={characterLabel} />
+                <ResourceTile icon={<Volume2 />} label="默认声音" value={voiceLabel} />
+                <ResourceTile icon={<Palette />} label="默认画风" value={artStyleLabel} />
+              </div>
+            </DetailSection>
+            <div className="mt-6 flex flex-wrap gap-2.5">
+              <Button onClick={() => onEdit(profile)}>编辑档案</Button>
+              <Button variant="outline" onClick={() => onDelete(profile)}>
+                <Trash2 className="h-4 w-4" />
+                删除档案
+              </Button>
+            </div>
+          </div>
 
-          <DetailSection icon={<Heart className="h-5 w-5" />} title="收藏绘本">
-            <EmptyFactState message="当前没有可展示的真实收藏绘本数据。" />
-          </DetailSection>
+          <div className="p-9 max-md:p-5">
+            <DetailSection icon={<BookOpen className="h-5 w-5" />} title="阅读历史">
+              <EmptyFactState message="当前没有可展示的真实阅读历史数据。" />
+            </DetailSection>
+
+            <DetailSection icon={<Heart className="h-5 w-5" />} title="收藏绘本">
+              <EmptyFactState message="当前没有可展示的真实收藏绘本数据。" />
+            </DetailSection>
+          </div>
         </div>
       </div>
-    </div>
-  </section>
-);
+    </section>
+  );
+};
 
 const DetailSection: React.FC<React.PropsWithChildren<{ icon: React.ReactNode; title: string }>> = ({ children, icon, title }) => (
   <section className="mb-7 last:mb-0">
@@ -250,23 +277,26 @@ const EmptyFactState: React.FC<{ message: string }> = ({ message }) => (
   </div>
 );
 
-const ResourceTile: React.FC<{ icon: React.ReactElement<{ className?: string }>; label: string; value: string }> = ({ icon, label, value }) => (
+const ResourceTile: React.FC<{ icon: React.ReactElement<{ className?: string }>; label: string; value: string | null | undefined }> = ({ icon, label, value }) => (
   <div className="rounded-[var(--radius-md)] border border-[rgba(212,114,92,0.1)] bg-[var(--cream)] p-4 text-center">
     <span className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-[14px] bg-white text-[var(--terracotta)]">
       {React.cloneElement(icon, { className: "h-5 w-5" })}
     </span>
     <span className="block text-xs font-bold text-[var(--text-mid)]">{label}</span>
-    <span className="mt-1 block truncate text-[11px] text-[var(--text-light)]">{value}</span>
+    <span className="mt-1 block truncate text-[11px] text-[var(--text-light)]">{value ?? "未设置"}</span>
   </div>
 );
 
-const TagList: React.FC<{ ids: string[]; options: Array<{ id: string; label: string }> }> = ({ ids, options }) => (
+const TaxonomyTagList: React.FC<{ codes: string[]; items: Array<{ code: string; name: string }> }> = ({ codes, items }) => (
   <div className="mb-3 flex flex-wrap gap-2">
-    {ids.map((id) => (
-      <span key={id} className="rounded-full border border-[rgba(212,114,92,0.12)] bg-white px-3 py-1 text-xs font-semibold text-[var(--text-mid)]">
-        {getOptionLabel(options, id)}
-      </span>
-    ))}
+    {codes.map((code) => {
+      const label = items.find((item) => item.code === code)?.name ?? code;
+      return (
+        <span key={code} className="rounded-full border border-[rgba(212,114,92,0.12)] bg-white px-3 py-1 text-xs font-semibold text-[var(--text-mid)]">
+          {label}
+        </span>
+      );
+    })}
   </div>
 );
 
@@ -277,6 +307,12 @@ const ProfileFormModal: React.FC<{
   onSubmit: (payload: ChildProfilePayload) => void;
 }> = ({ open, profile, onClose, onSubmit }) => {
   const [form, setForm] = React.useState<ChildProfilePayload>(emptyPayload);
+
+  const { items: ageRangeItems } = useTaxonomyGroup("age_range");
+  const { items: readingLevelItems } = useTaxonomyGroup("reading_level");
+  const { items: interestTagItems } = useTaxonomyGroup("interest_tag");
+  const { items: educationGoalItems } = useTaxonomyGroup("education_goal");
+  const { items: voiceStyleItems } = useTaxonomyGroup("voice_style");
 
   React.useEffect(() => {
     setForm(
@@ -341,52 +377,130 @@ const ProfileFormModal: React.FC<{
         />
 
         <div className="mb-4 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-          <SelectField
-            label="年龄段"
-            value={form.age_range ?? ""}
-            options={ageRanges}
-            onChange={(value) => setForm((current) => ({ ...current, age_range: value }))}
-          />
-          <SelectField
-            label="阅读等级"
-            value={form.reading_level ?? ""}
-            options={readingLevels}
-            onChange={(value) => setForm((current) => ({ ...current, reading_level: value }))}
-          />
+          <div className="block text-[13px] font-bold text-[var(--text-mid)]">
+            <span className="mb-2 block">年龄段</span>
+            <select
+              className="h-10 w-full rounded-[var(--radius-sm)] border-[1.5px] border-[rgba(212,114,92,0.15)] bg-white px-3 text-sm text-[var(--text-dark)] outline-none focus:border-[var(--honey)] focus:ring-4 focus:ring-[rgba(245,166,35,0.1)]"
+              value={form.age_range ?? ""}
+              onChange={(event) => setForm((current) => ({ ...current, age_range: (event.target.value || null) as ChildProfilePayload["age_range"] }))}
+            >
+              {ageRangeItems.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="block text-[13px] font-bold text-[var(--text-mid)]">
+            <span className="mb-2 block">阅读等级</span>
+            <select
+              className="h-10 w-full rounded-[var(--radius-sm)] border-[1.5px] border-[rgba(212,114,92,0.15)] bg-white px-3 text-sm text-[var(--text-dark)] outline-none focus:border-[var(--honey)] focus:ring-4 focus:ring-[rgba(245,166,35,0.1)]"
+              value={form.reading_level ?? ""}
+              onChange={(event) => setForm((current) => ({ ...current, reading_level: (event.target.value || null) as ChildProfilePayload["reading_level"] }))}
+            >
+              {readingLevelItems.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        <TagPicker
-          label="兴趣标签"
-          selectedIds={form.interest_tags}
-          options={interestTags}
-          onToggle={toggleInterestTag}
-        />
-        <TagPicker
-          label="教育目标"
-          selectedIds={form.education_goals}
-          options={educationGoals}
-          onToggle={toggleEducationGoal}
-        />
+        <fieldset className="mb-4">
+          <legend className="mb-2 text-[13px] font-bold text-[var(--text-mid)]">兴趣标签</legend>
+          <div className="flex flex-wrap gap-2">
+            {interestTagItems.map((item) => {
+              const selected = form.interest_tags.includes(item.code as ChildProfileInterestTag);
+              return (
+                <button
+                  key={item.code}
+                  className={cn(
+                    "rounded-full border-[1.5px] px-3.5 py-1.5 text-xs font-semibold transition-all",
+                    selected
+                      ? "border-[var(--honey)] bg-[rgba(245,166,35,0.1)] text-[#D4882A]"
+                      : "border-[rgba(212,114,92,0.12)] bg-white text-[var(--text-mid)] hover:border-[var(--honey)]",
+                  )}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => toggleInterestTag(item.code as ChildProfileInterestTag)}
+                >
+                  {selected ? "✓ " : ""}
+                  {item.name}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        <fieldset className="mb-4">
+          <legend className="mb-2 text-[13px] font-bold text-[var(--text-mid)]">教育目标</legend>
+          <div className="flex flex-wrap gap-2">
+            {educationGoalItems.map((item) => {
+              const selected = form.education_goals.includes(item.code as ChildProfileEducationGoal);
+              return (
+                <button
+                  key={item.code}
+                  className={cn(
+                    "rounded-full border-[1.5px] px-3.5 py-1.5 text-xs font-semibold transition-all",
+                    selected
+                      ? "border-[var(--honey)] bg-[rgba(245,166,35,0.1)] text-[#D4882A]"
+                      : "border-[rgba(212,114,92,0.12)] bg-white text-[var(--text-mid)] hover:border-[var(--honey)]",
+                  )}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => toggleEducationGoal(item.code as ChildProfileEducationGoal)}
+                >
+                  {selected ? "✓ " : ""}
+                  {item.name}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
 
         <div className="mt-4 grid grid-cols-3 gap-3 max-sm:grid-cols-1">
-          <SelectField
-            label="默认形象"
-            value={form.default_character ?? ""}
-            options={defaultCharacters}
-            onChange={(value) => setForm((current) => ({ ...current, default_character: value }))}
-          />
-          <SelectField
-            label="默认声音"
-            value={form.default_voice ?? ""}
-            options={defaultVoices}
-            onChange={(value) => setForm((current) => ({ ...current, default_voice: value }))}
-          />
-          <SelectField
-            label="默认画风"
-            value={form.default_art_style ?? ""}
-            options={defaultArtStyles}
-            onChange={(value) => setForm((current) => ({ ...current, default_art_style: value }))}
-          />
+          <div className="block text-[13px] font-bold text-[var(--text-mid)]">
+            <span className="mb-2 block">默认形象</span>
+            <select
+              className="h-10 w-full rounded-[var(--radius-sm)] border-[1.5px] border-[rgba(212,114,92,0.15)] bg-white px-3 text-sm text-[var(--text-dark)] outline-none focus:border-[var(--honey)] focus:ring-4 focus:ring-[rgba(245,166,35,0.1)]"
+              value={form.default_character ?? ""}
+              onChange={(event) => setForm((current) => ({ ...current, default_character: (event.target.value || null) as ChildProfilePayload["default_character"] }))}
+            >
+              <option value="">请选择</option>
+              <option value="star-child">星星主角</option>
+              <option value="forest-friend">森林伙伴</option>
+              <option value="little-captain">小船长</option>
+            </select>
+          </div>
+          <div className="block text-[13px] font-bold text-[var(--text-mid)]">
+            <span className="mb-2 block">默认声音</span>
+            <select
+              className="h-10 w-full rounded-[var(--radius-sm)] border-[1.5px] border-[rgba(212,114,92,0.15)] bg-white px-3 text-sm text-[var(--text-dark)] outline-none focus:border-[var(--honey)] focus:ring-4 focus:ring-[rgba(245,166,35,0.1)]"
+              value={form.default_voice ?? ""}
+              onChange={(event) => setForm((current) => ({ ...current, default_voice: (event.target.value || null) as ChildProfilePayload["default_voice"] }))}
+            >
+              <option value="">请选择</option>
+              {voiceStyleItems.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="block text-[13px] font-bold text-[var(--text-mid)]">
+            <span className="mb-2 block">默认画风</span>
+            <select
+              className="h-10 w-full rounded-[var(--radius-sm)] border-[1.5px] border-[rgba(212,114,92,0.15)] bg-white px-3 text-sm text-[var(--text-dark)] outline-none focus:border-[var(--honey)] focus:ring-4 focus:ring-[rgba(245,166,35,0.1)]"
+              value={form.default_art_style ?? ""}
+              onChange={(event) => setForm((current) => ({ ...current, default_art_style: (event.target.value || null) as ChildProfilePayload["default_art_style"] }))}
+            >
+              <option value="">请选择</option>
+              <option value="watercolor">柔和水彩</option>
+              <option value="crayon">蜡笔童趣</option>
+              <option value="bedtime">睡前暖光</option>
+            </select>
+          </div>
         </div>
 
         <div className="mt-6 flex justify-end gap-2">
@@ -401,62 +515,3 @@ const ProfileFormModal: React.FC<{
     </Modal>
   );
 };
-
-interface SelectFieldProps<TId extends string> {
-  label: string;
-  value: TId | "";
-  options: Array<{ id: TId; label: string }>;
-  onChange: (value: TId) => void;
-}
-
-const SelectField = <TId extends string>({ label, onChange, options, value }: SelectFieldProps<TId>) => (
-  <label className="block text-[13px] font-bold text-[var(--text-mid)]">
-    <span className="mb-2 block">{label}</span>
-    <select
-      className="h-10 w-full rounded-[var(--radius-sm)] border-[1.5px] border-[rgba(212,114,92,0.15)] bg-white px-3 text-sm text-[var(--text-dark)] outline-none focus:border-[var(--honey)] focus:ring-4 focus:ring-[rgba(245,166,35,0.1)]"
-      value={value}
-      onChange={(event) => onChange(event.target.value as TId)}
-    >
-      {options.map((option) => (
-        <option key={option.id} value={option.id}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-  </label>
-);
-
-interface TagPickerProps<TId extends string> {
-  label: string;
-  selectedIds: TId[];
-  options: Array<{ id: TId; label: string }>;
-  onToggle: (value: TId) => void;
-}
-
-const TagPicker = <TId extends string>({ label, onToggle, options, selectedIds }: TagPickerProps<TId>) => (
-  <fieldset className="mb-4">
-    <legend className="mb-2 text-[13px] font-bold text-[var(--text-mid)]">{label}</legend>
-    <div className="flex flex-wrap gap-2">
-      {options.map((option) => {
-        const selected = selectedIds.includes(option.id);
-        return (
-          <button
-            key={option.id}
-            className={cn(
-              "rounded-full border-[1.5px] px-3.5 py-1.5 text-xs font-semibold transition-all",
-              selected
-                ? "border-[var(--honey)] bg-[rgba(245,166,35,0.1)] text-[#D4882A]"
-                : "border-[rgba(212,114,92,0.12)] bg-white text-[var(--text-mid)] hover:border-[var(--honey)]",
-            )}
-            type="button"
-            aria-pressed={selected}
-            onClick={() => onToggle(option.id)}
-          >
-            {selected ? "✓ " : ""}
-            {option.label}
-          </button>
-        );
-      })}
-    </div>
-  </fieldset>
-);

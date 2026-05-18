@@ -3,8 +3,8 @@ import { apiClient } from "@/shared/api/client";
 
 export interface BookQuery {
   q?: string;
-  theme_id?: number;
-  age_range_id?: number;
+  theme_code?: string;
+  age_range_code?: string;
   language?: string;
   access_level?: string;
   sort?: "featured" | "newest" | "popular";

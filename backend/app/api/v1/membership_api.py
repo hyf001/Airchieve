@@ -1,9 +1,8 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.account_api import current_user_id
+from app.api.v1.account_api import current_admin_user_id, current_user_id
 from app.db.session import get_db
-from app.model.account import User, UserRole
 from app.model.audit import AuditOperatorType
 from app.schema.audit import AuditLogCreateInternal, AuditSnapshot
 from app.schema.entitlement import UserEntitlementsRead
@@ -18,16 +17,6 @@ from app.service import audit as audit_service, entitlement as entitlement_servi
 
 router = APIRouter()
 admin_router = APIRouter()
-
-
-async def current_admin_user_id(
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(current_user_id),
-) -> int:
-    user = await db.get(User, user_id)
-    if user is None or user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要管理员权限")
-    return user_id
 
 
 def _audit_snapshot(value: MembershipPlanRead | None) -> AuditSnapshot | None:

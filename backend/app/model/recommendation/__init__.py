@@ -1,4 +1,4 @@
-from app.model.recommendation.models import (
+from app.model.recommendation.recommendation import (
     RecommendationAccessFilter,
     RecommendationDisplayType,
     RecommendationItem,

@@ -2,13 +2,8 @@ import React from "react";
 import { Check, Edit3, Star } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  ageRanges,
-  getOptionLabel,
-  interestTags,
-  readingLevels,
-  type ChildProfile,
-} from "@/features/profile-management";
+import { type ChildProfile } from "@/features/profile-management";
+import { useTaxonomyGroup } from "@/entities/taxonomy/useTaxonomyGroup";
 import { cn } from "@/lib/utils";
 
 interface ChildProfileCardProps {
@@ -25,13 +20,34 @@ const avatarStyles = [
   "bg-[linear-gradient(135deg,#BBDEFB,#64B5F6,#4BA3C7)]",
 ];
 
+const ageBadgeClassNames: Record<string, string> = {
+  age_3_4: "bg-[rgba(245,166,35,0.12)] text-[#D4882A]",
+  age_5_6: "bg-[rgba(139,198,168,0.15)] text-[var(--sage-deep)]",
+  age_7_8: "bg-[rgba(179,157,219,0.15)] text-[#7E57C2]",
+  age_9_10: "bg-[rgba(126,200,227,0.16)] text-[var(--sky-deep)]",
+};
+
+const readingLevelPercents: Record<string, number> = {
+  starter: 35,
+  growing: 62,
+  independent: 84,
+};
+
 const avatarIcons = ["🌟", "🌱", "🍓", "🚀"];
 
 export const ChildProfileCard: React.FC<ChildProfileCardProps> = ({ profile, onEdit, onOpenDetail, onSelect }) => {
+  const { labelMap: ageLabels } = useTaxonomyGroup("age_range");
+  const { labelMap: readingLabels } = useTaxonomyGroup("reading_level");
+  const { items: interestItems } = useTaxonomyGroup("interest_tag");
+
   const hash = Array.from(String(profile.id)).reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  const readingLevel = readingLevels.find((level) => level.id === profile.reading_level) ?? readingLevels[0];
-  const ageRange = ageRanges.find((age) => age.id === profile.age_range);
-  const tagLabels = profile.interest_tags.map((tagId) => getOptionLabel(interestTags, tagId)).slice(0, 4);
+  const readingLevelLabel = profile.reading_level ? readingLabels[profile.reading_level] ?? profile.reading_level_label : undefined;
+  const readingPercent = profile.reading_level ? readingLevelPercents[profile.reading_level] ?? 50 : 50;
+  const ageBadgeClassName = profile.age_range ? ageBadgeClassNames[profile.age_range] : undefined;
+  const ageLabel = profile.age_range ? ageLabels[profile.age_range] ?? profile.age_range_label : undefined;
+  const tagLabels = profile.interest_tags
+    .map((tagCode) => interestItems.find((item) => item.code === tagCode)?.name ?? tagCode)
+    .slice(0, 4);
 
   return (
     <article
@@ -66,10 +82,10 @@ export const ChildProfileCard: React.FC<ChildProfileCardProps> = ({ profile, onE
           <span
             className={cn(
               "mt-1 inline-flex rounded-full px-3 py-1 text-xs font-bold",
-              ageRange?.badgeClassName ?? "bg-[rgba(212,114,92,0.08)] text-[var(--text-mid)]",
+              ageBadgeClassName ?? "bg-[rgba(212,114,92,0.08)] text-[var(--text-mid)]",
             )}
           >
-            {ageRange?.label ?? profile.age_range_label ?? "未设置年龄"}
+            {ageLabel ?? profile.age_range_label ?? "未设置年龄"}
           </span>
         </span>
       </button>
@@ -88,12 +104,12 @@ export const ChildProfileCard: React.FC<ChildProfileCardProps> = ({ profile, onE
       <div className="mb-5">
         <div className="mb-2 flex justify-between text-xs text-[var(--text-light)]">
           <span>阅读等级</span>
-          <span>{readingLevel.label}</span>
+          <span>{readingLevelLabel ?? profile.reading_level_label ?? "未设置"}</span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-[var(--cream)]">
           <span
             className="block h-full rounded-full bg-[linear-gradient(90deg,var(--honey),var(--peach))]"
-            style={{ width: `${readingLevel.percent}%` }}
+            style={{ width: `${readingPercent}%` }}
           />
         </div>
       </div>

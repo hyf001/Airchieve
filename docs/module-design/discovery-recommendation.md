@@ -111,7 +111,7 @@
 | target_id | int | 目标 ID |
 | title_override | string nullable | 展示标题覆盖 |
 | image_asset_id_override | string nullable | 展示图覆盖 |
-| scene_ids | JSON array | 适用场景 |
+| scene_codes | JSON array | 适用场景 |
 | min_age | integer nullable | 最小年龄 |
 | max_age | integer nullable | 最大年龄 |
 | access_level_filter | enum(`all`,`free`,`vip`) | 权益过滤 |

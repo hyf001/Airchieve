@@ -3,361 +3,294 @@ name: frontend-develop
 description: AIrchieve 项目前端开发技能。当处理前端代码（frontend/ 目录）时使用此技能，包括创建组件、页面、功能、UI 改进或任何 React/TypeScript 开发工作。
 ---
 
-# AIrchieve 前端开发规范
+# AIrchieve 前端开发指南
 
-## 技术栈
+当处理 `frontend/` 下的 React 前端代码时使用本技能。目标是让前端实现符合项目模块划分、React 开发规范、代码复用和多人协作边界。
 
-React 19 + TypeScript + Vite + Tailwind CSS + Radix UI (shadcn/ui) + lucide-react
+## 1. 使用范围
 
-**重要：使用状态路由，不使用 React Router**
+使用本技能的场景：
 
-## 目录结构
+- 新增或修改前端页面。
+- 新增或修改 React 组件。
+- 新增或调整前端业务模块。
+- 接入前端 API、状态、路由、表单、权限、会员权益。
+- 根据 `docs/frontend` 原型实现页面。
+- 根据 `docs/module-design.md` 拆分或落地模块。
 
-```
+不使用本技能的场景：
+
+- 后端 FastAPI、数据库、Alembic 迁移。
+- 专门编写或调试前端测试时，优先使用 `frontend-unit-test`。
+- 仅修改文档且不涉及前端代码约束时。
+
+## 2. 开发前必须阅读的上下文
+
+开始前按需阅读：
+
+- `docs/module-design.md`：前后端统一模块划分、分层职责、功能边界、依赖关系。
+- 对应原型文件：`docs/frontend/*.html`。
+- 当前前端目录：`frontend/src/`。
+- 当前组件风格：`frontend/src/components/ui/`、`frontend/src/components/auth/`、`frontend/src/components/editor/`。
+- 当前类型和常量：`frontend/src/types/`、`frontend/src/constants/`。
+
+如果需求涉及产品规则，需要参考：
+
+- `docs/picture-book-website-prd.md`
+
+## 3. 当前技术栈
+
+当前前端使用：
+
+- React
+- TypeScript
+- Vite
+- Tailwind CSS
+- lucide-react
+- Radix Slot
+- class-variance-authority
+- clsx
+- tailwind-merge
+
+开发时优先沿用当前技术栈，不随意引入新框架、新状态库、新 UI 库或新 CSS 方案。
+
+## 4. 分层规则
+
+前端代码按以下层次组织：
+
+```text
 frontend/src/
-├── pages/               # 页面组件
-│   ├── HomeView.tsx     # 首页（绘本列表）
-│   ├── EditorView.tsx   # 编辑器主页面
-│   └── editor/          # 编辑器子页面
-├── components/
-│   ├── ui/             # shadcn/ui 基础组件（见下方列表）
-│   └── editor/         # 编辑器组件
-│       ├── EditorCanvas.tsx    # 画布
-│       ├── EditorHeader.tsx    # 顶部栏
-│       ├── PageNavigator.tsx   # 页面导航
-│       ├── StorybookList.tsx   # 绘本列表
-│       ├── dialogs/            # 弹窗组件
-│       └── tools/              # 编辑工具系统
-│           ├── ToolRegistry.tsx  # 工具注册表
-│           ├── ToolPanel.tsx     # 工具面板容器
-│           ├── ToolSelector.tsx  # 工具选择器
-│           ├── ai-edit/          # AI 改图工具
-│           ├── draw/             # 涂鸦笔工具
-│           ├── text-edit/        # 文字编辑工具
-│           └── regenerate/       # AI 调整页面工具
-├── services/            # API 调用层
-├── contexts/            # 全局状态（AuthContext）
-├── hooks/               # 自定义 hooks
-│   ├── usePolling.ts   # 异步轮询 hook
-│   ├── useStorybookLoader.ts  # 绘本数据加载
-│   ├── useEditorState.ts      # 编辑器状态
-│   └── useToolManager.ts      # 工具状态管理
-├── types/               # TypeScript 类型定义
-└── constants/           # 静态数据
+  app/
+  pages/
+  features/
+  entities/
+  shared/
 ```
 
-## 编码规范
+当前仓库还存在早期结构：
 
-### 组件模板
-
-```tsx
-import React, { useState, useCallback } from 'react';
-import { Button } from '@/components/ui/button';
-
-interface Props {
-  title: string;
-  onAction?: () => void;
-}
-
-const ComponentName: React.FC<Props> = ({ title, onAction }) => {
-  const [state, setState] = useState('');
-
-  const handleClick = useCallback(() => {
-    onAction?.();
-  }, [onAction]);
-
-  return (
-    <div className="p-4">
-      <Button onClick={handleClick}>{title}</Button>
-    </div>
-  );
-};
-
-export default ComponentName;
+```text
+frontend/src/
+  pages/
+  components/
+  hooks/
+  lib/
+  types/
+  constants/
 ```
 
-**要点：**
-- 使用 `React.FC` 和接口定义 props
-- 可选 props 使用 `?` 并提供默认值
-- 事件处理器用 `useCallback`
-- 导出时使用 `export default`
+开发约束：
 
-### 暴露方法的组件（Forward Ref）
+- 新的大模块优先按 `app / pages / features / entities / shared` 组织。
+- 对既有小改动，可以先尊重当前目录结构，避免为了一个小需求做大规模迁移。
+- 如果开始实现 PRD 中的完整系统能力，应逐步迁移到 `docs/module-design.md` 中定义的分层。
+- 页面层只做页面编排，不沉淀复杂业务逻辑。
+- 业务流程放到 `features`。
+- 资源展示和资源基础能力放到 `entities`。
+- 基础 UI、工具、通用能力放到 `shared` 或当前的 `components/ui`、`lib`、`hooks`。
 
-```tsx
-export interface Ref {
-  doSomething: () => void;
-}
+## 5. 模块边界规则
 
-interface Props {
-  onChange?: (value: string) => void;
-}
+必须遵守 `docs/module-design.md` 的模块边界。
 
-const Component = forwardRef<Ref, Props>((props, ref) => {
-  useImperativeHandle(ref, () => ({
-    doSomething: () => {}
-  }));
-  return <div>...</div>;
-});
-Component.displayName = 'Component';
-export default Component;
+核心约束：
+
+- 登录态只由 `auth` 相关模块管理。
+- 当前儿童档案只由 `profile-management` 相关模块管理。
+- 会员权益只由 `membership` 相关模块判断。
+- 播放控制只由 `book-player` 相关模块管理。
+- 素材资源管理只由对应素材库模块管理。
+- 创建流程只负责编排，不复制素材库、播放器、会员逻辑。
+- 分享页复用播放器能力，只读展示，不开放编辑。
+- 故事是纯文本资产，不进入播放器逻辑。
+- 绘本模板创作不得开放画风、正文、背景、结构修改能力。
+- 儿童播放主流程不得出现商业购买入口。
+- 个人素材分享前必须经过隐私确认。
+
+跨模块依赖必须清晰：
+
+- `book-create` 可以依赖故事、形象、声音、画风选择能力，但不要复制这些模块的列表和管理逻辑。
+- `book-player` 可以依赖声音选择能力，但不要实现声音上传和声音管理。
+- `discovery` 可以跳转播放和创建，但不要实现播放控制或创建步骤。
+- `membership` 提供权益结果，其他模块消费结果，不自行计算套餐规则。
+
+## 6. React 代码规则
+
+组件规则：
+
+- 使用函数组件。
+- 使用 TypeScript 明确 props。
+- 组件名称使用 PascalCase。
+- 文件名使用 PascalCase 或与现有目录风格一致。
+- 组件职责保持单一，页面组件只负责组合。
+- 大组件应拆分为子组件，避免一个文件承载多个复杂区域。
+- 列表渲染必须使用稳定 key，不使用数组下标作为业务列表 key，除非列表永不变更。
+- 交互元素必须有清晰的可访问名称，例如 `aria-label` 或可见文本。
+
+状态规则：
+
+- 局部 UI 状态放组件内部。
+- 跨页面状态放对应业务模块。
+- 服务端数据不要复制到多个无关状态中。
+- 派生数据优先通过计算获得，不额外存储。
+- 不在 render 中执行副作用。
+- 异步请求必须处理 loading、error、empty 状态。
+
+事件规则：
+
+- 事件处理函数命名使用 `handleXxx`。
+- 传给子组件的回调命名使用 `onXxx`。
+- 避免在 JSX 中写复杂逻辑。
+- 表单提交必须阻止默认行为并处理错误反馈。
+
+类型规则：
+
+- 不使用 `any`，除非第三方库边界确实无法表达，并添加简短说明。
+- 不使用隐式复杂对象结构，公共 props 和公共数据结构必须有类型。
+- 类型放在离使用处最近的位置；跨模块复用的类型放到对应模块或 `types`。
+- 不把故事、绘本、绘本模板混成同一个类型概念。
+
+## 7. 样式与 UI 规则
+
+优先级：
+
+1. 复用现有 UI 组件：`frontend/src/components/ui/`
+2. 复用已有业务组件。
+3. 使用 Tailwind 组合实现页面局部样式。
+4. 必要时扩展共享组件。
+
+约束：
+
+- 不复制已有 Button、Input、Card 等基础组件。
+- 图标优先使用 `lucide-react`。
+- className 合并使用 `cn`。
+- 保持响应式设计，移动端 375px 宽度下主要内容不可重叠。
+- 文字不能溢出按钮、卡片、标签容器。
+- 交互控件要有 hover、focus、disabled 等基础状态。
+- 页面区域不要嵌套过多卡片；工具型重复项可以使用卡片。
+- 不把原型中的大量内联样式原样搬进 React。
+- 品牌色、圆角、阴影、字体等应逐步沉淀为主题 token 或共享样式。
+
+儿童产品体验约束：
+
+- 儿童阅读和播放区域保持清爽，不展示商业干扰入口。
+- 家长操作、订阅、隐私确认等应放在家长上下文。
+- 上传个人图片、声音、故事前必须有授权或版权提示。
+
+## 8. API 与数据规则
+
+API 代码约束：
+
+- 业务 API 放在对应业务模块内。
+- 通用 HTTP 能力放在共享层。
+- 不在组件 JSX 中直接拼接复杂请求逻辑。
+- API 错误必须转换成用户可理解的提示。
+- 登录失效、权限不足、会员限制要走统一处理。
+
+数据边界：
+
+- 后端 ORM model 暴露到前端的 `id` 以及内部关联 id（如 `user_id`、`child_profile_id`、`plan_id`、`order_id`）必须使用 `number` 类型；只有外部平台标识、业务编码、配置项 id、素材引用、设备 id 等非内部 model id 才使用 `string`。
+- 故事只表示文本资产。
+- 绘本表示可播放资产。
+- 绘本模板表示受限可替换资产。
+- 个人故事、形象、声音、生成绘本默认私有。
+- 删除形象或声音不应影响历史绘本展示，只影响后续选择。
+
+## 9. 文件与导出规则
+
+目录规则：
+
+- 页面放 `pages`。
+- 业务流程放 `features/<module>`。
+- 资源组件放 `entities/<resource>`。
+- 基础组件放 `shared/components` 或现有 `components/ui`。
+- 通用工具放 `shared/lib` 或现有 `lib`。
+- 通用 hooks 放 `shared/hooks` 或现有 `hooks`。
+
+导出规则：
+
+- 模块公共入口使用 `index.ts` 汇总。
+- 页面只依赖模块公开入口，不深层引用其他模块内部文件。
+- 避免循环依赖。
+- 不为了方便跨模块 import 而把业务组件放进 `shared`。
+
+## 10. 代码质量约束
+
+必须做到：
+
+- 代码可读，命名表达业务含义。
+- 删除无用 import、无用变量、无用状态。
+- 不留下 `console.log`，调试日志需要移除；有意保留的日志必须说明用途。
+- 不提交注释掉的大段代码。
+- 不使用魔法字符串反复散落，公共枚举或常量应集中。
+- 不做与需求无关的大重构。
+- 不引入未使用依赖。
+- 不修改与任务无关的用户改动。
+
+可以添加注释的场景：
+
+- 解释复杂业务规则。
+- 解释跨模块边界。
+- 解释非显然的兼容逻辑。
+
+避免添加注释的场景：
+
+- 解释代码表面含义。
+- 重复变量名或函数名已经表达清楚的内容。
+
+## 11. 验证规则
+
+完成前优先运行：
+
+```bash
+cd frontend
+npm run typecheck
+npm run build
 ```
 
-### Service 层模板
+根据改动类型选择：
 
-```tsx
-const API_BASE = "/api/v1/resource";
-import { getAuthHeaders } from "./authService";
+- 只改类型或组件 props：至少运行 `npm run typecheck`。
+- 改页面、样式、路由、打包配置：运行 `npm run build`。
+- 改交互复杂页面：建议启动 `npm run dev` 并进行浏览器检查。
 
-export interface Data { id: number; name: string; }
+如果命令因为环境、依赖或沙箱限制无法运行，需要在最终回复中说明。
 
-export const createItem = async (req: CreateRequest): Promise<Data> => {
-  const res = await fetch(API_BASE, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-    body: JSON.stringify(req),
-  });
-  if (!res.ok) {
-    if (res.status === 401) throw new Error("请先登录");
-    const error = await res.json().catch(() => ({}));
-    throw new Error(error.detail || "创建失败");
-  }
-  return res.json();
-};
-```
+## 12. 开发流程
 
-**要点：**
-- 使用 async/await
-- 类型化所有请求和响应
-- 处理 401 触发登录弹窗
-- 使用 `getAuthHeaders()` 处理认证
-- 积分不足场景使用 `InsufficientPointsError`（从 storybookService 导入）
+处理前端任务时按以下顺序：
 
-### 状态管理
+1. 明确需求属于哪个页面和哪个业务模块。
+2. 阅读相关原型、PRD 或模块设计文档。
+3. 检查现有组件和工具，优先复用。
+4. 确认改动应该放在哪一层。
+5. 实现代码。
+6. 检查模块边界和依赖方向。
+7. 运行类型检查或构建。
+8. 总结改动和验证结果。
 
-- **本地状态：** `useState`
-- **全局状态：** Context API（参考 `AuthContext`）
-- **异步轮询：** 使用 `usePolling` hook（见下方）
-- **编辑器状态：** 使用 `useEditorState` hook
+## 13. 常见错误避免
 
-### 异步轮询模式
+避免：
 
-```tsx
-import { usePolling } from '@/hooks/usePolling';
+- 在页面组件里写完整业务流程。
+- 把多个业务模块混在一个组件里。
+- 在创建流程中复制素材库列表逻辑。
+- 在播放器里实现声音上传。
+- 在会员模块外计算套餐权益。
+- 在模板创作流程开放画风修改。
+- 把故事当成可播放绘本。
+- 把分享播放页做成可编辑页面。
+- 为了快速实现复制原型里的所有 CSS。
+- 使用 `div` 模拟按钮却不处理键盘和可访问性。
+- 在移动端只检查桌面布局。
 
-const { start: startPolling, stop: stopPolling } = usePolling(
-  async (id: number) => {
-    const res = await fetch(`/api/v1/storybooks/${id}`, { headers: getAuthHeaders() });
-    return res.json();
-  },
-  async (data) => {
-    setCurrentStorybook(data);
-    if (data.status === 'finished' || data.status === 'error' || data.status === 'terminated') {
-      return { stop: true };
-    }
-    return { stop: false };
-  }
-);
-```
+## 14. 与模块设计文档的关系
 
-## UI 组件库
+`docs/module-design.md` 是前后端统一模块边界的主依据。
 
-### 可用的 shadcn/ui 组件
+如果开发中发现模块设计与实际代码冲突：
 
-**已安装的组件（`@/components/ui/`）：**
-- `button` - 按钮（支持 variant: default/outline/ghost/gradient/gradient-emerald/destructive）
-- `dialog` - 对话框（Dialog/DialogContent/DialogHeader/DialogTitle/DialogFooter）
-- `dropdown-menu` - 下拉菜单
-- `input` - 输入框
-- `label` - 标签
-- `select` - 选择器
-- `switch` - 开关
-- `tabs` - 标签页（Tabs/TabsList/TabsTrigger/TabsContent）
-- `textarea` - 多行输入
-- `tooltip` - 提示
-- `badge` - 徽章
-- `checkbox` - 复选框（`checked` + `onCheckedChange` API）
-- `toast` - 提示消息（通过 `useToast` hook 使用）
-
-## 样式规范
-
-### 品牌色
-
-- 主色：`#00CDD4`（青色）
-- 背景：`#061428`（夜空）
-- 文字：`#e2e8f0`
-
-### 常用类
-
-```tsx
-// 玻璃卡片
-<div className="glass-card rounded-lg p-6">内容</div>
-
-// 渐变按钮
-<Button variant="gradient">渐变</Button>
-<Button variant="gradient-emerald">翠绿</Button>
-
-// 布局
-className="h-screen flex flex-col items-center justify-center"
-className="overflow-auto"  // 可滚动
-className="overflow-hidden"  // 不可滚动
-```
-
-### 内置组件
-
-```tsx
-import LoadingSpinner from '@/components/LoadingSpinner';
-<LoadingSpinner size={48} text="加载中..." />
-
-import { useToast } from '@/hooks/use-toast';
-const { toast } = useToast();
-toast({ variant: "destructive", title: "错误", description: "详情" });
-```
-
-## 路由模式
-
-**使用状态路由，不使用 React Router**
-
-```tsx
-// App.tsx
-const [showProfile, setShowProfile] = useState(false);
-const [currentId, setCurrentId] = useState<number>();
-
-// 条件渲染
-{showProfile ? (
-  <ProfileView onBack={() => setShowProfile(false)} />
-) : (
-  <HomeView onStart={(id) => setCurrentId(id)} />
-)}
-```
-
-## 编辑器工具系统
-
-编辑器使用模块化工具架构，每种工具注册到 `ToolRegistry`。
-
-**工具类型（`types/tool.ts`）：**
-- `ai-edit` — AI 改图（有 Overlay）
-- `regenerate` — AI 调整页面（仅 Panel，无 Overlay）
-- `text` — 文字编辑（有 Overlay，使用 forwardRef）
-- `draw` — 涂鸦笔（有 Overlay）
-
-**集成流程：**
-1. 在 `types/tool.ts` 的 `ToolId` 中添加新 ID
-2. 在 `ToolRegistry.tsx` 中注册工具配置
-3. 在 `ToolPanel.tsx` 的 `getToolProps()` 中为新工具准备 props
-4. 如需 Overlay，在 `EditorCanvas.tsx` 和 `EditorView.tsx` 中集成
-
-**不是所有工具都需要完整的 4 文件结构。** 简单面板工具（如 regenerate）只需一个 `index.tsx` 即可。
-
-详细工具创建流程参考 `frontend-add-edit-tool` 技能。
-
-## 页面类型
-
-编辑器中的页面有三种类型（`PageType`）：
-
-- `cover` — 封面（page_index = 0）
-- `content` — 正文页（page_index 1..N）
-- `back_cover` — 封底（page_index N+1，固定底图，不可 AI 重新生成）
-
-```tsx
-import { PageType } from '@/services/storybookService';
-```
-
-## 常用模式
-
-### 异步操作
-
-```tsx
-const [loading, setLoading] = useState(false);
-
-const handleSubmit = async () => {
-  try {
-    setLoading(true);
-    await apiCall();
-  } catch (err) {
-    toast({ variant: "destructive", title: err.message });
-  } finally {
-    setLoading(false);
-  }
-};
-```
-
-### 积分不足处理
-
-```tsx
-import { InsufficientPointsError } from '@/services/storybookService';
-
-try {
-  await somePaidAction();
-} catch (err) {
-  if (err instanceof InsufficientPointsError) {
-    toast({ variant: 'destructive', title: '积分不足', description: err.message });
-  } else {
-    toast({ variant: 'destructive', title: '操作失败', description: err instanceof Error ? err.message : undefined });
-  }
-}
-```
-
-### 表单处理
-
-```tsx
-const [formData, setFormData] = useState({ name: '' });
-
-const handleChange = (field: string) => (value: string) => {
-  setFormData(prev => ({ ...prev, [field]: value }));
-};
-```
-
-### 空状态列表
-
-```tsx
-{loading ? (
-  <LoadingSpinner size={32} />
-) : items.length === 0 ? (
-  <div className="text-center text-slate-400 py-8">暂无数据</div>
-) : (
-  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-    {items.map(item => <div key={item.id}>{item.name}</div>)}
-  </div>
-)}
-```
-
-### 认证
-
-```tsx
-import { useAuth } from '@/contexts/AuthContext';
-const { user, logout, openLoginModal } = useAuth();
-
-if (!user) {
-  openLoginModal();
-  return;
-}
-```
-
-### 图片处理
-
-```tsx
-// OSS 图片必须转换 URL 避免跨域
-import { toApiUrl } from '@/services/storybookService';
-<img src={toApiUrl(imageUrl)} alt="" />
-```
-
-## 文件命名
-
-- 组件：PascalCase（如 `UserProfileView.tsx`）
-- 服务：camelCase（如 `storybookService.ts`）
-- Hooks：camelCase + use 前缀（如 `usePolling.ts`）
-
-## TypeScript 规范
-
-- 总是为 props 定义接口
-- 避免使用 `any`，使用 `unknown`
-- API 响应必须有类型定义
-- 使用类型守卫进行运行时检查
-
-## 性能优化
-
-- 传递给子组件的函数使用 `useCallback`
-- 昂贵计算使用 `useMemo`
-- 搜索输入使用防抖
-- 避免在 JSX 中使用内联函数
+- 小范围功能优先保持当前代码可维护。
+- 大范围功能优先按模块设计逐步迁移。
+- 不确定时在回复中说明取舍，不擅自扩大重构范围。

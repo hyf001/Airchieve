@@ -70,7 +70,7 @@ async def _slot_read(db: AsyncSession, slot: RecommendationSlot, *, include_inac
                 target_id=item.target_id,
                 title_override=item.title_override,
                 image_asset_id_override=item.image_asset_id_override,
-                scene_ids=item.scene_ids or [],
+                scene_codes=item.scene_codes or [],
                 min_age=item.min_age,
                 max_age=item.max_age,
                 access_level_filter=item.access_level_filter,

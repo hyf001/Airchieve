@@ -1,1 +1,1 @@
-from app.schema.admin.schemas import *
+from app.schema.admin.admin import *

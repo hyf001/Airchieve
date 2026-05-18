@@ -7,9 +7,9 @@ export interface BookSummary {
   subtitle?: string | null;
   summary?: string | null;
   cover_url?: string | null;
-  age_range_ids: number[];
-  theme_ids: number[];
-  education_goal_ids: number[];
+  age_range_codes: string[];
+  theme_codes: string[];
+  education_goal_codes: string[];
   tags: string[];
   language: BookLanguage;
   reading_level?: string | null;
@@ -22,8 +22,8 @@ export interface BookSummary {
 
 export interface BookDetail extends BookSummary {
   source_story_id?: number | null;
-  narrative_style_id?: number | null;
-  art_style_id?: number | null;
+  narrative_style_code?: string | null;
+  art_style_code?: string | null;
   publish_status: "draft" | "published" | "unpublished" | "deleted";
   is_featured: boolean;
   created_at: string;

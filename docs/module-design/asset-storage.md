@@ -108,9 +108,9 @@
 | description | text nullable | 描述 |
 | image_asset_id | int | 主图 |
 | reference_asset_id | int nullable | 参考图 |
-| recommended_art_style_id | int nullable | 推荐画风 |
-| category_id | int nullable | taxonomy:asset_category |
-| age_range_ids | JSON array | 适用年龄 |
+| recommended_art_style_code | string nullable | 推荐画风 code |
+| category_code | string nullable | taxonomy:asset_category |
+| age_range_codes | JSON array | 适用年龄 |
 | access_level | enum(`free`,`vip`) | 系统素材权益 |
 | source_type | enum(`system`,`user_upload`,`ai_generated`) | 来源 |
 | is_default | bool | 用户默认 |
@@ -129,7 +129,7 @@
 | description | text | 描述 |
 | prompt | text nullable | 生成提示词 |
 | example_asset_id | int nullable | 示例图 |
-| age_range_ids | JSON array | 适用年龄 |
+| age_range_codes | JSON array | 适用年龄 |
 | access_level | enum(`free`,`vip`) | 权益 |
 | sort_order | integer | 排序 |
 | status | enum(`active`,`inactive`,`deleted`) | 状态 |
@@ -142,7 +142,7 @@
 | id | int PK | 声音 ID |
 | owner_user_id | int nullable indexed | 用户声音所属人；系统声音为空 |
 | name | string | 名称 |
-| voice_style_id | int nullable | taxonomy:voice_style |
+| voice_style_code | string nullable | taxonomy:voice_style |
 | sample_asset_id | int nullable | 试听样本 |
 | source_sample_asset_id | int nullable | 用户原始样本 |
 | supported_languages | JSON array | 支持语言 |

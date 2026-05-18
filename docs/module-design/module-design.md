@@ -183,7 +183,7 @@ backend/app/
 复用入口：
 
 - 前端导出 `TaxonomySelect`、`TaxonomyMultiSelect`、`useTaxonomyGroup`。
-- 后端提供 `list_taxonomy()`、`validate_taxonomy_ids()`、`upsert_taxonomy_item()`。
+- 后端提供 `list_taxonomy()`、`validate_taxonomy_codes()`、`upsert_taxonomy_item()`。
 
 边界：
 

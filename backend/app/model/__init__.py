@@ -14,6 +14,7 @@ from app.model.membership import MembershipPlan, MembershipUsageCounter, UserMem
 from app.model.payment import PaymentOrder, PaymentRecord, RefundRecord
 from app.model.recommendation import RecommendationItem, RecommendationSlot, RecommendationTopic
 from app.model.story import Story
+from app.model.taxonomy import TaxonomyItem, TaxonomyItemStatus, TaxonomyType
 
 __all__ = [
     "AccountAuthIdentity",
@@ -34,6 +35,9 @@ __all__ = [
     "RecommendationTopic",
     "SmsVerificationCode",
     "Story",
+    "TaxonomyItem",
+    "TaxonomyItemStatus",
+    "TaxonomyType",
     "User",
     "UserMembership",
 ]

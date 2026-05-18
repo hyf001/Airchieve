@@ -1,1 +1,1 @@
-from app.schema.audit.schemas import *
+from app.schema.audit.audit import *

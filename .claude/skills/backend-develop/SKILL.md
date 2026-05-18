@@ -1,273 +1,339 @@
 ---
 name: backend-develop
-description: AIrchieve 项目后端开发技能。当处理后端代码（app/ 目录）时使用此技能，包括创建 API、服务、模型、数据库操作或任何 Python/FastAPI 开发工作。
+description: AIrchieve 项目后端开发技能。当处理后端代码（backend/app/ 目录）时使用此技能，包括创建 API、服务、模型、数据库操作、Alembic 迁移、FastAPI 开发和后端规范审查。
 ---
 
-You are the AIrchieve backend development expert. You help users build FastAPI backend features following the project's established patterns and conventions.
+# AIrchieve Backend Develop
 
-## 项目架构
+本技能用于 AIrchieve 后端开发。目标是让不同开发者进入项目后能快速理解目录结构、运行方式、模块边界和强制规范，避免多人并行时出现重复实现、跨层直连和业务规则漂移。
 
-```
-app/
-├── main.py                 # FastAPI 应用入口、异常处理器
-├── api/v1/                 # API 路由层（薄包装）
-│   ├── router.py           # 路由聚合
-│   ├── deps.py             # 依赖注入（认证��
-│   ├── storybook_api.py    # 绘本 API
-│   ├── page_api.py         # 页面与图层 API
-│   ├── user_api.py         # 用户 API
-│   └── *_api.py            # 其他模块端点
-├── services/               # 业务逻辑层（核心）
-│   ├── storybook_service.py  # 绘本创建、封面生成、页面重新生成
-│   ├── page_service.py       # 页面 CRUD 操作
-│   ├── layer_service.py      # 图层 CRUD 操作
-│   ├── llm_cli.py            # LLM 客户端基类（LLMClientBase）
-│   ├── gemini_cli.py         # Gemini 实现（英文 prompt）
-│   └── doubao_cli.py         # 豆包实现（中文 prompt）
-├── models/                 # ORM 模型
-│   ├── enums.py            # 枚举定义（PageType, CliType, StoryType 等）
-│   ├── storybook.py        # 绘本模型
-│   ├── page.py             # 页面模型（独立表，含分镜 JSON）
-│   ├── layer.py            # 图层模型
-│   └── base.py             # SQLAlchemy 基类
-├── schemas/                # Pydantic 请求/响应模型
-│   ├── page.py             # 页面相关 schema
-│   ├── storybook.py        # 绘本相关 schema
-│   └── media.py            # 媒体相关 schema
-├── core/                   # 配置与工具
-│   ├── config.py           # pydantic-settings
-│   ├── security.py         # JWT、密码
-│   └── utils/logger.py     # 日志工具
-└── db/session.py           # 异步会话工厂
-```
+## 快速判断
 
-## 核心规范
+当任务涉及以下内容时，必须使用本技能：
 
-### 1. 全异步优先
+- 修改 `backend/app/` 下任何 Python 后端代码。
+- 新增或修改 FastAPI API、service、schema、model。
+- 新增数据库表、字段、索引或 Alembic 迁移。
+- 修改后端配置、数据库 session、鉴权、支付、权益、生成任务、存储、隐私授权等公共能力。
+- 设计或审查后端模块边界、接口契约和数据流。
 
-```python
-# ✅ 所有数据库操作使用 async/await
-async def get_user(user_id: int) -> User | None:
-    async with async_session_maker() as session:
-        result = await session.execute(select(User).where(User.id == user_id))
-        return result.scalar_one_or_none()
+不适用范围：
 
-# SQLAlchemy 2.0 异步语法
-user = (await session.execute(select(User).where(User.id == id))).scalar_one_or_none()
-items = (await session.execute(select(Item).limit(10))).scalars().all()
+- 前端 `frontend/` 开发使用 `frontend-develop`。
+- 明确要求写 Python 单元测试时，同时使用 `python-unit-test`。
+- 仅做代码审查时，同时参考 `code-review`。
+
+## 项目结构
+
+当前后端包位于 `backend/app/`，使用根目录 `pyproject.toml` 管理依赖。
+
+```text
+backend/
+  app/
+    main.py                 # FastAPI app 创建和路由注册入口
+    api/v1/                 # API 路由层（按模块 {module}_api.py）
+    core/                   # 配置、安全、日志、基础设施
+    db/                     # 数据库 engine/session/base
+    model/{module}/         # ORM 模型层（按模块子目录组织）
+    schema/{module}/        # Pydantic 请求/响应/DTO（按模块子目录组织）
+    service/{module}/       # 业务逻辑层（按模块子目录组织）
+  alembic/
+    env.py                  # Alembic 异步迁移配置
+    versions/               # 数据库迁移文件
+tests/
+  api/                      # 后端 API 测试
 ```
 
-### 2. 分层职责
+当前技术栈：
 
-**API 层 - 薄包装：**
-```python
-@router.post("")
-async def create_endpoint(
-    req: RequestSchema,
-    current_user: User = Depends(get_current_user),
-):
-    result = await service_function(...)  # 调用 service
-    return result
+- Python `>=3.12`
+- FastAPI
+- Pydantic v2 / `pydantic-settings`
+- SQLAlchemy 2.x async
+- Alembic
+- 默认数据库：`sqlite+aiosqlite:///data/app.db`
+- 测试：pytest / pytest-asyncio / httpx
+
+## 开发环境
+
+常用命令从仓库根目录执行。
+
+安装依赖：
+
+```bash
+uv sync --extra dev
 ```
 
-**Service 层 - 业务逻辑：**
-```python
-async def service_function(...) -> Result:
-    async with async_session_maker() as session:
-        # 数据库操作、业务规则、外部服务调用
-        await session.commit()
-    return result
+如果没有使用 `uv`，可以用本地虚拟环境安装：
+
+```bash
+python -m pip install -e ".[dev]"
 ```
 
-### 3. 类型与结构化对象
+启动后端：
 
-对于有稳定字段的业务对象、请求/响应、service 入参或返回值，优先使用明确结构，不要大量手拼 `dict`。
-
-- API 请求/响应优先使用 `app/schemas/` 下的 Pydantic schema
-- Service 层跨函数传递的稳定结构优先使用 dataclass、TypedDict、Pydantic schema、ORM model 或明确的领域类
-- 数据库实体优先使用 ORM model，不要用 `dict` 模拟模型对象
-- 临时 `dict` 只适合极小范围、无跨层传播、字段不形成业务契约的局部场景
-- 如果某个 `dict` 需要在 API、service、测试或前端契约中重复出现，应抽成具体类型
-
-### 4. 模型定义
-
-```python
-from app.db.base import Base
-from sqlalchemy.orm import Mapped, mapped_column
-from datetime import datetime, timezone
-
-class YourModel(Base):
-    __tablename__ = "your_table"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-
-    # 时间戳统一使用 UTC
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc), nullable=False
-    )
+```bash
+uv run uvicorn app.main:app --reload --app-dir backend
 ```
 
-**枚举定义（`models/enums.py`）：**
-```python
-from enum import Enum
 
-class YourEnum(str, Enum):
-    VALUE_1 = "value_1"
-    VALUE_2 = "value_2"
+运行测试：
+
+```bash
+uv run pytest
 ```
 
-### 5. 依赖注入
+运行 Alembic 迁移：
 
-```python
-# 数据库会话（自动事务管理）
-from app.db.session import get_db
-@router.get("")
-async def list_items(db: AsyncSession = Depends(get_db)):
-    return (await db.execute(select(Item))).scalars().all()
-
-# 认证
-from app.api.deps import get_current_user, get_current_admin
-@router.post("")
-async def create_item(user: User = Depends(get_current_user)):
-    pass
+```bash
+uv run alembic upgrade head
 ```
 
-### 6. 错误处理
+生成迁移：
 
-```python
-# 自定义异常
-class InsufficientPointsError(Exception):
-    pass
-
-# HTTP 异常
-if not item:
-    raise HTTPException(status_code=404, detail="项目不存在")
-
-# 全局异常处理器（main.py）
-@app.exception_handler(CustomError)
-async def custom_error_handler(_request, exc):
-    return JSONResponse(status_code=422, content={"code": exc.code, "message": str(exc)})
+```bash
+uv run alembic revision --autogenerate -m "describe_change"
 ```
 
-### 7. 后台任务
+配置说明：
 
-```python
-from fastapi import BackgroundTasks
+- 配置统一从 `backend/app/core/config.py` 的 `Settings` 读取。
+- `.env` 默认从仓库根目录读取。
+- 不要在业务代码里散落读取环境变量。
+- 数据库连接统一使用 `backend/app/db/session.py` 里的 `get_db` / `async_session_maker`。
 
-@router.post("")
-async def create_task(
-    background_tasks: BackgroundTasks,
-):
-    # 快速返回，后台执行
-    background_tasks.add_task(run_long_task, arg1, arg2)
-    return {"status": "init"}
+## 分层职责
 
-def run_long_task(arg1, arg2):
-    asyncio.run(actual_task(arg1, arg2))
+### API 层：`backend/app/api/v1/`
+
+职责：
+
+- 定义路由、HTTP 方法、路径、状态码和 response model。
+- 接收和校验请求参数。
+- 注入数据库 session、当前用户等依赖。
+- 调用 service 并返回 schema。
+
+强制规则：
+
+- API 层不得写复杂业务逻辑。
+- API 层不得直接修改 ORM 对象状态。
+- API 层不得直接调用外部 AI、OSS、支付渠道等基础设施。
+- API 层不得堆大量 Pydantic model；稳定业务 schema 必须放到 `backend/app/schema/`。
+
+### Service 层：`backend/app/service/`
+
+职责：
+
+- 承载业务规则、状态流转和跨模块编排。
+- 统一处理事务、额度、权限、任务、存储、生成等流程。
+- 对外暴露模块公开方法，作为模块边界。
+
+强制规则：
+
+- 跨模块写操作必须调用目标模块 service，不得直接 import 对方 model 后修改。
+- 一个 service 只拥有本模块的数据写逻辑。
+- 业务模块不得自行判断 VIP、额度、次数上限，必须调用 `entitlement_service`。
+- 非阻塞副作用优先发布领域事件，不要在核心写流程里同步堆统计、审计、通知等逻辑。
+
+### Schema 层：`backend/app/schema/`
+
+职责：
+
+- 定义请求、响应、跨模块 DTO 和稳定内容结构。
+- 使用 Pydantic v2。
+- 输出 schema 使用 `ConfigDict(from_attributes=True)` 支持 ORM 转换。
+
+强制规则：
+
+- 稳定业务结构禁止使用裸 `dict`、`dict[str, Any]`、`Any` 或万能 payload；必须定义明确的 Pydantic schema、DTO、TypedDict 或专用值对象。
+- 请求、响应、内部 DTO 要分开命名，不要复用一个万能 schema。
+- 跨模块调用尽量传递 id、`SummaryDTO` 或 `InternalDTO`，不得暴露 SQLAlchemy model。
+- 适合枚举的状态值、类型字段、来源字段、动作字段等必须定义 `Enum` / `StrEnum` 或项目既有枚举类型，禁止散落字符串常量。
+
+### Model 层：`backend/app/model/`
+
+职责：
+
+- 定义 SQLAlchemy ORM 模型、表名、字段、索引、关系。
+- 所有 model 必须继承 `Base`，需要时间戳时复用 `TimestampMixin`。
+
+强制规则：
+
+- 新增 model 后必须在 `backend/app/model/__init__.py` 导出，保证 Alembic metadata 能发现。
+- 任何数据库结构变化必须配套 Alembic migration。
+- 所有 ORM model 的主键 `id` 以及指向内部 model 的外键 id 必须使用 `int` / SQLAlchemy `Integer` 自增主键，禁止使用 UUID 或 `String(36)` 作为内部模型 id；外部平台单号、业务编码、素材引用等非内部模型 id 可继续使用字符串字段。
+- 不要在 model 里写业务流程。
+- 删除类能力优先使用软删除或状态字段；涉及用户内容、支付、审计、导出、分享记录时不要物理删除历史事实。
+
+### Core / DB 层
+
+职责：
+
+- `core/` 放配置、安全、日志和基础设施封装。
+- `db/` 放 engine、session、Base 和迁移基座。
+
+强制规则：
+
+- 不要在业务代码里自行创建 engine/session。
+- 不要在业务代码里散落读取环境变量。
+- 日志应使用项目统一 logger，不要直接 `print`。
+
+## 推荐模块边界
+
+业务模块以 `docs/module-design.md` 为准。开发前必须先确认自己负责的模块边界。
+
+当前推荐模块包括：
+
+- `account`：用户、角色、登录态、儿童档案。
+- `membership / entitlement`：会员计划、订阅状态、权益校验和额度。
+- `payment`：订单、支付回调、退款、订阅账单。
+- `taxonomy`：年龄段、主题、教育目标、语言、阅读水平、叙事风格等配置。
+- `story`：纯文本故事资产。
+- `book`：绘本内容资产、页面、媒体、共读提示、学习卡片、播放器内容组装。
+- `reading`：收藏、阅读进度、继续阅读、阅读历史。
+- `template`：基于现有绘本的角色标注和复用。
+- `asset / storage`：形象、画风、声音、文件存储。
+- `creation`：基于故事生成绘本的创作流程。
+- `generation_task`：AI/导出等异步任务状态、进度、失败、重试。
+- `share`：分享链接和分享访问。
+- `export`：PDF 导出任务、导出文件、导出状态。
+- `recommendation`：推荐位、专题、运营配置。
+- `analytics`：事件记录、统计聚合、运营数据。
+- `privacy`：上传授权、个人素材隐私、分享/导出隐私确认。
+- `domain_event`：领域事件发布、投递、消费、失败重试。
+- `admin`：后台入口和运营动作编排。
+- `moderation / audit`：审核、举报、后台写操作审计。
+
+核心边界：
+
+- `story` 是纯文本资产，不包含页面、图片、音频、播放结构。
+- `book` 是可播放内容资产，不负责收藏/进度；收藏和进度归 `reading`。
+- `book_player_service` 是 `book` 内部文件，不是独立业务模块。
+- `template` 只标注和复用现有绘本，不重新创作绘本结构。
+- `asset` 管业务素材，`storage` 只管文件存取。
+- `generation_task` 只管任务生命周期和结果引用，不决定结果归属。
+- `admin` 只编排后台操作，不拥有核心业务规则。
+
+## 强制开发规则
+
+以下规则必须遵守，除非用户明确要求破例，并且在最终说明中解释原因。
+
+1. 新增 API 必须走 `api -> service -> model` 分层，不允许 API 直写数据库业务状态。
+2. 新增业务能力必须先判断归属模块；不能确定时先看 `docs/module-design.md`。
+3. 跨模块写操作只能调用目标模块 service，禁止直接 import 对方 ORM model 修改。
+4. 权限、会员、额度、VIP 判断必须集中在 `entitlement_service`，业务模块不得自行散写判断。
+5. 配置读取只能走 `core/config.py`，禁止业务代码直接读环境变量。
+6. 数据库 session 只能走 `get_db` 或 `async_session_maker`，禁止自行创建 engine。
+7. 数据库结构变化必须新增 Alembic migration，并确保 model 在 `model/__init__.py` 导出。
+8. 稳定请求/响应/DTO 必须放 `schema/`，禁止使用 `Any`、裸 `dict`、`dict[str, Any]` 或万能 payload；必须用明确对象规范表达数据契约。
+9. 跨模块引用使用 `target_type + target_id`、id 或明确 DTO，禁止保存对方内部模型。
+10. 非阻塞副作用优先走 `domain_event_service`，例如统计、运营分析、审计辅助事件。
+11. 强一致行为必须同步调用 service，例如权限校验、额度预占、隐私确认、支付回调、发布/下架。
+12. 用户上传、个人声音、个人形象、分享、导出相关流程必须考虑 `privacy_service`。
+13. 支付订单、审计日志、导出记录、分享记录、审核记录等历史事实不得随意物理删除。
+14. 后台接口可以单独写 API，但底层必须调用业务模块公开 service，并记录 audit。
+15. 不要引入新的框架、ORM、配置系统、任务系统，除非先确认现有能力无法满足。
+16. 不要把同一业务规则同时写在前台 API 和后台 API；规则必须沉到同一个 service。
+17. 函数返回值、schema 字段、状态枚举必须类型收窄；适合枚举的字段必须定义枚举，不要用万能类型掩盖契约。
+18. 代码改动后，至少运行与改动相关的测试；无法运行时必须在最终说明中说明原因。
+
+## 开发流程
+
+新增一个后端业务接口时，按这个顺序执行：
+
+1. 确认模块归属和边界。
+2. 在 `schema/` 定义请求、响应和必要 DTO。
+3. 在 `model/` 定义或复用 ORM 模型。
+4. 在 `service/` 实现业务逻辑和事务。
+5. 在 `api/v1/` 添加路由，只做参数接收、依赖注入和 service 调用。
+6. 在 `api/v1/router.py` 注册路由。
+7. 如果有数据库变化，新增 Alembic migration。
+8. 添加或更新测试。
+9. 运行相关测试和迁移检查。
+
+修改已有模块时，先阅读：
+
+- 对应 `api/v1/*_api.py`
+- 对应 `service/{module}/`
+- 对应 `schema/{module}/`
+- 对应 `model/{module}/`
+- `docs/module-design.md` 中的模块边界
+
+## 命名约定
+
+- API 文件：`{module}_api.py`
+- Service 目录：`service/{module}/`
+- Model 目录：`model/{module}/`
+- Schema 目录：`schema/{module}/`
+- 路由变量统一命名为 `router`
+- 数据库 session 参数统一命名为 `db`
+- 创建 schema：`XxxCreate`
+- 更新 schema：`XxxUpdate`
+- 读取 schema：`XxxRead`
+- 列表摘要：`XxxSummary`
+- 内部 DTO：`XxxInternalDTO`
+
+## 数据库与事务规则
+
+- service 层负责提交事务。
+- 单个业务动作应尽量在一个 service 方法内完成事务边界。
+- 需要跨模块编排时，由编排模块 service 控制流程，但目标对象写入仍调用目标模块 service。
+- 异步生成、导出、支付回调等必须设计幂等键或幂等处理。
+- 额度消耗类流程应采用“预占 -> 确认 -> 释放”，避免任务失败或重复点击导致重复扣减。
+- 列表查询必须考虑分页、排序和过滤条件，不要返回无上限全量数据。
+
+## API 设计规则
+
+- 所有 v1 API 放在 `backend/app/api/v1/`。
+- 新路由必须注册到 `backend/app/api/v1/router.py`。
+- response model 必须明确。
+- 错误场景使用合适 HTTP 状态码。
+- 需要登录、管理员、资源归属校验时，必须通过统一依赖或 service 断言实现。
+- API 不返回 ORM model 的内部结构；必须通过 schema 输出。
+
+## 测试与验证
+
+优先运行：
+
+```bash
+uv run pytest
 ```
 
-### 8. 日志
+针对 API 改动，至少覆盖：
 
-```python
-from app.core.utils.logger import get_logger
+- 成功路径。
+- 权限/归属失败。
+- 参数非法。
+- 关键业务边界，例如额度不足、资源不存在、状态不允许。
 
-logger = get_logger(__name__)
-logger.info("操作信息 | id=%s param=%d", id, param)
-logger.error("错误信息 | error=%s", e, exc_info=True)
-```
+针对数据库改动，至少检查：
 
-### 9. 配置
+- Alembic migration 可以执行。
+- model 被导入到 `model/__init__.py`。
+- 新字段默认值、nullable、索引、唯一约束符合业务含义。
 
-```python
-# core/config.py
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
-    DATABASE_URL: str = "sqlite+aiosqlite:///data/app.db"
-    API_KEY: str = ""
+## 常见反模式
 
-settings = get_settings()
+避免以下写法：
 
-# 使用
-from app.core.config import settings
-api_key = settings.API_KEY
-```
+- 在 API 文件里写几十行业务流程。
+- API 直接 `db.get()` 后修改别的模块对象。
+- service 里直接读取环境变量。
+- 为了省事把稳定结构写成 `dict`、`dict[str, Any]`、`Any` 或万能 payload，而不是定义明确对象。
+- 把状态、类型、来源、动作等有限取值字段写成散落字符串，而不是定义枚举。
+- 一个模块同时拥有内容、进度、统计、推荐、审核等多种不相关职责。
+- 后台接口绕过前台 service 直接改表。
+- 生成任务模块决定生成结果写入哪个业务表。
+- 推荐位复制完整绘本或故事内容，而不是保存目标引用和摘要。
+- analytics 反向修改业务对象。
+- privacy 替代 moderation 做审核结论。
 
-## 页面类型系统
+## 交付说明要求
 
-Page 有三种类型（`PageType` 枚举）：
+完成后端开发后，最终回复必须说明：
 
-```python
-class PageType(str, Enum):
-    COVER = "cover"          # 封面（page_index = 0）
-    CONTENT = "content"      # 正文页（page_index 1..N）
-    BACK_COVER = "back_cover" # 封底（page_index N+1，固定底图）
-```
-
-**封底规则：** 使用 `get_back_cover_image_url(aspect_ratio)` 获取固定 OSS 图片 URL，不可 AI 重新生成。
-
-**封面参考页选择：** 使用 `pick_cover_reference_pages(pages)` 从正文页选取首/中/尾作为参考图。
-
-**页面重新生成执行顺序：** text → storyboard → image，不清空已有图层。
-
-## 积分系统
-
-```python
-from app.services.points_service import (
-    check_creation_points,    # 检查积分是否足够（不扣减）
-    consume_for_creation,     # 创建绘本扣减积分
-    consume_for_page_edit,    # 页面编辑扣减积分
-)
-
-# 创建绘本积分 = 正文页数 + 1（封面）
-check_creation_points(user_id, content_count + 1)
-```
-
-## LLM 客户端
-
-```python
-from app.services.llm_cli import LLMClientBase
-
-# 获取客户端实例
-client = LLMClientBase.get_client(cli_type)  # CliType.GEMINI 或 CliType.DOUBAO
-
-# 核心方法
-await client.generate_page(...)              # 生成单页图片
-await client.edit_image(...)                 # AI 改图
-await client.create_story(...)               # 创建纯文本故事
-await client.create_storyboard_from_story(...)  # 基于故事创建分镜
-await client.generate_cover(...)             # 生成封面图片
-await client.regenerate_page_text(...)       # 重新生成页面文本
-await client.regenerate_page_storyboard(...) # 重新生成分镜
-
-# 语言注意：
-# - Gemini 使用英文 prompt
-# - 豆包使用中文 prompt
-```
-
-## 核心原则
-
-1. **全异步** - 所有数据库操作使用 async/await
-2. **分层清晰** - API 层薄包装，Service 层业务逻辑
-3. **UTC 时间** - `datetime.now(timezone.utc)`
-4. **枚举优先** - 使用 Enum 而非字符串字面量
-5. **类型明确** - 稳定业务结构优先使用 schema / dataclass / TypedDict / ORM model / 领域类，避免跨层手拼 `dict`
-6. **依赖注入** - 优先使用 `Depends(get_db)` 自动管理事务
-
-## 参考文件
-
-- [app/api/v1/storybook_api.py](app/api/v1/storybook_api.py) - API 层示例
-- [app/api/v1/page_api.py](app/api/v1/page_api.py) - 页面 API（含重新生成端点）
-- [app/services/storybook_service.py](app/services/storybook_service.py) - Service 层示例
-- [app/services/llm_cli.py](app/services/llm_cli.py) - LLM 客户端基类
-- [app/services/gemini_cli.py](app/services/gemini_cli.py) - Gemini 实现
-- [app/services/doubao_cli.py](app/services/doubao_cli.py) - 豆包实现
-- [app/models/storybook.py](app/models/storybook.py) - 模型示例
-- [app/models/enums.py](app/models/enums.py) - 枚举定义
-- [app/schemas/page.py](app/schemas/page.py) - Schema 示例
-- [app/db/session.py](app/db/session.py) - 会话管理
-- [app/core/config.py](app/core/config.py) - 配置管理
+- 改动了哪些模块。
+- 是否新增/修改数据库结构和迁移。
+- 是否新增/修改 API。
+- 运行了哪些测试或为什么无法运行。
+- 是否存在需要后续确认的业务边界。

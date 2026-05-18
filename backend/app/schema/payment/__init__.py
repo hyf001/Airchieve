@@ -1,1 +1,1 @@
-from app.schema.payment.schemas import *
+from app.schema.payment.payment import *

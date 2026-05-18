@@ -1,4 +1,4 @@
-from app.model.payment.models import (
+from app.model.payment.payment import (
     PaymentEventType,
     PaymentOrder,
     PaymentOrderStatus,

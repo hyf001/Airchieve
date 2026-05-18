@@ -1,4 +1,4 @@
-from app.model.audit.models import AuditLog, AuditOperatorType, AuditResult
+from app.model.audit.audit import AuditLog, AuditOperatorType, AuditResult
 
 __all__ = [
     "AuditLog",
