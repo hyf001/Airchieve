@@ -42,6 +42,18 @@ async def current_user_id(session: tuple[int, int] = Depends(current_session)) -
     return session[0]
 
 
+async def optional_current_user_id(
+    authorization: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> int | None:
+    if not authorization:
+        return None
+    if not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="请先登录")
+    user_id, _ = await account_service.verify_active_session(db, authorization.split(" ", 1)[1])
+    return user_id
+
+
 async def current_admin_user_id(
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(current_user_id),

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.account_api import current_user_id
+from app.api.v1.account_api import current_user_id, optional_current_user_id
 from app.db.session import get_db
 from app.model.story import StorySourceType
 from app.schema.story import (
@@ -26,9 +26,11 @@ async def list_stories(
     limit: int = Query(default=20, ge=1, le=50),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
+    user_id: int | None = Depends(optional_current_user_id),
 ) -> StoryListRead:
     return await story.list_stories(
         db,
+        user_id=user_id,
         source_type=source_type,
         q=q,
         theme_code=theme_code,
@@ -39,8 +41,12 @@ async def list_stories(
 
 
 @router.get("/{story_id}", response_model=StoryRead)
-async def get_story(story_id: int, db: AsyncSession = Depends(get_db)) -> StoryRead:
-    return await story.get_story(db, story_id)
+async def get_story(
+    story_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int | None = Depends(optional_current_user_id),
+) -> StoryRead:
+    return await story.get_story(db, story_id, user_id=user_id)
 
 
 @router.post("", response_model=StoryRead, status_code=status.HTTP_201_CREATED)
