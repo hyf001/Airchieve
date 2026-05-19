@@ -128,7 +128,7 @@
 | name | string | 名称 |
 | identity_tag | string nullable | 女儿、儿子、妈妈等 |
 | description | text nullable | 描述 |
-| image_asset_id | int | AI 生成后的角色形象主图 |
+| image_asset_id | int nullable | AI 生成后的角色形象主图；生成任务完成前为空 |
 | reference_asset_id | int nullable | 用户上传头像或参考图 |
 | art_style_id | int nullable FK art_styles.id | 绑定画风；系统存量形象可为空但必须有等价 code |
 | art_style_code | string nullable | 绑定系统画风 code |

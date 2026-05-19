@@ -10,6 +10,7 @@ dependencies = [
     "alibabacloud-dysmsapi20170525>=3.1.0",
     "alibabacloud-tea-openapi>=0.3.7",
     "alibabacloud-tea-util>=0.3.13",
+    "oss2>=2.19.1",
     "fastapi>=0.128.0",
     "pydantic-settings>=2.12.0",
     "python-dotenv>=1.2.0",

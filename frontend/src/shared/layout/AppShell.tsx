@@ -11,6 +11,7 @@ const navItems: Array<{ label: string; to: AppRoute }> = [
   { label: "故事库", to: "/stories" },
   { label: "画风", to: "/artstyle" },
   { label: "形象", to: "/characters" },
+  { label: "声音", to: "/voices" },
   { label: "会员", to: "/membership" },
 ];
 

@@ -1,0 +1,529 @@
+"""Tests for asset service: character CRUD, voice CRUD, set_default, moderation, VIP, assert_asset_usable."""
+
+from unittest.mock import AsyncMock, patch
+
+import pytest
+from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.model.asset import (
+    ArtStyle,
+    ArtStyleStatus,
+    Asset,
+    AssetAccessLevel,
+    AssetKind,
+    AssetSourceType,
+    AssetStatus,
+    AssetVisibility,
+    Character,
+    LibraryItemStatus,
+    Voice,
+    VoiceProcessingStatus,
+)
+from app.model.privacy import UploadConsentTargetType
+from app.schema.asset import CharacterCreateRequest, CharacterUpdateRequest, VoiceCreateRequest, VoiceUpdateRequest
+from app.service import asset as asset_service
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+async def _make_user_asset(db: AsyncSession, user_id: int, kind: AssetKind = AssetKind.IMAGE) -> Asset:
+    a = Asset(
+        owner_user_id=user_id,
+        asset_kind=kind,
+        storage_key=f"uploads/test/{user_id}/{kind.value}",
+        mime_type="image/jpeg" if kind == AssetKind.IMAGE else "audio/mpeg",
+        visibility=AssetVisibility.PRIVATE,
+        status=AssetStatus.READY,
+    )
+    db.add(a)
+    await db.commit()
+    await db.refresh(a)
+    return a
+
+
+async def _make_art_style(
+    db: AsyncSession,
+    *,
+    owner_user_id: int | None = None,
+    access_level: AssetAccessLevel = AssetAccessLevel.FREE,
+    status: ArtStyleStatus = ArtStyleStatus.ACTIVE,
+) -> ArtStyle:
+    s = ArtStyle(
+        owner_user_id=owner_user_id,
+        name="Test Style",
+        description="desc",
+        access_level=access_level,
+        sort_order=0,
+        status=status,
+    )
+    db.add(s)
+    await db.commit()
+    await db.refresh(s)
+    return s
+
+
+async def _make_character(
+    db: AsyncSession,
+    *,
+    owner_user_id: int | None = None,
+    is_default: bool = False,
+    status: LibraryItemStatus = LibraryItemStatus.ACTIVE,
+) -> Character:
+    c = Character(
+        owner_user_id=owner_user_id,
+        name="Test Character",
+        source_type=AssetSourceType.AI_GENERATED,
+        is_default=is_default,
+        status=status,
+    )
+    db.add(c)
+    await db.commit()
+    await db.refresh(c)
+    return c
+
+
+async def _make_voice(
+    db: AsyncSession,
+    *,
+    owner_user_id: int | None = None,
+    is_default: bool = False,
+    processing_status: VoiceProcessingStatus = VoiceProcessingStatus.READY,
+    status: LibraryItemStatus = LibraryItemStatus.ACTIVE,
+) -> Voice:
+    v = Voice(
+        owner_user_id=owner_user_id,
+        name="Test Voice",
+        source_type=AssetSourceType.USER_UPLOAD,
+        processing_status=processing_status,
+        is_default=is_default,
+        status=status,
+    )
+    db.add(v)
+    await db.commit()
+    await db.refresh(v)
+    return v
+
+
+# ---------------------------------------------------------------------------
+# Character
+# ---------------------------------------------------------------------------
+
+@patch("app.service.asset.service.generation_task.create_task", new_callable=AsyncMock)
+@patch("app.service.asset.service.entitlement_service.assert_can_create", new_callable=AsyncMock)
+async def test_create_character_basic(mock_entitlement, mock_create_task, db: AsyncSession):
+    mock_entitlement.return_value = None
+    mock_create_task.return_value = AsyncMock()
+
+    style = await _make_art_style(db)
+
+    result = await asset_service.create_character(
+        db,
+        user_id=1,
+        payload=CharacterCreateRequest(
+            name="小雨",
+            art_style_id=style.id,
+            generation_prompt="6 岁女孩，活泼勇敢",
+        ),
+    )
+
+    assert result.name == "小雨"
+    assert result.owner_user_id == 1
+    assert result.art_style_id == style.id
+    assert result.source_type == AssetSourceType.AI_GENERATED
+    mock_entitlement.assert_called_once()
+    mock_create_task.assert_called_once()
+
+
+@patch("app.service.asset.service.generation_task.create_task", new_callable=AsyncMock)
+@patch("app.service.asset.service.entitlement_service.assert_can_create", new_callable=AsyncMock)
+async def test_create_character_with_custom_art_style(mock_entitlement, mock_create_task, db: AsyncSession):
+    mock_entitlement.return_value = None
+    mock_create_task.return_value = AsyncMock()
+
+    result = await asset_service.create_character(
+        db,
+        user_id=1,
+        payload=CharacterCreateRequest(
+            name="Custom Style Character",
+            custom_art_style_prompt="温暖水粉质感",
+            generation_prompt="一个勇敢的男孩",
+        ),
+    )
+
+    assert result.name == "Custom Style Character"
+    assert result.custom_art_style_prompt == "温暖水粉质感"
+
+
+@patch("app.service.asset.service.generation_task.create_task", new_callable=AsyncMock)
+@patch("app.service.asset.service.entitlement_service.assert_can_create", new_callable=AsyncMock)
+async def test_create_character_rejects_without_art_style(mock_entitlement, mock_create_task, db: AsyncSession):
+    with pytest.raises(ValueError, match="画风"):
+        CharacterCreateRequest(
+            name="No Style",
+            generation_prompt="描述",
+        )
+
+
+@patch("app.service.asset.service.generation_task.create_task", new_callable=AsyncMock)
+@patch("app.service.asset.service.entitlement_service.assert_can_create", new_callable=AsyncMock)
+async def test_create_character_with_reference_image_and_consent(mock_entitlement, mock_create_task, db: AsyncSession):
+    mock_entitlement.return_value = None
+    mock_create_task.return_value = AsyncMock()
+
+    ref = await _make_user_asset(db, user_id=1, kind=AssetKind.IMAGE)
+    style = await _make_art_style(db)
+
+    from app.model.privacy import PrivacyUploadConsent
+
+    consent = PrivacyUploadConsent(
+        user_id=1,
+        target_type=UploadConsentTargetType.CHARACTER_REFERENCE_IMAGE,
+        target_id=ref.id,
+        consent_text_version="2026-05-asset-upload",
+        confirmed_rights=True,
+        confirmed_privacy=True,
+    )
+    db.add(consent)
+    await db.commit()
+    await db.refresh(consent)
+
+    result = await asset_service.create_character(
+        db,
+        user_id=1,
+        payload=CharacterCreateRequest(
+            name="With Ref",
+            art_style_id=style.id,
+            generation_prompt="描述",
+            reference_asset_id=ref.id,
+            upload_consent_id=consent.id,
+        ),
+    )
+
+    assert result.reference_asset_id == ref.id
+
+
+@patch("app.service.asset.service.generation_task.create_task", new_callable=AsyncMock)
+@patch("app.service.asset.service.entitlement_service.assert_can_create", new_callable=AsyncMock)
+async def test_create_character_rejects_reference_from_other_user(mock_entitlement, mock_create_task, db: AsyncSession):
+    mock_entitlement.return_value = None
+
+    _ref = await _make_user_asset(db, user_id=999, kind=AssetKind.IMAGE)
+    style = await _make_art_style(db)
+
+    with pytest.raises(HTTPException) as exc:
+        await asset_service.create_character(
+            db,
+            user_id=1,
+            payload=CharacterCreateRequest(
+                name="Steal Ref",
+                art_style_id=style.id,
+                generation_prompt="描述",
+                reference_asset_id=_ref.id,
+            ),
+        )
+    assert exc.value.status_code == 400
+
+
+@patch("app.service.asset.service.generation_task.create_task", new_callable=AsyncMock)
+@patch("app.service.asset.service.entitlement_service.assert_can_create", new_callable=AsyncMock)
+@patch("app.service.asset.service.entitlement_service.assert_can_use_vip_resource", new_callable=AsyncMock)
+async def test_create_character_rejects_vip_system_style_for_free_user(
+    mock_vip, mock_entitlement, mock_create_task, db: AsyncSession
+):
+    mock_entitlement.return_value = None
+    mock_vip.side_effect = HTTPException(status_code=403, detail="需要会员")
+
+    style = await _make_art_style(db, access_level=AssetAccessLevel.VIP)
+
+    with pytest.raises(HTTPException) as exc:
+        await asset_service.create_character(
+            db,
+            user_id=1,
+            payload=CharacterCreateRequest(
+                name="VIP Style",
+                art_style_id=style.id,
+                generation_prompt="描述",
+            ),
+        )
+    assert exc.value.status_code == 403
+
+
+async def test_get_character_owner_only(db: AsyncSession):
+    c = await _make_character(db, owner_user_id=1)
+
+    result = await asset_service.get_character(db, c.id, user_id=1)
+    assert result.id == c.id
+
+    with pytest.raises(HTTPException) as exc:
+        await asset_service.get_character(db, c.id, user_id=2)
+    assert exc.value.status_code == 404
+
+
+async def test_get_character_system_accessible_by_anyone(db: AsyncSession):
+    c = await _make_character(db, owner_user_id=None)
+
+    result = await asset_service.get_character(db, c.id, user_id=1)
+    assert result.id == c.id
+
+    result_no_user = await asset_service.get_character(db, c.id, user_id=None)
+    assert result_no_user.id == c.id
+
+
+async def test_update_character(db: AsyncSession):
+    c = await _make_character(db, owner_user_id=1)
+
+    result = await asset_service.update_character(
+        db, user_id=1, character_id=c.id, payload=CharacterUpdateRequest(name="Updated Name")
+    )
+    assert result.name == "Updated Name"
+
+
+async def test_update_character_rejects_non_owner(db: AsyncSession):
+    c = await _make_character(db, owner_user_id=1)
+
+    with pytest.raises(HTTPException) as exc:
+        await asset_service.update_character(
+            db, user_id=2, character_id=c.id, payload=CharacterUpdateRequest(name="Hacked")
+        )
+    assert exc.value.status_code == 403
+
+
+async def test_delete_character_soft_delete(db: AsyncSession):
+    c = await _make_character(db, owner_user_id=1, is_default=True)
+
+    await asset_service.delete_character(db, user_id=1, character_id=c.id)
+
+    # character still exists but status changed
+    await db.refresh(c)
+    assert c.status == LibraryItemStatus.DELETED
+    assert c.is_default is False
+
+
+async def test_delete_character_rejects_non_owner(db: AsyncSession):
+    c = await _make_character(db, owner_user_id=1)
+
+    with pytest.raises(HTTPException) as exc:
+        await asset_service.delete_character(db, user_id=2, character_id=c.id)
+    assert exc.value.status_code == 403
+
+
+async def test_set_default_character(db: AsyncSession):
+    c1 = await _make_character(db, owner_user_id=1, is_default=True)
+    c2 = await _make_character(db, owner_user_id=1, is_default=False)
+
+    result = await asset_service.set_default_character(db, user_id=1, character_id=c2.id)
+    assert result.is_default is True
+
+    await db.refresh(c1)
+    assert c1.is_default is False
+
+
+async def test_set_default_character_rejects_non_owner(db: AsyncSession):
+    c = await _make_character(db, owner_user_id=1)
+
+    with pytest.raises(HTTPException) as exc:
+        await asset_service.set_default_character(db, user_id=2, character_id=c.id)
+    assert exc.value.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Character list
+# ---------------------------------------------------------------------------
+
+async def test_list_characters_filters_by_owner(db: AsyncSession):
+    await _make_character(db, owner_user_id=1)
+    await _make_character(db, owner_user_id=2)
+    await _make_character(db, owner_user_id=None)
+
+    result = await asset_service.list_characters(db, user_id=1)
+    assert all(c.owner_user_id in {None, 1} for c in result.items)
+    assert result.total >= 2
+
+
+async def test_list_characters_excludes_deleted(db: AsyncSession):
+    await _make_character(db, owner_user_id=1, status=LibraryItemStatus.ACTIVE)
+    await _make_character(db, owner_user_id=1, status=LibraryItemStatus.DELETED)
+
+    result = await asset_service.list_characters(db, user_id=1)
+    assert all(c.status == LibraryItemStatus.ACTIVE for c in result.items)
+
+
+# ---------------------------------------------------------------------------
+# Voice
+# ---------------------------------------------------------------------------
+
+@patch("app.service.asset.service.entitlement_service.assert_can_create", new_callable=AsyncMock)
+async def test_create_voice_basic(mock_entitlement, db: AsyncSession):
+    mock_entitlement.return_value = None
+
+    sample = await _make_user_asset(db, user_id=1, kind=AssetKind.AUDIO)
+
+    from app.model.privacy import PrivacyUploadConsent
+
+    consent = PrivacyUploadConsent(
+        user_id=1,
+        target_type=UploadConsentTargetType.VOICE_SAMPLE,
+        target_id=sample.id,
+        consent_text_version="2026-05-asset-upload",
+        confirmed_rights=True,
+        confirmed_privacy=True,
+    )
+    db.add(consent)
+    await db.commit()
+    await db.refresh(consent)
+
+    result = await asset_service.create_voice(
+        db,
+        user_id=1,
+        payload=VoiceCreateRequest(
+            name="Mom Voice",
+            source_sample_asset_id=sample.id,
+            upload_consent_id=consent.id,
+        )
+    )
+
+    assert result.name == "Mom Voice"
+    assert result.owner_user_id == 1
+    assert result.processing_status == VoiceProcessingStatus.PROCESSING
+    assert result.sample_asset_id is None
+    assert result.sample_url is None
+
+
+async def test_update_voice(db: AsyncSession):
+    v = await _make_voice(db, owner_user_id=1)
+
+    result = await asset_service.update_voice(db, user_id=1, voice_id=v.id, payload=VoiceUpdateRequest(name="Renamed"))
+    assert result.name == "Renamed"
+
+
+async def test_delete_voice_soft_delete(db: AsyncSession):
+    v = await _make_voice(db, owner_user_id=1, is_default=True)
+
+    await asset_service.delete_voice(db, user_id=1, voice_id=v.id)
+
+    await db.refresh(v)
+    assert v.status == LibraryItemStatus.DELETED
+    assert v.is_default is False
+
+
+async def test_set_default_voice(db: AsyncSession):
+    v1 = await _make_voice(db, owner_user_id=1, is_default=True)
+    v2 = await _make_voice(db, owner_user_id=1, is_default=False)
+
+    result = await asset_service.set_default_voice(db, user_id=1, voice_id=v2.id)
+    assert result.is_default is True
+
+    await db.refresh(v1)
+    assert v1.is_default is False
+
+
+async def test_list_voices_excludes_deleted(db: AsyncSession):
+    await _make_voice(db, owner_user_id=1, status=LibraryItemStatus.ACTIVE)
+    await _make_voice(db, owner_user_id=1, status=LibraryItemStatus.DELETED)
+
+    result = await asset_service.list_voices(db, user_id=1)
+    assert all(v.status == LibraryItemStatus.ACTIVE for v in result.items)
+
+
+# ---------------------------------------------------------------------------
+# assert_asset_usable
+# ---------------------------------------------------------------------------
+
+async def test_assert_asset_usable_character(db: AsyncSession):
+    c = await _make_character(db, owner_user_id=1)
+
+    dto = await asset_service.assert_asset_usable(db, user_id=1, asset_type="character", asset_id=c.id)
+    assert dto.asset_id == c.id
+    assert dto.usable is True
+    assert dto.asset_type == "character"
+
+
+async def test_assert_asset_usable_deleted_character(db: AsyncSession):
+    c = await _make_character(db, owner_user_id=1)
+
+    c.status = LibraryItemStatus.DELETED
+    await db.commit()
+
+    dto = await asset_service.assert_asset_usable(db, user_id=1, asset_type="character", asset_id=c.id)
+    assert dto.usable is False
+
+
+@patch("app.service.asset.service.entitlement_service.assert_can_use_vip_resource", new_callable=AsyncMock)
+async def test_assert_asset_usable_vip_system_character(mock_vip, db: AsyncSession):
+    mock_vip.return_value = None
+
+    c = await _make_character(db, owner_user_id=None)
+    c.access_level = AssetAccessLevel.VIP
+    await db.commit()
+
+    dto = await asset_service.assert_asset_usable(db, user_id=1, asset_type="character", asset_id=c.id)
+    assert dto.access_level == AssetAccessLevel.VIP
+    mock_vip.assert_called_once()
+
+
+async def test_assert_asset_usable_voice_ready(db: AsyncSession):
+    v = await _make_voice(db, owner_user_id=1, processing_status=VoiceProcessingStatus.READY)
+
+    dto = await asset_service.assert_asset_usable(db, user_id=1, asset_type="voice", asset_id=v.id)
+    assert dto.usable is True
+
+
+async def test_assert_asset_usable_voice_processing(db: AsyncSession):
+    v = await _make_voice(db, owner_user_id=1, processing_status=VoiceProcessingStatus.PROCESSING)
+
+    with pytest.raises(HTTPException) as exc:
+        await asset_service.assert_asset_usable(db, user_id=1, asset_type="voice", asset_id=v.id)
+    assert exc.value.status_code == 409
+
+
+async def test_assert_asset_usable_unsupported_type(db: AsyncSession):
+    with pytest.raises(HTTPException) as exc:
+        await asset_service.assert_asset_usable(db, user_id=1, asset_type="unknown", asset_id=1)
+    assert exc.value.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Art Style
+# ---------------------------------------------------------------------------
+
+async def test_list_art_styles(db: AsyncSession):
+    await _make_art_style(db)
+    await _make_art_style(db, owner_user_id=1)
+
+    result = await asset_service.list_art_styles(db, user_id=1)
+    assert result.total >= 2
+
+
+async def test_list_art_styles_excludes_inactive(db: AsyncSession):
+    await _make_art_style(db, status=ArtStyleStatus.ACTIVE)
+    await _make_art_style(db, status=ArtStyleStatus.INACTIVE)
+
+    result = await asset_service.list_art_styles(db)
+    assert all(s.status == ArtStyleStatus.ACTIVE for s in result.items)
+
+
+async def test_get_art_style_owner_check(db: AsyncSession):
+    style = await _make_art_style(db, owner_user_id=1)
+
+    result = await asset_service.get_art_style(db, style.id, user_id=1)
+    assert result.id == style.id
+
+    with pytest.raises(HTTPException) as exc:
+        await asset_service.get_art_style(db, style.id, user_id=2)
+    assert exc.value.status_code == 404
+
+
+async def test_create_custom_art_style(db: AsyncSession):
+    from app.schema.asset import CustomArtStyleCreate
+
+    result = await asset_service.create_custom_art_style(
+        db,
+        user_id=1,
+        payload=CustomArtStyleCreate(name="My Style", description="warm watercolor"),
+    )
+    assert result.name == "My Style"
+    assert result.owner_user_id == 1
+    assert result.access_level == AssetAccessLevel.FREE

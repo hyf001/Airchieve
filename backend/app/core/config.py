@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     ALIYUN_SMS_ENDPOINT: str = "dysmsapi.aliyuncs.com"
     ALIYUN_SMS_SIGN_NAME: str | None = None
     ALIYUN_SMS_TEMPLATE_CODE: str | None = None
+    OSS_ACCESS_KEY_ID: str | None = None
+    OSS_ACCESS_KEY_SECRET: str | None = None
+    OSS_ENDPOINT: str | None = None
+    OSS_BUCKET_NAME: str | None = None
+    OSS_UPLOAD_EXPIRE_SECONDS: int = 60 * 10
+    OSS_DOWNLOAD_EXPIRE_SECONDS: int = 60 * 10
     TERMS_VERSION: str = "2026-05-16"
     PRIVACY_VERSION: str = "2026-05-16"
 

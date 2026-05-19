@@ -8,6 +8,9 @@ import { PlayerPage } from "@/pages/PlayerPage";
 import { StoriesPage } from "@/pages/StoriesPage";
 import { AuthPage } from "@/pages/auth/AuthPage";
 import { ProfilesPage } from "@/pages/profiles/ProfilesPage";
+import { ArtStylesPage } from "@/pages/assets/ArtStylesPage";
+import { CharactersPage } from "@/pages/assets/CharactersPage";
+import { VoicesPage } from "@/pages/assets/VoicesPage";
 import { SkeletonPage } from "@/pages/prototype/SkeletonPage";
 
 const App: React.FC = () => {
@@ -39,6 +42,18 @@ const App: React.FC = () => {
 
   if (path === "/create") {
     return <CreatePage />;
+  }
+
+  if (path === "/artstyle") {
+    return <ArtStylesPage />;
+  }
+
+  if (path === "/characters") {
+    return <CharactersPage />;
+  }
+
+  if (path === "/voices") {
+    return <VoicesPage />;
   }
 
   return <SkeletonPage route={path} />;
