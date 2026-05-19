@@ -5,6 +5,9 @@ import { HomePage } from "@/pages/HomePage";
 import { BookDetailPage } from "@/pages/BookDetailPage";
 import { CreatePage } from "@/pages/CreatePage";
 import { PlayerPage } from "@/pages/PlayerPage";
+import { MembershipPage } from "@/pages/MembershipPage";
+import { PublicSharePage } from "@/pages/PublicSharePage";
+import { SharePage } from "@/pages/SharePage";
 import { StoriesPage } from "@/pages/StoriesPage";
 import { AuthPage } from "@/pages/auth/AuthPage";
 import { ProfilesPage } from "@/pages/profiles/ProfilesPage";
@@ -54,6 +57,18 @@ const App: React.FC = () => {
 
   if (path === "/voices") {
     return <VoicesPage />;
+  }
+
+  if (path === "/membership") {
+    return <MembershipPage />;
+  }
+
+  if (path === "/share") {
+    return <SharePage />;
+  }
+
+  if (path === "/share/public") {
+    return <PublicSharePage />;
   }
 
   return <SkeletonPage route={path} />;

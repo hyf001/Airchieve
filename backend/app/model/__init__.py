@@ -13,11 +13,13 @@ from app.model.book import Book, BookDialogue, BookLearningCard, BookPage, BookR
 from app.model.ai_provider import AiProviderCall, AiProviderUsageRecord
 from app.model.creation import CreationSession, CreationStoryboardPage
 from app.model.entitlement import EntitlementQuotaReservation
+from app.model.export import ExportJob
 from app.model.generation_task import GenerationTask, GenerationTaskAttempt
 from app.model.membership import MembershipPlan, MembershipUsageCounter, UserMembership
 from app.model.payment import PaymentOrder, PaymentRecord, RefundRecord
 from app.model.recommendation import RecommendationItem, RecommendationSlot, RecommendationTopic
 from app.model.reading import ReadingEvent, ReadingFavorite, ReadingProgress
+from app.model.share import ShareAccessLog, ShareLink
 from app.model.story import Story
 from app.model.storage import StorageUploadSession
 from app.model.taxonomy import TaxonomyItem, TaxonomyItemStatus, TaxonomyType
@@ -44,6 +46,7 @@ __all__ = [
     "CreationSession",
     "CreationStoryboardPage",
     "EntitlementQuotaReservation",
+    "ExportJob",
     "GenerationTask",
     "GenerationTaskAttempt",
     "MembershipPlan",
@@ -60,6 +63,8 @@ __all__ = [
     "ReadingEvent",
     "ReadingFavorite",
     "ReadingProgress",
+    "ShareAccessLog",
+    "ShareLink",
     "SmsVerificationCode",
     "Story",
     "StorageUploadSession",

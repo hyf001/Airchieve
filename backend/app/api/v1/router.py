@@ -6,12 +6,14 @@ from app.api.v1 import (
     asset_api,
     book_api,
     creation_api,
+    export_api,
     generation_task_api,
     membership_api,
     payment_api,
     privacy_api,
     reading_api,
     recommendation_api,
+    share_api,
     story_api,
     taxonomy_api,
     template_api,
@@ -27,6 +29,8 @@ api_router.include_router(recommendation_api.router, prefix="/recommendations", 
 api_router.include_router(story_api.router, prefix="/stories", tags=["stories"])
 api_router.include_router(payment_api.router, prefix="/payment", tags=["payment"])
 api_router.include_router(privacy_api.router, prefix="/privacy", tags=["privacy"])
+api_router.include_router(share_api.router, prefix="/share", tags=["share"])
+api_router.include_router(export_api.router, prefix="/export", tags=["export"])
 api_router.include_router(reading_api.router, prefix="/reading", tags=["reading"])
 api_router.include_router(admin_api.router, prefix="/admin", tags=["admin"])
 api_router.include_router(taxonomy_api.router, prefix="/taxonomy", tags=["taxonomy"])

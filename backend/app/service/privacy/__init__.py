@@ -1,4 +1,5 @@
 from app.service.privacy.service import (
+    assert_privacy_confirmation,
     assert_upload_consent,
     get_privacy_flags,
     record_privacy_confirmation,
@@ -6,4 +7,11 @@ from app.service.privacy.service import (
     set_visibility_policy,
 )
 
-__all__ = ["assert_upload_consent", "get_privacy_flags", "record_privacy_confirmation", "record_upload_consent", "set_visibility_policy"]
+__all__ = [
+    "assert_privacy_confirmation",
+    "assert_upload_consent",
+    "get_privacy_flags",
+    "record_privacy_confirmation",
+    "record_upload_consent",
+    "set_visibility_policy",
+]

@@ -22,6 +22,7 @@ const routeMeta: Record<AppRoute, { title: string; subtitle: string; eyebrow: st
   "/player": { title: "绘本播放", subtitle: "沉浸式阅读和语音播放", eyebrow: "阅读器", icon: "▶️" },
   "/book-detail": { title: "绘本详情", subtitle: "查看简介、试看和推荐内容", eyebrow: "详情页", icon: "📘" },
   "/share": { title: "分享", subtitle: "生成家人可访问的分享入口", eyebrow: "分享页", icon: "🔗" },
+  "/share/public": { title: "公开分享", subtitle: "只读播放家人分享的绘本", eyebrow: "分享播放", icon: "🔗" },
   "/voices": { title: "声音", subtitle: "选择旁白音色或录制家人声音", eyebrow: "声音库", icon: "🎙️" },
 };
 

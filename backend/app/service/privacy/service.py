@@ -81,6 +81,27 @@ async def record_privacy_confirmation(
     return PrivacyConfirmationRead.model_validate(confirmation)
 
 
+async def assert_privacy_confirmation(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    confirmation_id: int | None,
+    action: PrivacyAction,
+    target: PrivacyTarget,
+) -> None:
+    if confirmation_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="必须先确认隐私风险")
+    confirmation = await db.get(PrivacyConfirmation, confirmation_id)
+    if (
+        confirmation is None
+        or confirmation.user_id != user_id
+        or confirmation.action != action
+        or confirmation.target_type != target.target_type
+        or confirmation.target_id != target.target_id
+    ):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="隐私风险确认无效")
+
+
 async def get_privacy_flags(
     db: AsyncSession,
     target: PrivacyTarget,

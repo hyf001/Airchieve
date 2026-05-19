@@ -12,6 +12,7 @@ export type AppRoute =
   | "/player"
   | "/book-detail"
   | "/share"
+  | "/share/public"
   | "/voices";
 
 interface RouterContextValue {
@@ -33,11 +34,13 @@ const routes = new Set<AppRoute>([
   "/player",
   "/book-detail",
   "/share",
+  "/share/public",
   "/voices",
 ]);
 
 const normalizePath = (value: string): AppRoute => {
   const path = value.replace(/\.html$/, "").replace(/^\/index$/, "/");
+  if (path.startsWith("/share/public/")) return "/share/public";
   return routes.has(path as AppRoute) ? (path as AppRoute) : "/";
 };
 
