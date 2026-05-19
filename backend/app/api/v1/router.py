@@ -1,6 +1,19 @@
 from fastapi import APIRouter
 
-from app.api.v1 import account_api, admin_api, book_api, membership_api, payment_api, reading_api, recommendation_api, story_api, taxonomy_api
+from app.api.v1 import (
+    account_api,
+    admin_api,
+    book_api,
+    creation_api,
+    generation_task_api,
+    membership_api,
+    payment_api,
+    reading_api,
+    recommendation_api,
+    story_api,
+    taxonomy_api,
+    template_api,
+)
 
 api_router = APIRouter()
 api_router.include_router(account_api.router, prefix="/account", tags=["account"])
@@ -14,3 +27,6 @@ api_router.include_router(reading_api.router, prefix="/reading", tags=["reading"
 api_router.include_router(admin_api.router, prefix="/admin", tags=["admin"])
 api_router.include_router(taxonomy_api.router, prefix="/taxonomy", tags=["taxonomy"])
 api_router.include_router(taxonomy_api.admin_router, prefix="/admin/taxonomy", tags=["admin-taxonomy"])
+api_router.include_router(creation_api.router, prefix="/creation", tags=["creation"])
+api_router.include_router(generation_task_api.router, prefix="/generation-tasks", tags=["generation-tasks"])
+api_router.include_router(template_api.router, prefix="/templates", tags=["templates"])

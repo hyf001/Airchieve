@@ -67,7 +67,6 @@ description: 专门用于 Python 单元测试工作的技能。仅当用户明�
 │   │   └── api/v1/         # FastAPI 路由（扁平文件）
 │   └── alembic/            # 数据库迁移
 └── tests/                  # 测试目录（与 backend/app/ 镜像）
-    └── conftest.py
 ```
 
 ### 测试目录映射

@@ -40,10 +40,10 @@
 | 故事管理 | `AdminStoryList`、`AdminStoryEditor` | `story` | 系统/用户故事列表、创建、编辑、删除、上下架、权益状态、审核状态、关联绘本；故事后台不得维护页面、插图、音频、角色位或播放器结构 |
 | 绘本管理 | `AdminBookList`、`AdminBookEditor`、`AdminBookPageEditor` | `book` | 绘本列表、创建、编辑、上下架、删除、搜索、状态筛选；页面顺序、正文、中英文文本、对白、朗读文本、背景音乐、音效、对口型素材状态、共读提示和学习卡片 |
 | 模板管理 | `AdminTemplateList`、`AdminTemplateEditor`、`TemplateRegionEditor` | `template` | 从已有绘本创建模板、角色配置、声音替换规则、逐页替换区域、锁定非替换内容、模板校验、替换效果预览 |
-| 系统素材 | `AdminCharacterList`、`AdminVoiceList`、`AdminArtStyleList` | `asset` | 系统画风、系统形象、系统声音配置，包含示例、适用年龄、排序、启用状态、免费/VIP 权益状态 |
+| 系统素材 | `AdminCharacterList`、`AdminVoiceList`、`AdminArtStyleList` | `asset` | 系统画风、系统角色形象、系统声音配置，系统角色形象必须包含绑定画风、示例、适用年龄、排序、启用状态、免费/VIP 权益状态 |
 | 分类配置 | `AdminTaxonomyList` | `taxonomy` | 主题、兴趣、年龄段、阅读水平、教育目标、语言、叙事风格和推荐标签统一管理 |
 | 会员权益 | `AdminMembershipPlanList`、`AdminEntitlementEditor` | `membership`、`entitlement` | 会员内容标记、试看页数、生成次数、故事/形象/声音/儿童档案/分享/PDF 导出额度、导出清晰度 |
-| 推荐运营 | `AdminRecommendationSlotList`、`AdminRecommendationEditor` | `recommendation` | 首页、分类页、详情页、播放器结束页、生成入口的推荐绘本、故事、模板、画风、形象和声音 |
+| 推荐运营 | `AdminRecommendationSlotList`、`AdminRecommendationEditor` | `recommendation` | 首页、分类页、详情页、播放器结束页、生成入口的推荐绘本、故事、模板、画风、角色形象和声音 |
 | 生成任务 | `AdminGenerationTaskList`、`GenerationResultInspector` | `generation_task`、`creation` | 查看故事、分镜、插图、音频、对口型任务状态、失败原因、重试记录和人工审核入口 |
 | 审核举报 | `ModerationQueue`、`ReportDetail` | `moderation` | 审核故事、绘本、图片、声音、分享链接和导出内容；处理举报并记录结果 |
 | 分享导出 | `AdminShareLinkList`、`AdminExportJobList` | `share`、`export` | 分享链接状态、访问范围、关闭/恢复/封禁、PDF 导出状态和隐私风险标记 |
@@ -98,7 +98,7 @@
 - `story`：系统故事/用户故事列表、编辑、删除、上下架、权益和审核状态。
 - `book`：绘本、绘本页面、共读提示、学习卡片、试看页数、上下架和页面级媒体配置。
 - `template`：模板基础信息、可替换角色、替换区域、声音规则、校验和替换预览。
-- `asset`：系统画风、系统形象、系统声音的配置、排序、启停和权益状态。
+- `asset`：系统画风、系统角色形象、系统声音的配置、排序、启停和权益状态。
 - `taxonomy`：分类项的新增、编辑、排序、启停和 code 唯一性校验。
 - `membership` / `entitlement`：套餐、权益规则、会员内容访问等级和额度规则。
 - `recommendation`：推荐位、专题、推荐项排序、时间窗、目标内容选择。
@@ -144,4 +144,4 @@ admin 模块不拥有核心业务表。后台专属配置可按需落在目标�
 - 不拥有故事、绘本、模板、素材、推荐、会员、支付等核心业务规则。
 - 前端后台动作必须展示确认和原因输入，后端负责最终审计落库。
 - 后台页面不得把故事纯文本资产和绘本可播放资产混为一个编辑器。
-- 模板后台必须保留“锁定非头像/非声音内容”的校验入口，前台模板创作不得暴露画风、正文、背景和结构修改能力。
+- 模板后台必须保留“锁定非角色形象/非声音内容”的校验入口，前台模板创作不得暴露画风、正文、背景和结构修改能力。

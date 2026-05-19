@@ -3,6 +3,7 @@ import React from "react";
 import { useRouter } from "@/app/router";
 import { HomePage } from "@/pages/HomePage";
 import { BookDetailPage } from "@/pages/BookDetailPage";
+import { CreatePage } from "@/pages/CreatePage";
 import { PlayerPage } from "@/pages/PlayerPage";
 import { StoriesPage } from "@/pages/StoriesPage";
 import { AuthPage } from "@/pages/auth/AuthPage";
@@ -34,6 +35,10 @@ const App: React.FC = () => {
 
   if (path === "/profile") {
     return <ProfilesPage />;
+  }
+
+  if (path === "/create") {
+    return <CreatePage />;
   }
 
   return <SkeletonPage route={path} />;

@@ -10,7 +10,7 @@
 
 ## 1. 模块目标
 
-将已有绘本标记为可复用模板，管理可替换角色、角色出现页码、每页头像/形象替换区域和声音替换规则。基于模板创作只能替换已标注角色区域和朗读声音。
+将已有绘本标记为可复用模板，管理可替换角色、角色出现页码、每页角色形象替换区域和声音替换规则。基于模板创作只能替换已标注角色形象区域和朗读声音。
 
 ## 2. 前端设计
 
@@ -98,8 +98,8 @@
 | name | string | 角色名 |
 | description | text nullable | 角色说明 |
 | required | bool | 是否必填 |
-| default_character_id | int nullable | 默认形象 |
-| allowed_replacement_sources | JSON array | `child_profile`,`user_character`,`system_character`,`upload`,`generated` |
+| default_character_id | int nullable | 默认角色形象 |
+| allowed_replacement_sources | JSON array | `child_profile`,`user_character`,`system_character`,`generated` |
 | appear_page_nos | JSON array | 出现页码 |
 | sort_order | integer | 排序 |
 
@@ -138,8 +138,8 @@
 ## 5. 跨模块协作
 
 - 调用 `book` 读取原绘本、页面和媒体，并创建最终个人绘本。
-- 调用 `asset` 读取用户形象、系统形象、上传图片和声音。
-- 调用 `entitlement` 校验模板、形象、声音权益。
+- 调用 `asset` 读取用户角色形象、系统角色形象、角色形象绑定画风和声音。
+- 调用 `entitlement` 校验模板、角色形象、声音权益。
 - 调用 `generation_task` 触发替换合成或音频重生成任务。
 
 ## 6. 边界规则
@@ -147,3 +147,4 @@
 - 不创建新的故事、分镜或页面内容。
 - 不允许更换画风、插图背景、视频素材、页面构图、正文、互动提示、学习卡片和播放节奏。
 - 前端模板创作不得暴露普通创作流程中的画风选择和分镜编辑。
+- 用于替换的角色形象必须与模板画风保持一致；需要新画风时必须先生成符合模板画风的角色形象。

@@ -31,7 +31,7 @@
 - `features/profile-management`
   - 儿童档案创建、编辑、软删除、设为默认。
   - 当前儿童档案初始化和切换。
-  - 档案默认形象、默认声音、默认画风引用。
+  - 档案默认角色形象、默认声音引用。
   - 档案维度阅读历史、收藏和个人绘本库入口。
 
 ### 领域组件
@@ -227,9 +227,8 @@
 | reading_level | enum nullable | 内置阅读等级枚举 |
 | interest_tags | JSON array | 内置兴趣标签枚举数组 |
 | education_goals | JSON array | 内置教育目标枚举数组 |
-| default_character | enum nullable | 内置默认形象枚举 |
-| default_voice | enum nullable | 内置默认声音枚举 |
-| default_art_style | enum nullable | 内置默认画风枚举 |
+| default_character_id | int nullable | 默认角色形象 ID，引用 asset.characters |
+| default_voice_id | int nullable | 默认声音 ID，引用 asset.voices |
 | visibility | enum(`private`) | MVP 固定私密 |
 | is_default | bool | 是否默认 |
 | status | enum(`active`,`deleted`) | 软删除状态 |
@@ -249,3 +248,4 @@
 - 档案阅读历史和收藏归 `reading`，档案页只展示聚合结果。
 - 会员权益归 `membership / entitlement`。
 - 素材创建和处理归 `asset / storage / privacy`。
+- 账号头像 `users.avatar_asset_id` 只用于账号展示；儿童档案默认角色形象用于绘本生成。

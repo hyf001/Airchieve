@@ -16,7 +16,7 @@ export class ApiError<T = unknown> extends Error {
 }
 
 export interface RequestOptions extends Omit<RequestInit, "body"> {
-  body?: BodyInit | Record<string, unknown> | null;
+  body?: BodyInit | object | null;
 }
 
 const isJsonBody = (body: RequestOptions["body"]): body is Record<string, unknown> =>
@@ -37,7 +37,9 @@ const readPayload = async (response: Response): Promise<unknown> => {
 export const createApiClient = ({ baseUrl = "/api", getToken }: ApiClientOptions = {}) => {
   const request = async <T>(path: string, options: RequestOptions = {}): Promise<T> => {
     const headers = new Headers(options.headers);
-    const body = isJsonBody(options.body) ? JSON.stringify(options.body) : options.body;
+    const body: BodyInit | null | undefined = isJsonBody(options.body)
+      ? JSON.stringify(options.body)
+      : (options.body as BodyInit | null | undefined);
     const token = getToken?.();
 
     if (isJsonBody(options.body) && !headers.has("content-type")) {

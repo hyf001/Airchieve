@@ -24,7 +24,7 @@
   - 创建绘本向导。
   - 故事来源选择：系统故事、我的故事、上传/粘贴、一个想法。
   - 儿童档案选择和默认配置带入。
-  - 形象、画风、声音选择。
+  - 角色形象和声音选择。
   - 分镜编辑。
   - 图片、音频、对口型生成。
   - 局部重生成。
@@ -89,6 +89,7 @@
 - `generate_image(request)`
 - `generate_audio(request)`
 - `generate_lip_sync(request)`
+- `generate_character_image(request)`
 
 ## 4. 关键契约与校验规则
 
@@ -113,7 +114,7 @@
 
 - `story_to_book` 必须有 `story_source_type`，且 `target_page_count` 在 6-12。
 - `template_book` 必须有 `template_id`，不得进入普通画风选择和分镜编辑步骤。
-- `similar_book` 必须有 `reference_book_id`，只复制主题、适龄、页数、画风、结构参考等摘要，不复制原绘本文字、图片、音频或视频。
+- `similar_book` 必须有 `reference_book_id`，只复制主题、适龄、页数、视觉风格、结构参考等摘要，不复制原绘本文字、图片、音频或视频。
 
 ### UploadedStoryInput
 
@@ -134,21 +135,20 @@
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| character_refs | `CharacterRef[]` | 选择的形象 |
-| art_style_ref | `ArtStyleRef` nullable | 系统画风或自定义画风 |
+| character_refs | `CharacterRef[]` | 选择的角色形象 |
 | voice_ref | `VoiceRef` nullable | 系统声音或用户声音 |
 | language | enum(`zh`,`en`,`bilingual`) nullable | 生成语言 |
 | target_page_count | integer nullable | 页数，仍需保持 6-12 |
 
-`CharacterRef` 字段：`source` enum(`story_original`,`child_profile_default`,`user_character`,`system_character`,`upload`,`generated`)、`character_id` nullable、`role_code` nullable、`display_name` nullable。
-
-`ArtStyleRef` 字段：`source` enum(`system`,`custom`)、`art_style_code` nullable、`custom_prompt` nullable。
+`CharacterRef` 字段：`source` enum(`story_original`,`child_profile_default`,`user_character`,`system_character`,`generated`)、`character_id` nullable、`role_code` nullable、`display_name` nullable、`art_style_code` nullable、`custom_art_style_prompt` nullable。
 
 `VoiceRef` 字段：`source` enum(`template_default`,`system`,`user`)、`voice_id` nullable、`display_name` nullable。
 
 校验：
 
 - 所有素材必须调用 `asset.assert_asset_usable()` 和 `entitlement` 校验。
+- 生成绘本插图时必须使用所选角色形象绑定的画风；用户头像或参考图不能直接作为绘本出图素材。
+- 如果需要新画风，必须先通过 `asset.create_character()` 基于头像/参考图、画风和生成指令创建新的角色形象。
 - 选择用户声音时，后续生成的每页正文音频必须使用该声音。
 - 中英双语必须同时生成 `text_zh`、`text_en` 和对应 `narration_text`。
 
@@ -193,7 +193,7 @@
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | id | int | 任务 ID |
-| task_type | enum(`story`,`storyboard`,`image`,`audio`,`lip_sync`,`template_composite`,`pdf_export`) | 任务类型 |
+| task_type | enum(`story`,`storyboard`,`character_image`,`image`,`audio`,`lip_sync`,`template_composite`,`pdf_export`) | 任务类型 |
 | owner_type | string | 发起模块 |
 | owner_id | int | 发起对象 |
 | status | enum(`queued`,`running`,`succeeded`,`failed`,`canceled`) | 状态 |
@@ -237,7 +237,7 @@
 | child_profile_id | int nullable | 儿童档案 |
 | creation_type | enum(`story_to_book`,`template_book`,`similar_book`) | 创作类型 |
 | status | enum(`draft`,`generating`,`preview`,`saved`,`failed`,`canceled`) | 状态 |
-| current_step | enum(`story`,`template`,`character`,`art_style`,`storyboard`,`voice`,`preview`) | 当前步骤 |
+| current_step | enum(`story`,`template`,`character`,`storyboard`,`voice`,`preview`) | 当前步骤 |
 | story_source_type | enum(`system_story`,`user_story`,`uploaded_story`,`idea`) nullable | 故事来源；模板路径为空 |
 | story_id | int nullable | 已确认故事 |
 | template_id | int nullable | 模板路径使用的模板 |
@@ -249,8 +249,7 @@
 | theme_codes | JSON array | 主题 |
 | education_goal_codes | JSON array | 教育目标 |
 | narrative_style_code | string nullable | 叙事风格 code |
-| character_refs | JSON array | 选择的形象 |
-| art_style_ref | JSON nullable | 系统画风或自定义画风 |
+| character_refs | JSON array | 选择的角色形象，包含绑定画风摘要 |
 | voice_ref | JSON nullable | 声音 |
 | quota_reservation_id | int nullable | 生成额度预占 |
 | saved_book_id | int nullable | 保存后的绘本 |
@@ -284,7 +283,7 @@
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | id | int PK | 任务 ID |
-| task_type | enum(`story`,`storyboard`,`image`,`audio`,`lip_sync`,`template_composite`,`pdf_export`) | 类型 |
+| task_type | enum(`story`,`storyboard`,`character_image`,`image`,`audio`,`lip_sync`,`template_composite`,`pdf_export`) | 类型 |
 | owner_type | string | 发起模块，如 `creation` |
 | owner_id | int | 发起对象 ID |
 | user_id | int nullable indexed | 用户 |
@@ -355,7 +354,7 @@
 ## 6. 跨模块协作
 
 - 调用 `story` 获取和校验故事。
-- 调用 `asset` 获取和校验形象、画风、声音。
+- 调用 `asset` 获取和校验角色形象、角色形象绑定画风、声音。
 - 调用 `book` 创建草稿绘本和最终绘本。
 - 调用 `template` 处理模板创作路径。
 - 调用 `entitlement` 校验生成额度和 VIP 素材。
@@ -365,7 +364,7 @@
 
 ## 7. 边界规则
 
-- 基于故事生成可以选择画风、编辑分镜、局部重生成。
+- 基于故事生成选择角色形象后，插图画风跟随角色形象绑定画风；可以编辑分镜、局部重生成。
 - 基于模板创作不走普通画风/分镜编辑能力。
 - `creation` 不做素材 CRUD，不直接调用供应商 SDK。
 - `generation_task` 不做权益判断，不决定结果归属。

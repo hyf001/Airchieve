@@ -14,7 +14,7 @@
 - 可复用：选择器、卡片、摘要 DTO、权限判断、上传确认、播放器 payload 等公共能力必须沉淀到模块公开入口，不在页面复制。
 - 可并行：模块负责人只修改自己模块内部文件；跨模块改动必须先约定契约，再分别落地。
 - 儿童体验隔离：儿童阅读主流程不得混入购买、充值、真人验证等家长操作。
-- 领域边界稳定：故事是纯文本资产；绘本是可播放内容资产；绘本模板是基于现有绘本的角色替换配置。
+- 领域边界稳定：故事是纯文本资产；绘本是可播放内容资产；用户头像或参考图是角色形象生成素材；角色形象是绑定画风的绘本视觉资产；绘本模板是基于现有绘本的角色替换配置。
 
 ## 2. 统一分层
 
@@ -64,7 +64,7 @@ backend/app/
 | Story 1 首页发现与快速开始 | `index.html` | `pages/home` | `discovery` | `profile-management`, `membership`, `creation`, `story-library`, `asset` |
 | Story 2 用户登录、注册与账号绑定 | `auth.html` | `pages/auth` | `auth` | `privacy` |
 | Story 3 在线播放绘本 / Story 4 亲子共读 | `player.html` | `pages/player` | `book-player` | `voice-library`, `reading`, `membership`, `moderation` |
-| Story 5 儿童档案与个性化 | `profile.html` | `pages/profiles` | `profile-management` | `character-library`, `voice-library`, `art-style-library`, `reading` |
+| Story 5 儿童档案与个性化 | `profile.html` | `pages/profiles` | `profile-management` | `character-library`, `voice-library`, `reading` |
 | Story 6 绘本生成 / Story 8 基于绘本创建类似作品 | `create.html`, `book-detail.html`, `player.html` | `pages/create`, `pages/book-detail`, `pages/player` | `creation` | `discovery`, `story-library`, `profile-management`, `asset`, `membership`, `privacy`, `book-player` |
 | Story 7 故事库 | `stories.html` | `pages/stories` | `story-library` | `creation`, `membership`, `privacy` |
 | Story 9 画风管理 | `artstyle.html` | `pages/art-styles` | `art-style-library` | `membership` |
@@ -84,7 +84,7 @@ backend/app/
 前端归属：
 
 - `features/auth`：登录注册、微信登录、手机号验证码登录、登录态恢复、账号绑定、退出登录、风险验证入口。
-- `features/profile-management`：儿童档案 CRUD、当前档案切换、默认形象/声音/画风引用、档案阅读历史和收藏入口。
+- `features/profile-management`：儿童档案 CRUD、当前档案切换、默认角色形象/声音引用、档案阅读历史和收藏入口。
 - `entities/account`、`entities/child-profile`：账号摘要、档案摘要、档案选择器。
 
 后端归属：
@@ -99,7 +99,7 @@ backend/app/
 
 边界：
 
-- 不计算会员权益，不创建形象、声音、画风。
+- 不计算会员权益，不创建角色形象、声音、画风。
 - 儿童档案只保存默认素材引用，不拥有素材实体。
 - 阅读历史和收藏数据归 `reading`，档案页只展示聚合结果。
 
@@ -275,9 +275,9 @@ backend/app/
 边界：
 
 - 模板不维护独立页面内容，页面结构来自原绘本。
-- 基于模板创作只能替换已标注角色头像/形象区域和朗读声音。
+- 基于模板创作只能替换已标注角色形象区域和朗读声音。
 - 不允许更换画风、背景、页面构图、正文、音效、互动提示、学习卡片和播放节奏。
-- 头像合成、音频重生成通过 `generation_task`。
+- 角色形象替换合成、音频重生成通过 `generation_task`。
 
 协作建议：
 
@@ -289,32 +289,33 @@ backend/app/
 
 前端归属：
 
-- `features/character-library`：我的形象、系统形象、创建形象、上传参考图、重命名、删除、设为默认、形象选择器。
+- `features/character-library`：我的角色形象、系统角色形象、创建形象、上传头像或参考图、选择画风、输入生成指令、重命名、删除、设为默认、形象选择器。
 - `features/voice-library`：我的声音、系统声音、上传声音、处理状态、试听、删除、设为默认、声音选择器。
-- `features/art-style-library`：系统画风、自定义画风描述、画风对比、画风选择器。
+- `features/art-style-library`：系统画风、自定义画风描述、画风对比、角色形象生成中的画风选择器。
 - `entities/asset`：素材卡片、上传入口、素材选择器基础组件。
 
 后端归属：
 
-- `asset`：形象、画风、声音、媒体资产引用和素材状态。
+- `asset`：角色形象、画风、声音、头像/参考图媒体资产引用和素材状态。
 - `storage`：上传会话、文件访问 URL、存储 provider 差异。
 - `privacy`：上传授权和个人素材隐私确认。
 
 复用入口：
 
-- 前端导出 `CharacterSelector`、`VoiceSelector`、`ArtStyleSelector`、`AssetUploadField`。
-- 后端提供 `list_characters()`、`get_character()`、`list_voices()`、`get_voice()`、`list_art_styles()`、`get_art_style()`、`assert_asset_usable()`、`create_upload_session()`、`complete_upload()`。
+- 前端导出 `CharacterSelector`、`CharacterCreateForm`、`VoiceSelector`、`ArtStyleSelector`、`AssetUploadField`。
+- 后端提供 `list_characters()`、`get_character()`、`create_character()`、`list_voices()`、`get_voice()`、`list_art_styles()`、`get_art_style()`、`assert_asset_usable()`、`create_upload_session()`、`complete_upload()`。
 
 边界：
 
 - 素材库不编排绘本生成流程，只提供选择和管理能力。
-- 画风是独立资源，不属于形象必填属性。
+- 画风是独立资源，但角色形象必须保存生成时绑定的画风；绘本插图画风以所选角色形象为准。
+- 用户头像或参考图不直接进入绘本生成结果，只作为角色形象生成素材。
 - 删除形象或声音不删除历史绘本中的已生成图片或音频。
 - `storage` 不理解业务语义，不判断会员权益，不记录授权。
 
 协作建议：
 
-- 形象、声音、画风可三组并行，但共用 `AssetSummary`、上传会话和权益展示组件。
+- 角色形象、声音、画风可三组并行，但角色形象创建必须消费画风选择结果，并共用 `AssetSummary`、上传会话和权益展示组件。
 
 ### 4.9 创作生成与异步任务 `creation / generation_task / ai_provider`
 
@@ -322,7 +323,7 @@ backend/app/
 
 前端归属：
 
-- `features/creation`：创建向导、故事路径、模板路径、儿童档案选择、素材选择、画风选择、分镜编辑、生成任务状态、失败重试、局部重生成、播放预览、保存个人绘本。
+- `features/creation`：创建向导、故事路径、模板路径、儿童档案选择、角色形象和声音选择、分镜编辑、生成任务状态、失败重试、局部重生成、播放预览、保存个人绘本。
 - `entities/generation-task`：任务进度、失败原因、重试控件。
 
 后端归属：
@@ -338,11 +339,11 @@ backend/app/
 
 边界：
 
-- 基于故事生成可以选择画风、编辑分镜、局部重生成。
+- 基于故事生成选择角色形象后，插图画风跟随角色形象绑定画风；可以编辑分镜、局部重生成。
 - 基于模板创作不走普通画风/分镜编辑能力。
 - `creation` 不做素材 CRUD，不直接调用供应商 SDK。
 - `generation_task` 不做权益判断，不决定结果归属。
-- 创建类似作品只复用主题、适龄、长度、画风等参考信息，不复制原文和图片。
+- 创建类似作品只复用主题、适龄、长度、视觉风格等参考信息，不复制原文和图片。
 
 协作建议：
 
@@ -374,7 +375,7 @@ backend/app/
 - 分享复用只读播放器，不编辑绘本内容。
 - 导出不管理分享链接。
 - 隐私模块不上传文件、不审核内容、不修改业务对象。
-- 含个人形象或个人声音的分享/导出必须先记录隐私确认。
+- 含个人角色形象或个人声音的分享/导出必须先记录隐私确认。
 
 协作建议：
 
@@ -505,6 +506,7 @@ service -> other service public method / DTO / domain_event
 - 业务模块自行判断 VIP、额度、试看、素材权限。
 - 创作流程复制素材库、播放器、会员逻辑。
 - 模板创作开放画风、正文、背景、结构修改。
+- 绘本生成绕过角色形象绑定画风，直接使用用户头像或参考图出图。
 - 故事进入播放器逻辑。
 - `storage`、`ai_provider`、`analytics` 写业务状态。
 
@@ -517,7 +519,7 @@ service -> other service public method / DTO / domain_event
 | C 组 | `discovery/story-library/recommendation` | 首页、绘本详情、故事库、推荐位 |
 | D 组 | `book-player/book/reading` | 播放器、播放器 payload、收藏、阅读进度 |
 | E 组 | `creation/template/generation_task/ai_provider` | 创作向导、模板创作、生成任务、AI 适配 |
-| F 组 | `asset/storage/privacy` | 形象、声音、画风、上传、隐私确认 |
+| F 组 | `asset/storage/privacy` | 角色形象、声音、画风、上传、隐私确认 |
 | G 组 | `membership/entitlement/payment/share/export` | 权益、订阅支付、分享、导出 |
 | H 组 | `admin/moderation/audit/analytics/domain_event` | 后台、审核、审计、统计、领域事件 |
 
@@ -543,7 +545,7 @@ service -> other service public method / DTO / domain_event
 | 播放器 | `features/book-player` | `book`, `reading` |
 | 绘本模板 | `features/creation`, `entities/template` | `template` |
 | 创作生成 | `features/creation` | `creation`, `generation_task`, `ai_provider` |
-| 形象库 | `features/character-library` | `asset` |
+| 角色形象库 | `features/character-library` | `asset` |
 | 声音库 | `features/voice-library` | `asset` |
 | 画风库 | `features/art-style-library` | `asset` |
 | 分享 | `features/share` | `share` |

@@ -108,8 +108,8 @@
 | language | enum(`zh`,`en`,`bilingual`) | 语言 |
 | reading_level_code | string nullable | 阅读水平 code |
 | narrative_style_code | string nullable | 叙事风格 code |
-| art_style_code | string nullable | 系统画风 code |
-| custom_art_style_prompt | text nullable | 自定义画风描述 |
+| character_art_style_code | string nullable | 角色形象绑定的系统画风 code |
+| character_custom_art_style_prompt | text nullable | 角色形象绑定的自定义画风描述 |
 | default_voice_id | int nullable | 默认朗读声音 |
 | estimated_duration_seconds | integer | 预计播放时长 |
 | page_count | integer | 页数 |
