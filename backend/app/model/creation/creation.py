@@ -104,7 +104,10 @@ class CreationStoryboardPage(TimestampMixin, Base):
     character_appearances: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
     dialogues: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
     image_asset_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     audio_asset_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    audio_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lip_sync_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     generation_status: Mapped[StoryboardGenerationStatus] = mapped_column(
         Enum(StoryboardGenerationStatus),
         nullable=False,

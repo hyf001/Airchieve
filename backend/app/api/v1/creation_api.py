@@ -97,6 +97,16 @@ async def generate_audio(
     return await creation.generate_audio(db, user_id, session_id, payload)
 
 
+@router.post("/sessions/{session_id}/generate-lip-sync", response_model=CreationTaskResponse)
+async def generate_lip_sync(
+    session_id: int,
+    payload: GeneratePagesRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(current_user_id),
+) -> CreationTaskResponse:
+    return await creation.generate_lip_sync(db, user_id, session_id, payload)
+
+
 @router.post("/sessions/{session_id}/regenerate", response_model=CreationTaskResponse)
 async def regenerate(
     session_id: int,

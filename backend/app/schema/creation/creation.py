@@ -165,7 +165,10 @@ class StoryboardPageRead(BaseModel):
     character_appearances: list[dict] = Field(default_factory=list)
     dialogues: list[dict] = Field(default_factory=list)
     image_asset_id: int | None = None
+    image_url: str | None = None
     audio_asset_id: int | None = None
+    audio_url: str | None = None
+    lip_sync_url: str | None = None
     generation_status: StoryboardGenerationStatus
     created_at: datetime
     updated_at: datetime

@@ -3,7 +3,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.model.book import Book, BookAccessLevel, BookContentStatus, BookPage, BookPublishStatus
+from app.model.book import Book, BookAccessLevel, BookContentStatus, BookModerationStatus, BookPage, BookPublishStatus
 from app.schema.entitlement import AccessDecision
 from app.schema.membership import EntitlementAccessLevel
 from app.model.taxonomy import TaxonomyType
@@ -42,7 +42,10 @@ async def list_books(
     limit: int = 20,
     offset: int = 0,
 ) -> BookListRead:
-    conditions = [Book.publish_status == BookPublishStatus.PUBLISHED]
+    conditions = [
+        Book.publish_status == BookPublishStatus.PUBLISHED,
+        Book.moderation_status == BookModerationStatus.APPROVED,
+    ]
     if q:
         pattern = f"%{q.strip()}%"
         conditions.append(or_(Book.title.ilike(pattern), Book.summary.ilike(pattern)))
@@ -81,7 +84,12 @@ async def list_books(
 
 async def get_book_detail(db: AsyncSession, book_id: int, user_id: int | None = None) -> BookDetailRead:
     book = await db.get(Book, book_id)
-    if book is None or book.publish_status != BookPublishStatus.PUBLISHED:
+    owner_can_view = user_id is not None and book is not None and book.owner_user_id == user_id
+    if (
+        book is None
+        or book.publish_status != BookPublishStatus.PUBLISHED
+        or (book.moderation_status != BookModerationStatus.APPROVED and not owner_can_view)
+    ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="绘本不存在")
     return await _book_detail_read(db, book)
 
@@ -101,7 +109,7 @@ async def _book_detail_read(db: AsyncSession, book: Book) -> BookDetailRead:
     )
 
 
-async def _get_book_for_player(db: AsyncSession, book_id: int) -> Book:
+async def _get_book_for_player(db: AsyncSession, book_id: int, user_id: int | None = None) -> Book:
     result = await db.execute(
         select(Book)
         .options(
@@ -112,7 +120,12 @@ async def _get_book_for_player(db: AsyncSession, book_id: int) -> Book:
         .where(Book.id == book_id)
     )
     book = result.scalar_one_or_none()
-    if book is None or book.publish_status != BookPublishStatus.PUBLISHED:
+    owner_can_view = user_id is not None and book is not None and book.owner_user_id == user_id
+    if (
+        book is None
+        or book.publish_status != BookPublishStatus.PUBLISHED
+        or (book.moderation_status != BookModerationStatus.APPROVED and not owner_can_view)
+    ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="绘本不存在")
     return book
 
@@ -189,7 +202,7 @@ async def get_player_payload(
     user_id: int | None = None,
     options: BookPlayerOptions | None = None,
 ) -> BookPlayerPayload:
-    book = await _get_book_for_player(db, book_id)
+    book = await _get_book_for_player(db, book_id, user_id=user_id)
     detail = await _book_detail_read(db, book)
     access_decision: AccessDecision | None = None
     can_read_full_book = book.access_level == BookAccessLevel.FREE

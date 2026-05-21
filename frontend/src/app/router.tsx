@@ -13,6 +13,7 @@ export type AppRoute =
   | "/book-detail"
   | "/share"
   | "/share/public"
+  | "/admin"
   | "/voices";
 
 interface RouterContextValue {
@@ -35,6 +36,7 @@ const routes = new Set<AppRoute>([
   "/book-detail",
   "/share",
   "/share/public",
+  "/admin",
   "/voices",
 ]);
 

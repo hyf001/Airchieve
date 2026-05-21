@@ -3,12 +3,14 @@ from fastapi import APIRouter
 from app.api.v1 import (
     account_api,
     admin_api,
+    analytics_api,
     asset_api,
     book_api,
     creation_api,
     export_api,
     generation_task_api,
     membership_api,
+    moderation_api,
     payment_api,
     privacy_api,
     reading_api,
@@ -33,6 +35,10 @@ api_router.include_router(share_api.router, prefix="/share", tags=["share"])
 api_router.include_router(export_api.router, prefix="/export", tags=["export"])
 api_router.include_router(reading_api.router, prefix="/reading", tags=["reading"])
 api_router.include_router(admin_api.router, prefix="/admin", tags=["admin"])
+api_router.include_router(moderation_api.router, prefix="/moderation", tags=["moderation"])
+api_router.include_router(moderation_api.admin_router, prefix="/admin/moderation", tags=["admin-moderation"])
+api_router.include_router(analytics_api.router, prefix="/analytics", tags=["analytics"])
+api_router.include_router(analytics_api.admin_router, prefix="/admin/analytics", tags=["admin-analytics"])
 api_router.include_router(taxonomy_api.router, prefix="/taxonomy", tags=["taxonomy"])
 api_router.include_router(taxonomy_api.admin_router, prefix="/admin/taxonomy", tags=["admin-taxonomy"])
 api_router.include_router(creation_api.router, prefix="/creation", tags=["creation"])

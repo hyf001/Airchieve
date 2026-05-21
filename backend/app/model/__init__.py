@@ -7,15 +7,18 @@ from app.model.account import (
     SmsVerificationCode,
     User,
 )
+from app.model.analytics import AnalyticsDailyMetric, AnalyticsEvent
 from app.model.audit import AuditLog
 from app.model.asset import ArtStyle, Asset, Character, Voice
 from app.model.book import Book, BookDialogue, BookLearningCard, BookPage, BookReadingPrompt
 from app.model.ai_provider import AiProviderCall, AiProviderUsageRecord
 from app.model.creation import CreationSession, CreationStoryboardPage
+from app.model.domain_event import DomainEvent, DomainEventDelivery
 from app.model.entitlement import EntitlementQuotaReservation
 from app.model.export import ExportJob
 from app.model.generation_task import GenerationTask, GenerationTaskAttempt
 from app.model.membership import MembershipPlan, MembershipUsageCounter, UserMembership
+from app.model.moderation import ModerationRecord, Report
 from app.model.payment import PaymentOrder, PaymentRecord, RefundRecord
 from app.model.recommendation import RecommendationItem, RecommendationSlot, RecommendationTopic
 from app.model.reading import ReadingEvent, ReadingFavorite, ReadingProgress
@@ -30,6 +33,8 @@ __all__ = [
     "AccountAuthIdentity",
     "AccountRiskChallenge",
     "AccountSession",
+    "AnalyticsDailyMetric",
+    "AnalyticsEvent",
     "AuditLog",
     "ArtStyle",
     "AiProviderCall",
@@ -45,12 +50,15 @@ __all__ = [
     "Character",
     "CreationSession",
     "CreationStoryboardPage",
+    "DomainEvent",
+    "DomainEventDelivery",
     "EntitlementQuotaReservation",
     "ExportJob",
     "GenerationTask",
     "GenerationTaskAttempt",
     "MembershipPlan",
     "MembershipUsageCounter",
+    "ModerationRecord",
     "PaymentOrder",
     "PaymentRecord",
     "PrivacyConfirmation",
@@ -63,6 +71,7 @@ __all__ = [
     "ReadingEvent",
     "ReadingFavorite",
     "ReadingProgress",
+    "Report",
     "ShareAccessLog",
     "ShareLink",
     "SmsVerificationCode",

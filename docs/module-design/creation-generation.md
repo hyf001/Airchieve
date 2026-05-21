@@ -64,6 +64,7 @@
 - `PATCH /api/v1/creation/sessions/{session_id}/storyboard/pages/{page_id}`
 - `POST /api/v1/creation/sessions/{session_id}/generate-images`
 - `POST /api/v1/creation/sessions/{session_id}/generate-audio`
+- `POST /api/v1/creation/sessions/{session_id}/generate-lip-sync`
 - `POST /api/v1/creation/sessions/{session_id}/regenerate`
 - `POST /api/v1/creation/sessions/{session_id}/save-book`
 - `GET /api/v1/generation-tasks/{task_id}`
@@ -90,6 +91,8 @@
 - `generate_audio(request)`
 - `generate_lip_sync(request)`
 - `generate_character_image(request)`
+
+对口型生成当前默认接入 Kling Avatar 2.0，使用“单张图片 + 音频 + 可选表演提示”生成口型同步 avatar 视频。该能力要求输入页已经具备公网可访问的 `image_url` 和 `audio_url`；创作流程会先把 provider 返回的 `data:` 图片/音频落到 OSS，再提交 Avatar 2.0 异步任务并轮询结果。生成结果回写到 `CreationStoryboardPage.lip_sync_url`，保存绘本时作为 `BookPage.video_url` 输出，并将 `lip_sync_status` 标记为 `ready`。
 
 ## 4. 关键契约与校验规则
 

@@ -14,6 +14,7 @@ import { ProfilesPage } from "@/pages/profiles/ProfilesPage";
 import { ArtStylesPage } from "@/pages/assets/ArtStylesPage";
 import { CharactersPage } from "@/pages/assets/CharactersPage";
 import { VoicesPage } from "@/pages/assets/VoicesPage";
+import { AdminPage } from "@/pages/admin/AdminPage";
 import { SkeletonPage } from "@/pages/prototype/SkeletonPage";
 
 const App: React.FC = () => {
@@ -69,6 +70,10 @@ const App: React.FC = () => {
 
   if (path === "/share/public") {
     return <PublicSharePage />;
+  }
+
+  if (path === "/admin") {
+    return <AdminPage />;
   }
 
   return <SkeletonPage route={path} />;

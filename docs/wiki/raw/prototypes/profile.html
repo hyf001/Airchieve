@@ -1,0 +1,1827 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>毛毛虫绘本 - 我的孩子档案</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=ZCOOL+KuaiLe&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --honey: #F5A623;
+  --peach: #FF8A65;
+  --terracotta: #D4725C;
+  --sage: #8BC6A8;
+  --sage-deep: #5EA07A;
+  --sky: #7EC8E3;
+  --sky-deep: #4BA3C7;
+  --lavender: #B39DDB;
+  --cream: #FFF8F0;
+  --warm-bg: #FFFAF5;
+  --card-bg: #FFFFFF;
+  --text-dark: #3D2C2C;
+  --text-mid: #6B5555;
+  --text-light: #9E8B8B;
+  --shadow-soft: 0 2px 16px rgba(61,44,44,0.08);
+  --shadow-hover: 0 6px 24px rgba(61,44,44,0.14);
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
+  --font-display: 'ZCOOL KuaiLe', 'Nunito', cursive;
+  --font-body: 'Noto Sans SC', 'Nunito', sans-serif;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-body);
+  background: var(--warm-bg);
+  color: var(--text-dark);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ===== NAV ===== */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(255,248,240,0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(212,114,92,0.1);
+  padding: 0 32px;
+}
+
+.nav-inner {
+  max-width: 1320px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  height: 68px;
+  gap: 24px;
+}
+
+.logo {
+  font-family: var(--font-display);
+  font-size: 26px;
+  color: var(--terracotta);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.logo-icon {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, var(--honey), var(--peach));
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 3px 12px rgba(245,166,35,0.3);
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  justify-content: center;
+}
+
+.nav-links a {
+  text-decoration: none;
+  color: var(--text-mid);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  transition: all 0.25s;
+  white-space: nowrap;
+}
+
+.nav-links a:hover {
+  color: var(--terracotta);
+  background: rgba(212,114,92,0.08);
+}
+
+.nav-links a.active {
+  color: var(--terracotta);
+  background: rgba(212,114,92,0.1);
+  font-weight: 600;
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--sage), var(--sky));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  cursor: pointer;
+  transition: transform 0.3s;
+  box-shadow: 0 2px 8px rgba(139,198,168,0.3);
+}
+
+.user-avatar:hover { transform: scale(1.1); }
+
+/* ===== PAGE HEADER ===== */
+.page-header {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 48px 32px 32px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-size: 36px;
+  color: var(--text-dark);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-title-icon {
+  font-size: 32px;
+}
+
+.page-subtitle {
+  font-size: 15px;
+  color: var(--text-light);
+  font-weight: 400;
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 28px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  background: linear-gradient(135deg, var(--honey), var(--peach));
+  color: white;
+  box-shadow: 0 4px 16px rgba(245,166,35,0.3);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(245,166,35,0.4);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+/* ===== PROFILES GRID ===== */
+.profiles-section {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 0 32px 48px;
+}
+
+.profiles-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+}
+
+.profile-card {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: 32px 28px;
+  box-shadow: var(--shadow-soft);
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+
+.profile-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.profile-card:nth-child(1)::before { background: linear-gradient(90deg, var(--honey), var(--peach)); }
+.profile-card:nth-child(2)::before { background: linear-gradient(90deg, var(--sage), var(--sky)); }
+.profile-card:nth-child(3)::before { background: linear-gradient(90deg, var(--lavender), var(--peach)); }
+
+.profile-card:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-hover);
+  border-color: rgba(212,114,92,0.12);
+}
+
+.profile-card.active-card {
+  border-color: var(--honey);
+  box-shadow: 0 4px 24px rgba(245,166,35,0.2);
+}
+
+.active-badge {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: linear-gradient(135deg, var(--honey), var(--peach));
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.card-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  flex-shrink: 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  position: relative;
+}
+
+.card-avatar::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px dashed rgba(255,255,255,0.5);
+}
+
+.card-avatar.star-avatar {
+  background: linear-gradient(135deg, #FFE082, var(--honey), var(--peach));
+}
+
+.card-avatar.bean-avatar {
+  background: linear-gradient(135deg, var(--sage), #A8E6CF, var(--sky));
+}
+
+.card-avatar.fruit-avatar {
+  background: linear-gradient(135deg, #E1BEE7, var(--lavender), #F48FB1);
+}
+
+.card-info {
+  flex: 1;
+}
+
+.card-name {
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--text-dark);
+  margin-bottom: 4px;
+}
+
+.age-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.age-badge.age-young {
+  background: rgba(245,166,35,0.12);
+  color: #D4882A;
+}
+
+.age-badge.age-mid {
+  background: rgba(139,198,168,0.15);
+  color: var(--sage-deep);
+}
+
+.age-badge.age-old {
+  background: rgba(179,157,219,0.15);
+  color: #7E57C2;
+}
+
+.card-interests {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.interest-tag {
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--cream);
+  color: var(--text-mid);
+  border: 1px solid rgba(212,114,92,0.1);
+  transition: all 0.25s;
+}
+
+.interest-tag:hover {
+  background: rgba(245,166,35,0.1);
+  border-color: rgba(245,166,35,0.2);
+  color: var(--terracotta);
+}
+
+.reading-level {
+  margin-bottom: 20px;
+}
+
+.reading-level-label {
+  font-size: 12px;
+  color: var(--text-light);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.level-bar {
+  height: 8px;
+  background: var(--cream);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.level-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+}
+
+.level-fill.honey-fill { background: linear-gradient(90deg, var(--honey), var(--peach)); }
+.level-fill.sage-fill { background: linear-gradient(90deg, var(--sage), var(--sky)); }
+.level-fill.lavender-fill { background: linear-gradient(90deg, var(--lavender), #F48FB1); }
+
+.card-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.btn-card {
+  flex: 1;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.btn-set-active {
+  background: linear-gradient(135deg, var(--honey), var(--peach));
+  color: white;
+  box-shadow: 0 2px 10px rgba(245,166,35,0.25);
+}
+
+.btn-set-active:hover {
+  box-shadow: 0 4px 16px rgba(245,166,35,0.35);
+  transform: translateY(-1px);
+}
+
+.btn-set-active.is-active {
+  background: var(--cream);
+  color: var(--honey);
+  box-shadow: none;
+  border: 1.5px solid rgba(245,166,35,0.3);
+}
+
+.btn-edit {
+  background: var(--cream);
+  color: var(--text-mid);
+  border: 1.5px solid rgba(212,114,92,0.1);
+}
+
+.btn-edit:hover {
+  background: rgba(212,114,92,0.06);
+  border-color: rgba(212,114,92,0.2);
+  color: var(--terracotta);
+}
+
+/* ===== DETAIL PANEL ===== */
+.detail-section {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 0 32px 60px;
+}
+
+.detail-panel {
+  background: var(--card-bg);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+  border: 1px solid rgba(212,114,92,0.08);
+}
+
+.detail-header {
+  background: linear-gradient(135deg, #FFF8F0, #FFF0E5);
+  padding: 36px 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(212,114,92,0.08);
+}
+
+.detail-header-left {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.detail-avatar {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #FFE082, var(--honey), var(--peach));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+  box-shadow: 0 6px 24px rgba(245,166,35,0.3);
+  position: relative;
+}
+
+.detail-avatar::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 3px dashed rgba(255,255,255,0.5);
+  animation: spin 20s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.detail-name {
+  font-family: var(--font-display);
+  font-size: 28px;
+  color: var(--text-dark);
+}
+
+.detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 6px;
+}
+
+.detail-age {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  background: rgba(245,166,35,0.12);
+  color: #D4882A;
+}
+
+.detail-books-count {
+  font-size: 13px;
+  color: var(--text-light);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-close-detail {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(61,44,44,0.06);
+  color: var(--text-mid);
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.25s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-close-detail:hover {
+  background: rgba(61,44,44,0.1);
+  color: var(--text-dark);
+}
+
+.detail-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+
+.detail-left {
+  padding: 36px 40px;
+  border-right: 1px solid rgba(212,114,92,0.08);
+}
+
+.detail-right {
+  padding: 36px 40px;
+}
+
+.detail-section-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--text-dark);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.form-group {
+  margin-bottom: 24px;
+}
+
+.form-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-mid);
+  margin-bottom: 10px;
+  display: block;
+}
+
+.tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-item {
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1.5px solid rgba(212,114,92,0.12);
+  background: white;
+  color: var(--text-mid);
+  cursor: pointer;
+  transition: all 0.25s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tag-item:hover {
+  border-color: var(--honey);
+  color: var(--honey);
+}
+
+.tag-item.selected {
+  background: rgba(245,166,35,0.1);
+  border-color: var(--honey);
+  color: #D4882A;
+}
+
+.tag-item.selected::before {
+  content: '✓';
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.form-select {
+  width: 100%;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid rgba(212,114,92,0.15);
+  background: white;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--text-dark);
+  cursor: pointer;
+  outline: none;
+  transition: all 0.25s;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239E8B8B' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+}
+
+.form-select:focus {
+  border-color: var(--honey);
+  box-shadow: 0 0 0 4px rgba(245,166,35,0.1);
+}
+
+/* Linked Resources */
+.linked-resources {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.resource-card {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid rgba(212,114,92,0.1);
+  background: var(--cream);
+  text-align: center;
+  transition: all 0.25s;
+  cursor: pointer;
+}
+
+.resource-card:hover {
+  border-color: var(--honey);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(245,166,35,0.15);
+}
+
+.resource-preview {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  margin: 0 auto 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.resource-preview.char-preview {
+  background: linear-gradient(135deg, #FFE0B2, #FFCC80);
+}
+
+.resource-preview.voice-preview {
+  background: linear-gradient(135deg, #C8E6C9, #A5D6A7);
+}
+
+.resource-preview.art-preview {
+  background: linear-gradient(135deg, #E1BEE7, #CE93D8);
+}
+
+.resource-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-mid);
+}
+
+.resource-value {
+  font-size: 11px;
+  color: var(--text-light);
+  margin-top: 2px;
+}
+
+/* Reading History */
+.reading-history {
+  margin-top: 16px;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(212,114,92,0.06);
+}
+
+.history-item:last-child {
+  border-bottom: none;
+}
+
+.history-cover {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.history-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.history-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dark);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--cream);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--honey), var(--peach));
+  transition: width 0.6s ease;
+}
+
+.progress-text {
+  font-size: 11px;
+  color: var(--text-light);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Favorites */
+.favorites-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.fav-card {
+  aspect-ratio: 3/4;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+}
+
+.fav-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+}
+
+.fav-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(61,44,44,0.4), transparent);
+  pointer-events: none;
+}
+
+.fav-title {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
+  z-index: 1;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.fav-1 { background: linear-gradient(135deg, #FFE082, #FFB74D); }
+.fav-2 { background: linear-gradient(135deg, #A5D6A7, #66BB6A); }
+.fav-3 { background: linear-gradient(135deg, #B39DDB, #7E57C2); }
+.fav-4 { background: linear-gradient(135deg, #7EC8E3, #4BA3C7); }
+.fav-5 { background: linear-gradient(135deg, #FF8A65, #D4725C); }
+.fav-6 { background: linear-gradient(135deg, #F48FB1, #E91E63); }
+.fav-7 { background: linear-gradient(135deg, #80DEEA, #26C6DA); }
+.fav-8 { background: linear-gradient(135deg, #FFD54F, #FFA000); }
+
+/* ===== MODAL ===== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(61,44,44,0.4);
+  backdrop-filter: blur(6px);
+  z-index: 200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.modal-overlay.show {
+  display: flex;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal {
+  background: var(--card-bg);
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 520px;
+  box-shadow: 0 16px 64px rgba(61,44,44,0.2);
+  animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  overflow: hidden;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(30px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.modal-header {
+  padding: 28px 32px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--text-dark);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-modal-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: var(--cream);
+  color: var(--text-mid);
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.25s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-modal-close:hover {
+  background: rgba(212,114,92,0.1);
+  color: var(--terracotta);
+}
+
+.modal-body {
+  padding: 24px 32px 32px;
+}
+
+.modal-form-group {
+  margin-bottom: 20px;
+}
+
+.modal-form-group:last-child {
+  margin-bottom: 0;
+}
+
+.modal-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-mid);
+  margin-bottom: 8px;
+  display: block;
+}
+
+.modal-input {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid rgba(212,114,92,0.15);
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--text-dark);
+  outline: none;
+  transition: all 0.25s;
+  background: white;
+}
+
+.modal-input::placeholder { color: var(--text-light); }
+
+.modal-input:focus {
+  border-color: var(--honey);
+  box-shadow: 0 0 0 4px rgba(245,166,35,0.1);
+}
+
+.avatar-picker {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.avatar-option {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  cursor: pointer;
+  transition: all 0.3s;
+  border: 3px solid transparent;
+}
+
+.avatar-option:hover { transform: scale(1.15); }
+
+.avatar-option.selected {
+  border-color: var(--honey);
+  box-shadow: 0 0 0 4px rgba(245,166,35,0.2);
+  transform: scale(1.1);
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  padding: 0 32px 28px;
+}
+
+.btn-modal-cancel {
+  flex: 1;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid rgba(212,114,92,0.15);
+  background: white;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-mid);
+  cursor: pointer;
+  transition: all 0.25s;
+}
+
+.btn-modal-cancel:hover {
+  background: var(--cream);
+  border-color: rgba(212,114,92,0.25);
+}
+
+.btn-modal-save {
+  flex: 1;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: linear-gradient(135deg, var(--honey), var(--peach));
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: 0 3px 12px rgba(245,166,35,0.3);
+}
+
+.btn-modal-save:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 16px rgba(245,166,35,0.4);
+}
+
+/* ===== TOAST ===== */
+.toast {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-20px);
+  background: var(--card-bg);
+  border-radius: var(--radius-md);
+  padding: 14px 28px;
+  box-shadow: 0 8px 32px rgba(61,44,44,0.15);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dark);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 300;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  border: 1px solid rgba(245,166,35,0.15);
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+
+/* ===== FOOTER ===== */
+.footer {
+  background: var(--cream);
+  border-top: 1px solid rgba(212,114,92,0.08);
+  padding: 48px 32px 32px;
+}
+
+.footer-inner {
+  max-width: 1320px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.5fr repeat(3, 1fr);
+  gap: 40px;
+}
+
+.footer-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.footer-logo {
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--terracotta);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+}
+
+.footer-desc {
+  font-size: 13px;
+  color: var(--text-light);
+  line-height: 1.8;
+  max-width: 280px;
+}
+
+.footer-col-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--text-dark);
+  margin-bottom: 16px;
+}
+
+.footer-links {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.footer-links a {
+  font-size: 13px;
+  color: var(--text-light);
+  text-decoration: none;
+  transition: color 0.25s;
+}
+
+.footer-links a:hover {
+  color: var(--terracotta);
+}
+
+.footer-bottom {
+  max-width: 1320px;
+  margin: 32px auto 0;
+  padding-top: 24px;
+  border-top: 1px solid rgba(212,114,92,0.08);
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-light);
+}
+
+/* ===== DECORATIVE ELEMENTS ===== */
+.deco-star {
+  position: fixed;
+  pointer-events: none;
+  opacity: 0.15;
+  z-index: 0;
+  font-size: 32px;
+}
+
+.deco-star:nth-child(1) { top: 15%; right: 8%; animation: float1 6s ease-in-out infinite; }
+.deco-star:nth-child(2) { top: 45%; left: 5%; animation: float2 8s ease-in-out infinite; font-size: 24px; }
+.deco-star:nth-child(3) { bottom: 20%; right: 12%; animation: float1 7s ease-in-out infinite 1s; font-size: 20px; }
+
+@keyframes float1 {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-20px) rotate(15deg); }
+}
+
+@keyframes float2 {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-15px) rotate(-10deg); }
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 1024px) {
+  .profiles-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .detail-body {
+    grid-template-columns: 1fr;
+  }
+  .detail-left {
+    border-right: none;
+    border-bottom: 1px solid rgba(212,114,92,0.08);
+  }
+  .favorites-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .footer-inner {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .nav-inner {
+    gap: 12px;
+  }
+  .nav-links {
+    display: none;
+  }
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 32px 20px 24px;
+  }
+  .page-title {
+    font-size: 28px;
+  }
+  .profiles-section {
+    padding: 0 20px 32px;
+  }
+  .profiles-grid {
+    grid-template-columns: 1fr;
+  }
+  .profile-card {
+    padding: 24px 20px;
+  }
+  .detail-section {
+    padding: 0 20px 40px;
+  }
+  .detail-header {
+    padding: 24px 20px;
+  }
+  .detail-left, .detail-right {
+    padding: 24px 20px;
+  }
+  .linked-resources {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .favorites-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .footer-inner {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .footer-bottom {
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .nav { padding: 0 16px; }
+  .page-header { padding: 24px 16px 20px; }
+  .profiles-section { padding: 0 16px 24px; }
+  .detail-section { padding: 0 16px 32px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Decorative floating elements -->
+<div class="deco-star">🌟</div>
+<div class="deco-star">✨</div>
+<div class="deco-star">💫</div>
+
+<!-- Toast notification -->
+<div class="toast" id="toast">
+  <span id="toast-icon">✨</span>
+  <span id="toast-text">操作成功</span>
+</div>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="index.html" class="logo">
+      <span class="logo-icon">📖</span>
+      毛毛虫绘本
+    </a>
+    <div class="nav-links">
+      <a href="index.html">🏠 首页</a>
+      <a href="stories.html">📚 故事</a>
+      <a href="characters.html">🎭 角色</a>
+      <a href="voices.html">🎙 声音</a>
+      <a href="artstyle.html">🎨 画风</a>
+      <a href="profile.html" class="active">👶 档案</a>
+      <a href="membership.html">👑 会员</a>
+    </div>
+    <div class="nav-actions">
+      <div class="user-avatar">👩</div>
+    </div>
+  </div>
+</nav>
+
+<!-- PAGE HEADER -->
+<div class="page-header">
+  <div class="header-left">
+    <h1 class="page-title">
+      <span class="page-title-icon">👨‍👩‍👧‍👦</span>
+      我的孩子档案
+    </h1>
+    <p class="page-subtitle">为每个孩子创建专属阅读档案，定制个性化绘本体验</p>
+  </div>
+  <button class="btn-primary" onclick="openModal()">
+    <span>➕</span> 添加档案
+  </button>
+</div>
+
+<!-- PROFILES GRID -->
+<section class="profiles-section">
+  <div class="profiles-grid" id="profilesGrid">
+
+    <!-- Card 1: 小星星 (active) -->
+    <div class="profile-card active-card" data-id="1" onclick="expandDetail(1)">
+      <div class="active-badge">⭐ 当前</div>
+      <div class="card-top">
+        <div class="card-avatar star-avatar">🌟</div>
+        <div class="card-info">
+          <div class="card-name">小星星</div>
+          <span class="age-badge age-young">🎂 3-4岁</span>
+        </div>
+      </div>
+      <div class="card-interests">
+        <span class="interest-tag">🦁 动物</span>
+        <span class="interest-tag">🌈 童话</span>
+        <span class="interest-tag">🎵 儿歌</span>
+      </div>
+      <div class="reading-level">
+        <div class="reading-level-label">
+          <span>阅读等级</span>
+          <span>启蒙期</span>
+        </div>
+        <div class="level-bar">
+          <div class="level-fill honey-fill" style="width: 35%"></div>
+        </div>
+      </div>
+      <div class="card-actions">
+        <button class="btn-card btn-set-active is-active" onclick="event.stopPropagation()">⭐ 当前</button>
+        <button class="btn-card btn-edit" onclick="event.stopPropagation(); expandDetail(1)">✏️ 编辑</button>
+      </div>
+    </div>
+
+    <!-- Card 2: 豆豆 -->
+    <div class="profile-card" data-id="2" onclick="expandDetail(2)">
+      <div class="card-top">
+        <div class="card-avatar bean-avatar">🫘</div>
+        <div class="card-info">
+          <div class="card-name">豆豆</div>
+          <span class="age-badge age-mid">🎂 5-6岁</span>
+        </div>
+      </div>
+      <div class="card-interests">
+        <span class="interest-tag">🚀 冒险</span>
+        <span class="interest-tag">🔬 科普</span>
+        <span class="interest-tag">🤖 科技</span>
+        <span class="interest-tag">🌍 自然</span>
+      </div>
+      <div class="reading-level">
+        <div class="reading-level-label">
+          <span>阅读等级</span>
+          <span>成长期</span>
+        </div>
+        <div class="level-bar">
+          <div class="level-fill sage-fill" style="width: 60%"></div>
+        </div>
+      </div>
+      <div class="card-actions">
+        <button class="btn-card btn-set-active" onclick="event.stopPropagation(); setActive(2)">⭐ 设为当前</button>
+        <button class="btn-card btn-edit" onclick="event.stopPropagation(); expandDetail(2)">✏️ 编辑</button>
+      </div>
+    </div>
+
+    <!-- Card 3: 果果 -->
+    <div class="profile-card" data-id="3" onclick="expandDetail(3)">
+      <div class="card-top">
+        <div class="card-avatar fruit-avatar">🍑</div>
+        <div class="card-info">
+          <div class="card-name">果果</div>
+          <span class="age-badge age-old">🎂 7-10岁</span>
+        </div>
+      </div>
+      <div class="card-interests">
+        <span class="interest-tag">🏰 历史</span>
+        <span class="interest-tag">🧩 推理</span>
+        <span class="interest-tag">🎭 文学</span>
+      </div>
+      <div class="reading-level">
+        <div class="reading-level-label">
+          <span>阅读等级</span>
+          <span>探索期</span>
+        </div>
+        <div class="level-bar">
+          <div class="level-fill lavender-fill" style="width: 80%"></div>
+        </div>
+      </div>
+      <div class="card-actions">
+        <button class="btn-card btn-set-active" onclick="event.stopPropagation(); setActive(3)">⭐ 设为当前</button>
+        <button class="btn-card btn-edit" onclick="event.stopPropagation(); expandDetail(3)">✏️ 编辑</button>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- DETAIL PANEL (expanded for 小星星) -->
+<section class="detail-section" id="detailSection">
+  <div class="detail-panel">
+    <div class="detail-header">
+      <div class="detail-header-left">
+        <div class="detail-avatar">🌟</div>
+        <div>
+          <div class="detail-name">小星星</div>
+          <div class="detail-meta">
+            <span class="detail-age">🎂 3-4岁</span>
+            <span class="detail-books-count">📚 已读 23 本绘本</span>
+          </div>
+        </div>
+      </div>
+      <button class="btn-close-detail" onclick="closeDetail()">✕</button>
+    </div>
+
+    <div class="detail-body">
+      <!-- Left Column -->
+      <div class="detail-left">
+        <!-- Interests -->
+        <div class="form-group">
+          <label class="form-label">兴趣爱好</label>
+          <div class="tag-cloud">
+            <span class="tag-item selected">🦁 动物</span>
+            <span class="tag-item selected">🌈 童话</span>
+            <span class="tag-item selected">🎵 儿歌</span>
+            <span class="tag-item">🚀 冒险</span>
+            <span class="tag-item">🔬 科普</span>
+            <span class="tag-item">🎨 艺术</span>
+            <span class="tag-item">🌍 自然</span>
+            <span class="tag-item">🏰 历史</span>
+            <span class="tag-item">🧩 推理</span>
+            <span class="tag-item">🤖 科技</span>
+            <span class="tag-item">🎭 文学</span>
+            <span class="tag-item">⚽ 运动</span>
+          </div>
+        </div>
+
+        <!-- Reading Level -->
+        <div class="form-group">
+          <label class="form-label">阅读等级</label>
+          <select class="form-select">
+            <option value="1">🌱 启蒙期 (1-2岁)</option>
+            <option value="2" selected>🌿 认知期 (3-4岁)</option>
+            <option value="3">🌳 成长期 (5-6岁)</option>
+            <option value="4">📖 探索期 (7-8岁)</option>
+            <option value="5">🎓 深度期 (9-10岁)</option>
+          </select>
+        </div>
+
+        <!-- Education Goals -->
+        <div class="form-group">
+          <label class="form-label">教育目标</label>
+          <div class="tag-cloud">
+            <span class="tag-item selected">💬 语言发展</span>
+            <span class="tag-item selected">🎨 创造力</span>
+            <span class="tag-item selected">❤️ 情感教育</span>
+            <span class="tag-item">🧠 逻辑思维</span>
+            <span class="tag-item">🤝 社交能力</span>
+            <span class="tag-item">🌍 世界认知</span>
+          </div>
+        </div>
+
+        <!-- Linked Resources -->
+        <div>
+          <div class="detail-section-title">🔗 关联资源</div>
+          <div class="linked-resources">
+            <div class="resource-card" onclick="window.location.href='characters.html'">
+              <div class="resource-preview char-preview">🦊</div>
+              <div class="resource-label">默认形象</div>
+              <div class="resource-value">小狐狸</div>
+            </div>
+            <div class="resource-card" onclick="window.location.href='voices.html'">
+              <div class="resource-preview voice-preview">🎙️</div>
+              <div class="resource-label">朗读声音</div>
+              <div class="resource-value">温柔姐姐</div>
+            </div>
+            <div class="resource-card" onclick="window.location.href='artstyle.html'">
+              <div class="resource-preview art-preview">🖌️</div>
+              <div class="resource-label">画风</div>
+              <div class="resource-value">水彩童话</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column -->
+      <div class="detail-right">
+        <!-- Reading History -->
+        <div>
+          <div class="detail-section-title">📚 最近阅读</div>
+          <div class="reading-history">
+            <div class="history-item">
+              <div class="history-cover" style="background: linear-gradient(135deg, #FFE082, #FFB74D);">🐻</div>
+              <div class="history-info">
+                <div class="history-title">小熊的蜂蜜冒险</div>
+                <div class="history-progress">
+                  <div class="progress-bar"><div class="progress-fill" style="width: 85%"></div></div>
+                  <span class="progress-text">85%</span>
+                </div>
+              </div>
+            </div>
+            <div class="history-item">
+              <div class="history-cover" style="background: linear-gradient(135deg, #A5D6A7, #66BB6A);">🐸</div>
+              <div class="history-info">
+                <div class="history-title">青蛙王子的秘密花园</div>
+                <div class="history-progress">
+                  <div class="progress-bar"><div class="progress-fill" style="width: 60%"></div></div>
+                  <span class="progress-text">60%</span>
+                </div>
+              </div>
+            </div>
+            <div class="history-item">
+              <div class="history-cover" style="background: linear-gradient(135deg, #B39DDB, #7E57C2);">🌙</div>
+              <div class="history-info">
+                <div class="history-title">月亮上的小兔子</div>
+                <div class="history-progress">
+                  <div class="progress-bar"><div class="progress-fill" style="width: 100%"></div></div>
+                  <span class="progress-text">100%</span>
+                </div>
+              </div>
+            </div>
+            <div class="history-item">
+              <div class="history-cover" style="background: linear-gradient(135deg, #7EC8E3, #4BA3C7);">🐟</div>
+              <div class="history-info">
+                <div class="history-title">彩虹鱼学会了分享</div>
+                <div class="history-progress">
+                  <div class="progress-bar"><div class="progress-fill" style="width: 40%"></div></div>
+                  <span class="progress-text">40%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Favorites -->
+        <div style="margin-top: 32px;">
+          <div class="detail-section-title">❤️ 收藏绘本</div>
+          <div class="favorites-grid">
+            <div class="fav-card fav-1" onclick="window.location.href='book-detail.html'">
+              🐻
+              <div class="fav-title">小熊的蜂蜜冒险</div>
+            </div>
+            <div class="fav-card fav-2" onclick="window.location.href='book-detail.html'">
+              🌳
+              <div class="fav-title">森林音乐会</div>
+            </div>
+            <div class="fav-card fav-3" onclick="window.location.href='book-detail.html'">
+              🦄
+              <div class="fav-title">独角兽的彩虹桥</div>
+            </div>
+            <div class="fav-card fav-4" onclick="window.location.href='book-detail.html'">
+              🐳
+              <div class="fav-title">大海的歌谣</div>
+            </div>
+            <div class="fav-card fav-5" onclick="window.location.href='book-detail.html'">
+              🌈
+              <div class="fav-title">彩虹的另一边</div>
+            </div>
+            <div class="fav-card fav-6" onclick="window.location.href='book-detail.html'">
+              🦋
+              <div class="fav-title">蝴蝶的旅行</div>
+            </div>
+            <div class="fav-card fav-7" onclick="window.location.href='book-detail.html'">
+              🏰
+              <div class="fav-title">魔法城堡</div>
+            </div>
+            <div class="fav-card fav-8" onclick="window.location.href='book-detail.html'">
+              🌻
+              <div class="fav-title">向日葵的愿望</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ADD PROFILE MODAL -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">➕ 添加孩子档案</div>
+      <button class="btn-modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-form-group">
+        <label class="modal-label">选择头像</label>
+        <div class="avatar-picker">
+          <div class="avatar-option selected" style="background: linear-gradient(135deg, #FFE082, var(--honey));" data-emoji="🌟">🌟</div>
+          <div class="avatar-option" style="background: linear-gradient(135deg, var(--sage), #A8E6CF);" data-emoji="🫘">🫘</div>
+          <div class="avatar-option" style="background: linear-gradient(135deg, #E1BEE7, var(--lavender));" data-emoji="🍑">🍑</div>
+          <div class="avatar-option" style="background: linear-gradient(135deg, var(--sky), #B3E5FC);" data-emoji="🐳">🐳</div>
+          <div class="avatar-option" style="background: linear-gradient(135deg, #FFCDD2, #F48FB1);" data-emoji="🌸">🌸</div>
+          <div class="avatar-option" style="background: linear-gradient(135deg, #C8E6C9, #66BB6A);" data-emoji="🍀">🍀</div>
+          <div class="avatar-option" style="background: linear-gradient(135deg, #FFD54F, #FF8F00);" data-emoji="🔥">🔥</div>
+          <div class="avatar-option" style="background: linear-gradient(135deg, #B2EBF2, #00ACC1);" data-emoji="🐧">🐧</div>
+        </div>
+      </div>
+      <div class="modal-form-group">
+        <label class="modal-label">昵称</label>
+        <input type="text" class="modal-input" placeholder="给孩子取一个可爱的昵称" id="newNickname">
+      </div>
+      <div class="modal-form-group">
+        <label class="modal-label">年龄段</label>
+        <select class="form-select" id="newAge">
+          <option value="1-2">1-2岁</option>
+          <option value="3-4" selected>3-4岁</option>
+          <option value="5-6">5-6岁</option>
+          <option value="7-10">7-10岁</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closeModal()">取消</button>
+      <button class="btn-modal-save" onclick="saveNewProfile()">✨ 创建档案</button>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <a href="index.html" class="footer-logo">
+        <span style="font-size:28px">📖</span> 毛毛虫绘本
+      </a>
+      <p class="footer-desc">为每个孩子打造专属的绘本世界，用故事点亮想象力，用色彩描绘成长。让阅读成为最美的亲子时光。</p>
+    </div>
+    <div>
+      <div class="footer-col-title">📚 探索</div>
+      <ul class="footer-links">
+        <li><a href="index.html">首页</a></li>
+        <li><a href="stories.html">故事图书馆</a></li>
+        <li><a href="characters.html">角色形象</a></li>
+        <li><a href="voices.html">声音选择</a></li>
+        <li><a href="artstyle.html">画风定制</a></li>
+      </ul>
+    </div>
+    <div>
+      <div class="footer-col-title">🎨 创作</div>
+      <ul class="footer-links">
+        <li><a href="create.html">创作绘本</a></li>
+        <li><a href="player.html">绘本播放器</a></li>
+        <li><a href="share.html">分享作品</a></li>
+        <li><a href="book-detail.html">作品详情</a></li>
+      </ul>
+    </div>
+    <div>
+      <div class="footer-col-title">👶 我的</div>
+      <ul class="footer-links">
+        <li><a href="profile.html">孩子档案</a></li>
+        <li><a href="membership.html">会员中心</a></li>
+        <li><a href="index.html">帮助中心</a></li>
+        <li><a href="index.html">关于我们</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    &copy; 2026 毛毛虫绘本 PictureBook Planet · 用故事点亮每一颗童心 🌟
+  </div>
+</footer>
+
+<script>
+// Profile data
+const profiles = {
+  1: {
+    name: '小星星', emoji: '🌟', age: '3-4岁', ageClass: 'age-young',
+    avatarClass: 'star-avatar', gradient: 'linear-gradient(135deg, #FFE082, #F5A623, #FF8A65)',
+    interests: ['🦁 动物', '🌈 童话', '🎵 儿歌'],
+    level: 35, levelLabel: '启蒙期', levelClass: 'honey-fill',
+    booksCount: 23, tagInterests: ['🦁 动物','🌈 童话','🎵 儿歌'],
+    goals: ['💬 语言发展','🎨 创造力','❤️ 情感教育'],
+    readLevel: 2
+  },
+  2: {
+    name: '豆豆', emoji: '🫘', age: '5-6岁', ageClass: 'age-mid',
+    avatarClass: 'bean-avatar', gradient: 'linear-gradient(135deg, #8BC6A8, #A8E6CF, #7EC8E3)',
+    interests: ['🚀 冒险', '🔬 科普', '🤖 科技', '🌍 自然'],
+    level: 60, levelLabel: '成长期', levelClass: 'sage-fill',
+    booksCount: 45, tagInterests: ['🚀 冒险','🔬 科普','🤖 科技','🌍 自然'],
+    goals: ['🧠 逻辑思维','🌍 世界认知','🤝 社交能力'],
+    readLevel: 3
+  },
+  3: {
+    name: '果果', emoji: '🍑', age: '7-10岁', ageClass: 'age-old',
+    avatarClass: 'fruit-avatar', gradient: 'linear-gradient(135deg, #E1BEE7, #B39DDB, #F48FB1)',
+    interests: ['🏰 历史', '🧩 推理', '🎭 文学'],
+    level: 80, levelLabel: '探索期', levelClass: 'lavender-fill',
+    booksCount: 67, tagInterests: ['🏰 历史','🧩 推理','🎭 文学'],
+    goals: ['🧠 逻辑思维','🎨 创造力','🌍 世界认知'],
+    readLevel: 4
+  }
+};
+
+let activeProfile = 1;
+
+// Tag toggle
+document.querySelectorAll('.tag-item').forEach(tag => {
+  tag.addEventListener('click', function() {
+    this.classList.toggle('selected');
+  });
+});
+
+// Avatar picker in modal
+document.querySelectorAll('.avatar-option').forEach(opt => {
+  opt.addEventListener('click', function() {
+    document.querySelectorAll('.avatar-option').forEach(o => o.classList.remove('selected'));
+    this.classList.add('selected');
+  });
+});
+
+// Set active profile
+function setActive(id) {
+  activeProfile = id;
+  // Update cards
+  document.querySelectorAll('.profile-card').forEach(card => {
+    const cardId = parseInt(card.dataset.id);
+    if (cardId === id) {
+      card.classList.add('active-card');
+      // Add active badge if not present
+      if (!card.querySelector('.active-badge')) {
+        const badge = document.createElement('div');
+        badge.className = 'active-badge';
+        badge.textContent = '⭐ 当前';
+        card.prepend(badge);
+      }
+      // Update button
+      const btn = card.querySelector('.btn-set-active');
+      if (btn) {
+        btn.className = 'btn-card btn-set-active is-active';
+        btn.textContent = '⭐ 当前';
+        btn.onclick = function(e) { e.stopPropagation(); };
+      }
+    } else {
+      card.classList.remove('active-card');
+      const badge = card.querySelector('.active-badge');
+      if (badge) badge.remove();
+      const btn = card.querySelector('.btn-set-active');
+      if (btn) {
+        btn.className = 'btn-card btn-set-active';
+        btn.innerHTML = '⭐ 设为当前';
+        btn.onclick = function(e) { e.stopPropagation(); setActive(cardId); };
+      }
+    }
+  });
+  showToast('⭐', `已切换到 ${profiles[id].name} 的档案`);
+}
+
+// Expand detail panel
+function expandDetail(id) {
+  const p = profiles[id];
+  const section = document.getElementById('detailSection');
+  section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Close detail
+function closeDetail() {
+  const section = document.getElementById('detailSection');
+  section.style.display = 'none';
+  setTimeout(() => { section.style.display = ''; }, 100);
+}
+
+// Open modal
+function openModal() {
+  document.getElementById('addModal').classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+
+// Close modal
+function closeModal() {
+  document.getElementById('addModal').classList.remove('show');
+  document.body.style.overflow = '';
+}
+
+// Save new profile
+function saveNewProfile() {
+  const nickname = document.getElementById('newNickname').value.trim();
+  if (!nickname) {
+    showToast('⚠️', '请输入昵称');
+    document.getElementById('newNickname').focus();
+    return;
+  }
+  const selectedAvatar = document.querySelector('.avatar-option.selected');
+  const emoji = selectedAvatar ? selectedAvatar.dataset.emoji : '🌟';
+  const bg = selectedAvatar ? selectedAvatar.style.background : '';
+  const ageSelect = document.getElementById('newAge');
+  const age = ageSelect.options[ageSelect.selectedIndex].text;
+
+  showToast('🎉', `${nickname} 的档案创建成功！`);
+  closeModal();
+  document.getElementById('newNickname').value = '';
+}
+
+// Toast
+function showToast(icon, text) {
+  const toast = document.getElementById('toast');
+  document.getElementById('toast-icon').textContent = icon;
+  document.getElementById('toast-text').textContent = text;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2500);
+}
+
+// Close modal on overlay click
+document.getElementById('addModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// Close modal on Escape
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeModal();
+});
+
+// Animate level bars on scroll
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.querySelectorAll('.level-fill, .progress-fill').forEach(fill => {
+        const width = fill.style.width;
+        fill.style.width = '0%';
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            fill.style.width = width;
+          });
+        });
+      });
+    }
+  });
+}, { threshold: 0.2 });
+
+document.querySelectorAll('.profile-card, .detail-panel').forEach(el => observer.observe(el));
+</script>
+
+</body>
+</html>

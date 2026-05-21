@@ -3,7 +3,6 @@ import {
   BookOpenCheck,
   ChevronLeft,
   ChevronRight,
-  Flag,
   Pause,
   Play,
   Repeat,
@@ -16,8 +15,8 @@ import { Button } from "@/components/ui/button";
 import { BookPageView, CoReadingPrompts, LearningCards, type BookLanguage, type BookPlayerPayload, type BookVoiceOption } from "@/entities/book";
 import { FavoriteButton, readingApi, type ReadingMode } from "@/features/reading";
 import { useAuth } from "@/features/auth";
+import { ReportContentDialog } from "@/features/moderation";
 import { useProfiles } from "@/features/profile-management";
-import { useToast } from "@/shared/ui/toast";
 import { VoiceSwitcher } from "./VoiceSwitcher";
 
 interface BookPlayerProps {
@@ -34,7 +33,6 @@ const speedOptions = [
 export const BookPlayer: React.FC<BookPlayerProps> = ({ payload, readonly = false }) => {
   const { isAuthenticated } = useAuth();
   const { currentProfile } = useProfiles();
-  const { showToast } = useToast();
   const [currentIndex, setCurrentIndex] = React.useState(0);
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [textMode, setTextMode] = React.useState<BookLanguage>(payload.default_text_mode);
@@ -127,10 +125,7 @@ export const BookPlayer: React.FC<BookPlayerProps> = ({ payload, readonly = fals
             共读
           </Button>
           {!readonly ? <FavoriteButton bookId={payload.book.id} childProfileId={childProfileId} /> : null}
-          <Button variant="ghost" onClick={() => showToast("举报入口已记录，后续会接入审核模块")}>
-            <Flag className="h-4 w-4" />
-            举报
-          </Button>
+          <ReportContentDialog targetType="book" targetId={payload.book.id} />
         </div>
       </div>
 

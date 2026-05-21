@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.model.book import Book, BookLanguage, BookModerationStatus, BookPage, BookPublishStatus, BookSourceType
+from app.model.asset import AssetKind
 from app.model.creation import (
     CreationSession,
     CreationSessionStatus,
@@ -31,6 +32,7 @@ from app.service import account as account_service
 from app.service import book as book_service
 from app.service import generation_task
 from app.service import story as story_service
+from app.service import storage as storage_service
 from app.service import template as template_service
 
 
@@ -143,13 +145,15 @@ async def generate_storyboard(db: AsyncSession, user_id: int, session_id: int) -
     await generation_task.mark_task_running(db, task.id)
     try:
         title = "专属绘本"
+        story_content = title
         if session.story_id is not None:
             story = await story_service.assert_story_usable(db, user_id, session.story_id)
             title = story.title
+            story_content = story.body
         structured = await ai_provider.generate_structured(
             db,
             task_id=task.id,
-            request={"title": title, "target_page_count": session.target_page_count},
+            request={"title": title, "story_content": story_content, "target_page_count": session.target_page_count},
         )
     except Exception as exc:
         failed = await _mark_generation_failed(db, session, task.id, exc)
@@ -179,6 +183,7 @@ async def update_storyboard_page(
         setattr(page, field, value)
     page.image_asset_id = None
     page.audio_asset_id = None
+    page.lip_sync_url = None
     page.generation_status = StoryboardGenerationStatus.DRAFT
     await db.commit()
     return await get_session(db, user_id, session_id)
@@ -202,10 +207,19 @@ async def generate_audio(
     return await _generate_media_task(db, user_id, session_id, payload, GenerationTaskType.AUDIO)
 
 
+async def generate_lip_sync(
+    db: AsyncSession,
+    user_id: int,
+    session_id: int,
+    payload: GeneratePagesRequest,
+) -> CreationTaskResponse:
+    return await _generate_media_task(db, user_id, session_id, payload, GenerationTaskType.LIP_SYNC)
+
+
 async def regenerate(db: AsyncSession, user_id: int, session_id: int, payload: RegenerateRequest) -> CreationTaskResponse:
     session = await _get_session_model(db, user_id, session_id)
     task_type = TASK_TYPE_BY_REGENERATE_TARGET[payload.target_type]
-    if task_type not in {GenerationTaskType.IMAGE, GenerationTaskType.AUDIO}:
+    if task_type not in {GenerationTaskType.IMAGE, GenerationTaskType.AUDIO, GenerationTaskType.LIP_SYNC}:
         raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="该重生成类型尚未实现")
     task = await generation_task.create_task(
         db,
@@ -223,9 +237,21 @@ async def regenerate(db: AsyncSession, user_id: int, session_id: int, payload: R
             page.generation_status = StoryboardGenerationStatus.PENDING
     try:
         if task_type == GenerationTaskType.IMAGE:
-            await ai_provider.generate_image(db, task_id=task.id, page_ids=payload.page_ids)
+            image_result = await ai_provider.generate_image(db, task_id=task.id, pages=_page_payloads(session, payload.page_ids))
+            await _persist_media_result_urls(db, user_id, image_result, url_key="image_url", asset_kind=AssetKind.IMAGE, extension=".png")
+            _apply_image_results(session, image_result)
+        elif task_type == GenerationTaskType.AUDIO:
+            audio_result = await ai_provider.generate_audio(
+                db,
+                task_id=task.id,
+                pages=_page_payloads(session, payload.page_ids),
+                voice_ref=session.voice_ref,
+            )
+            await _persist_media_result_urls(db, user_id, audio_result, url_key="audio_url", asset_kind=AssetKind.AUDIO, extension=".wav")
+            _apply_audio_results(session, audio_result)
         else:
-            await ai_provider.generate_audio(db, task_id=task.id, page_ids=payload.page_ids)
+            lip_sync_result = await ai_provider.generate_lip_sync(db, task_id=task.id, pages=_page_payloads(session, payload.page_ids))
+            _apply_lip_sync_results(session, lip_sync_result)
     except Exception as exc:
         failed = await _mark_generation_failed(db, session, task.id, exc)
         for page in session.storyboard_pages:
@@ -298,8 +324,11 @@ async def save_book(db: AsyncSession, user_id: int, session_id: int) -> SaveBook
                 narration_text=page.narration_text,
                 visual_prompt=page.visual_prompt,
                 image_asset_id=page.image_asset_id,
+                image_url=page.image_url,
+                video_url=page.lip_sync_url,
                 audio_asset_id=page.audio_asset_id,
-                lip_sync_status="none",
+                audio_url=page.audio_url,
+                lip_sync_status="ready" if page.lip_sync_url else "none",
             )
         )
     session.saved_book_id = book.id
@@ -330,9 +359,21 @@ async def _generate_media_task(
     await generation_task.mark_task_running(db, task.id)
     try:
         if task_type == GenerationTaskType.IMAGE:
-            await ai_provider.generate_image(db, task_id=task.id, page_ids=payload.page_ids)
+            image_result = await ai_provider.generate_image(db, task_id=task.id, pages=_page_payloads(session, payload.page_ids))
+            await _persist_media_result_urls(db, user_id, image_result, url_key="image_url", asset_kind=AssetKind.IMAGE, extension=".png")
+            _apply_image_results(session, image_result)
+        elif task_type == GenerationTaskType.AUDIO:
+            audio_result = await ai_provider.generate_audio(
+                db,
+                task_id=task.id,
+                pages=_page_payloads(session, payload.page_ids),
+                voice_ref=session.voice_ref,
+            )
+            await _persist_media_result_urls(db, user_id, audio_result, url_key="audio_url", asset_kind=AssetKind.AUDIO, extension=".wav")
+            _apply_audio_results(session, audio_result)
         else:
-            await ai_provider.generate_audio(db, task_id=task.id, page_ids=payload.page_ids)
+            lip_sync_result = await ai_provider.generate_lip_sync(db, task_id=task.id, pages=_page_payloads(session, payload.page_ids))
+            _apply_lip_sync_results(session, lip_sync_result)
     except Exception as exc:
         failed = await _mark_generation_failed(db, session, task.id, exc)
         for page in session.storyboard_pages:
@@ -351,6 +392,93 @@ async def _generate_media_task(
     )
     await db.commit()
     return CreationTaskResponse(session=await get_session(db, user_id, session_id), task=completed)
+
+
+def _page_payloads(session: CreationSession, page_ids: list[int] | None) -> list[dict]:
+    pages = [page for page in session.storyboard_pages if page_ids is None or page.id in page_ids]
+    if not pages:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="没有可生成的分镜页")
+    return [
+        {
+            "id": page.id,
+            "page_no": page.page_no,
+            "title": page.title,
+            "text_zh": page.text_zh,
+            "text_en": page.text_en,
+            "narration_text": page.narration_text,
+            "visual_prompt": page.visual_prompt,
+            "character_appearances": page.character_appearances or [],
+            "dialogues": page.dialogues or [],
+            "image_url": page.image_url,
+            "audio_url": page.audio_url,
+            "lip_sync_url": page.lip_sync_url,
+        }
+        for page in pages
+    ]
+
+
+def _apply_image_results(session: CreationSession, image_result: dict) -> None:
+    images_by_page_id = {
+        item.get("page_id"): item
+        for item in image_result.get("page_results", [])
+        if item.get("page_id") is not None and item.get("image_url")
+    }
+    for page in session.storyboard_pages:
+        image_item = images_by_page_id.get(page.id)
+        if image_item:
+            page.image_url = image_item.get("image_url")
+            page.image_asset_id = image_item.get("image_asset_id") or page.image_asset_id
+
+
+async def _persist_media_result_urls(
+    db: AsyncSession,
+    user_id: int,
+    result: dict,
+    *,
+    url_key: str,
+    asset_kind: AssetKind,
+    extension: str,
+) -> None:
+    for item in result.get("page_results", []):
+        url = str(item.get(url_key) or "")
+        if not url.startswith("data:"):
+            continue
+        stored = await storage_service.save_generated_data_url(
+            db,
+            user_id,
+            data_url=url,
+            asset_kind=asset_kind,
+            filename_extension=extension,
+        )
+        item[url_key] = stored.url
+        asset_key = f"{asset_kind.value}_asset_id"
+        item[asset_key] = stored.id
+
+
+def _apply_audio_results(session: CreationSession, audio_result: dict) -> None:
+    audio_by_page_id = {
+        item.get("page_id"): item
+        for item in audio_result.get("page_results", [])
+        if item.get("page_id") is not None and item.get("audio_url")
+    }
+    for page in session.storyboard_pages:
+        audio_item = audio_by_page_id.get(page.id)
+        if audio_item:
+            page.audio_url = audio_item.get("audio_url")
+            page.audio_asset_id = audio_item.get("audio_asset_id") or page.audio_asset_id
+            page.lip_sync_url = None
+
+
+def _apply_lip_sync_results(session: CreationSession, lip_sync_result: dict) -> None:
+    lip_sync_by_page_id = {
+        item.get("page_id"): item.get("lip_sync_url")
+        for item in lip_sync_result.get("page_results", [])
+        if item.get("page_id") is not None and item.get("lip_sync_url")
+    }
+    for page in session.storyboard_pages:
+        lip_sync_url = lip_sync_by_page_id.get(page.id)
+        if lip_sync_url:
+            page.lip_sync_url = lip_sync_url
 
 
 async def _replace_storyboard_pages(db: AsyncSession, session: CreationSession, pages: list[dict]) -> None:

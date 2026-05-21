@@ -41,3 +41,10 @@ class AuditLogRead(BaseModel):
     ip_hash: str | None
     user_agent: str | None
     created_at: datetime
+
+
+class AuditLogListRead(BaseModel):
+    items: list[AuditLogRead]
+    total: int
+    limit: int
+    offset: int

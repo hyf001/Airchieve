@@ -35,7 +35,10 @@ export interface StoryboardPage {
   character_appearances: Record<string, unknown>[];
   dialogues: Record<string, unknown>[];
   image_asset_id?: number | null;
+  image_url?: string | null;
   audio_asset_id?: number | null;
+  audio_url?: string | null;
+  lip_sync_url?: string | null;
   generation_status: "draft" | "pending" | "ready" | "failed";
 }
 

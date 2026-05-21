@@ -1,4 +1,5 @@
 import asyncio
+import base64
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import PurePosixPath
@@ -162,6 +163,45 @@ async def get_asset_url(db: AsyncSession, asset_id: int, *, user_id: int | None 
     if asset.visibility == AssetVisibility.PRIVATE and asset.owner_user_id != user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问该文件")
     return get_file_url(asset.storage_key, expires_in=expires_in)
+
+
+async def save_generated_data_url(
+    db: AsyncSession,
+    user_id: int,
+    *,
+    data_url: str,
+    asset_kind: AssetKind,
+    filename_extension: str,
+    visibility: AssetVisibility = AssetVisibility.PRIVATE,
+) -> AssetStorageDTO:
+    if not data_url.startswith("data:") or ";base64," not in data_url:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="生成结果不是有效 data URL")
+    metadata, base64_payload = data_url.split(";base64,", 1)
+    mime_type = metadata.removeprefix("data:") or "application/octet-stream"
+    try:
+        content = base64.b64decode(base64_payload)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="生成结果 base64 无法解码") from exc
+    storage_key = f"generated/{asset_kind.value}/{user_id}/{uuid4().hex}{filename_extension}"
+    await asyncio.to_thread(_get_oss_bucket().put_object, storage_key, content, headers={"Content-Type": mime_type})
+    asset = Asset(
+        owner_user_id=user_id,
+        asset_kind=asset_kind,
+        storage_key=storage_key,
+        mime_type=mime_type,
+        byte_size=len(content),
+        visibility=visibility,
+        status=AssetStatus.READY,
+    )
+    db.add(asset)
+    await db.flush()
+    return AssetStorageDTO(
+        id=asset.id,
+        storage_key=asset.storage_key,
+        url=get_file_url(asset.storage_key),
+        mime_type=asset.mime_type,
+        byte_size=asset.byte_size,
+    )
 
 
 async def _get_uploaded_object_size(storage_key: str) -> int | None:

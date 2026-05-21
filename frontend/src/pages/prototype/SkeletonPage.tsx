@@ -23,6 +23,7 @@ const routeMeta: Record<AppRoute, { title: string; subtitle: string; eyebrow: st
   "/book-detail": { title: "绘本详情", subtitle: "查看简介、试看和推荐内容", eyebrow: "详情页", icon: "📘" },
   "/share": { title: "分享", subtitle: "生成家人可访问的分享入口", eyebrow: "分享页", icon: "🔗" },
   "/share/public": { title: "公开分享", subtitle: "只读播放家人分享的绘本", eyebrow: "分享播放", icon: "🔗" },
+  "/admin": { title: "运营后台", subtitle: "聚合审核、统计和审计入口", eyebrow: "后台", icon: "🛠️" },
   "/voices": { title: "声音", subtitle: "选择旁白音色或录制家人声音", eyebrow: "声音库", icon: "🎙️" },
 };
 

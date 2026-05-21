@@ -5,7 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.model.book import Book, BookPublishStatus
-from app.model.creation import CreationSession, CreationSessionStatus, CreationStep, CreationType
+from app.model.creation import CreationSession, CreationSessionStatus, CreationStep, CreationStoryboardPage, CreationType
 from app.schema.creation import CreationSessionCreate
 
 
@@ -88,6 +88,38 @@ class TestGenerateAudioAIError:
         )
         assert result.task.status == "failed"
         assert result.task.error_code == "PROVIDER_FAILED"
+
+
+class TestGenerateLipSync:
+    @patch("app.service.ai_provider.generate_lip_sync", new_callable=AsyncMock)
+    async def test_generate_lip_sync_applies_page_result(self, mock_gen, db: AsyncSession):
+        session = await _create_test_session(db)
+        page = CreationStoryboardPage(
+            session_id=session.id,
+            page_no=1,
+            title="Page 1",
+            text_zh="你好",
+            narration_text="你好",
+            visual_prompt="孩子在说话",
+            image_url="https://example.com/page.png",
+            audio_url="https://example.com/audio.wav",
+        )
+        db.add(page)
+        await db.commit()
+        mock_gen.return_value = {"page_results": [{"page_id": page.id, "lip_sync_url": "https://example.com/lip.mp4"}]}
+
+        from app.schema.creation import GeneratePagesRequest
+        from app.service.creation import generate_lip_sync
+
+        result = await generate_lip_sync(
+            db,
+            user_id=1,
+            session_id=session.id,
+            payload=GeneratePagesRequest(page_ids=[page.id]),
+        )
+
+        assert result.task.status == "succeeded"
+        assert result.session.storyboard_pages[0].lip_sync_url == "https://example.com/lip.mp4"
 
 
 class TestRegenerateUnsupported:

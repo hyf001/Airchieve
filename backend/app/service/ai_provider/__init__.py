@@ -1,6 +1,7 @@
 from app.service.ai_provider.service import (
     generate_audio,
     generate_image,
+    generate_lip_sync,
     generate_structured,
     generate_text,
     record_provider_call,
@@ -9,6 +10,7 @@ from app.service.ai_provider.service import (
 __all__ = [
     "generate_audio",
     "generate_image",
+    "generate_lip_sync",
     "generate_structured",
     "generate_text",
     "record_provider_call",

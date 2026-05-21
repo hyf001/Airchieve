@@ -71,6 +71,11 @@ export const AppShell: React.FC<AppShellProps> = ({ children, hideSearch = false
           </div>
 
           <div className="flex shrink-0 items-center gap-2.5">
+            {user?.role === "admin" ? (
+              <Button asChild variant="ghost" className="max-sm:hidden">
+                <AppLink to="/admin">后台</AppLink>
+              </Button>
+            ) : null}
             <Button asChild variant="ghost" className="max-sm:hidden">
               <AppLink to="/profile">我的档案</AppLink>
             </Button>
