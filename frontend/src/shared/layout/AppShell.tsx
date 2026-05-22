@@ -1,5 +1,5 @@
 import React from "react";
-import { Search } from "lucide-react";
+import { LogOut, Search } from "lucide-react";
 
 import { type AppRoute, useRouter } from "@/app/router";
 import { Button } from "@/components/ui/button";
@@ -22,8 +22,13 @@ interface AppShellProps {
 }
 
 export const AppShell: React.FC<AppShellProps> = ({ children, hideSearch = false }) => {
-  const { path } = useRouter();
-  const { isAuthenticated, user } = useAuth();
+  const { path, navigate } = useRouter();
+  const { isAuthenticated, logout, user } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/");
+  };
 
   return (
     <div className="min-h-screen bg-[var(--warm-bg)] text-[var(--text-dark)]">
@@ -80,14 +85,27 @@ export const AppShell: React.FC<AppShellProps> = ({ children, hideSearch = false
               <AppLink to="/profile">我的档案</AppLink>
             </Button>
             {isAuthenticated ? (
-              <AppLink
-                to="/profile"
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--sage),var(--sky))] text-sm font-black text-white no-underline shadow-[0_2px_8px_rgba(139,198,168,0.3)]"
-                aria-label={`当前账号：${user?.display_name ?? "已登录"}`}
-                title={user?.display_name ?? "已登录"}
-              >
-                {(user?.display_name ?? "家").slice(0, 1)}
-              </AppLink>
+              <>
+                <Button
+                  aria-label="退出登录"
+                  className="px-3.5 max-sm:w-10 max-sm:px-0"
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                  onClick={() => void handleLogout()}
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span className="max-sm:hidden">退出登录</span>
+                </Button>
+                <AppLink
+                  to="/profile"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--sage),var(--sky))] text-sm font-black text-white no-underline shadow-[0_2px_8px_rgba(139,198,168,0.3)]"
+                  aria-label={`当前账号：${user?.display_name ?? "已登录"}`}
+                  title={user?.display_name ?? "已登录"}
+                >
+                  {(user?.display_name ?? "家").slice(0, 1)}
+                </AppLink>
+              </>
             ) : (
               <Button asChild>
                 <AppLink to="/auth">登录</AppLink>

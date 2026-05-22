@@ -70,6 +70,53 @@ class CustomArtStyleCreate(BaseModel):
     prompt: str | None = Field(default=None, max_length=2000)
 
 
+class SystemArtStyleCreate(BaseModel):
+    code: str = Field(min_length=1, max_length=80)
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(min_length=1, max_length=1000)
+    prompt: str | None = Field(default=None, max_length=2000)
+    example_asset_id: int | None = None
+    example_image_base64: str | None = Field(default=None, min_length=1)
+    example_image_mime_type: str = Field(default="image/png", min_length=1, max_length=120)
+    example_image_filename: str = Field(default="art-style-preview.png", min_length=1, max_length=240)
+    age_range_codes: list[str] = Field(default_factory=list)
+    access_level: AssetAccessLevel = AssetAccessLevel.FREE
+    sort_order: int = 0
+    status: ArtStyleStatus = ArtStyleStatus.ACTIVE
+
+
+class SystemArtStyleUpdate(BaseModel):
+    code: str | None = Field(default=None, min_length=1, max_length=80)
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = Field(default=None, min_length=1, max_length=1000)
+    prompt: str | None = Field(default=None, max_length=2000)
+    example_asset_id: int | None = None
+    example_image_base64: str | None = Field(default=None, min_length=1)
+    example_image_mime_type: str | None = Field(default=None, min_length=1, max_length=120)
+    example_image_filename: str | None = Field(default=None, min_length=1, max_length=240)
+    age_range_codes: list[str] | None = None
+    access_level: AssetAccessLevel | None = None
+    sort_order: int | None = None
+    status: ArtStyleStatus | None = None
+
+
+class ArtStyleImageUploadRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    base64_data: str | None = Field(default=None, min_length=1, alias="base64")
+    data_url: str | None = Field(default=None, min_length=1)
+    mime_type: str = Field(default="image/png", min_length=1, max_length=120)
+    filename: str = Field(default="art-style-preview.png", min_length=1, max_length=240)
+
+    @model_validator(mode="after")
+    def normalize_base64_data(self) -> "ArtStyleImageUploadRequest":
+        if self.data_url and not self.base64_data:
+            self.base64_data = self.data_url
+        if not self.base64_data:
+            raise ValueError("必须提供 base64 或 data_url")
+        return self
+
+
 class CharacterSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

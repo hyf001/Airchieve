@@ -6,12 +6,15 @@ from fastapi.responses import JSONResponse
 
 from app.api.v1.router import api_router
 from app.core.config import settings
-from app.db.session import init_db
+from app.db.session import async_session_maker, init_db
+from app.service.asset.seed import seed_system_art_styles
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await init_db()
+    async with async_session_maker() as session:
+        await seed_system_art_styles(session)
     yield
 
 

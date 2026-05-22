@@ -3,6 +3,7 @@ import base64
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import PurePosixPath
+from urllib.parse import quote
 from uuid import uuid4
 
 from fastapi import HTTPException, status
@@ -49,7 +50,11 @@ def _sign_oss_url(method: str, storage_key: str, expires_in: int, *, headers: di
 
 
 def get_file_url(storage_key: str, expires_in: int | None = None) -> str:
-    return _sign_oss_url("GET", storage_key, expires_in or settings.OSS_DOWNLOAD_EXPIRE_SECONDS)
+    if not settings.OSS_BUCKET_NAME or not settings.OSS_ENDPOINT:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="OSS 配置缺失：OSS_BUCKET_NAME, OSS_ENDPOINT")
+    endpoint = settings.OSS_ENDPOINT.removeprefix("https://").removeprefix("http://").rstrip("/")
+    path = quote(storage_key.lstrip("/"), safe="/")
+    return f"https://{settings.OSS_BUCKET_NAME}.{endpoint}/{path}"
 
 
 def _guess_asset_kind(mime_type: str) -> AssetKind:
@@ -64,6 +69,12 @@ def _guess_asset_kind(mime_type: str) -> AssetKind:
     return AssetKind.OTHER
 
 
+def _asset_storage_key(asset_kind: AssetKind, user_id: int | None, filename: str) -> str:
+    extension = PurePosixPath(filename).suffix.lower()
+    owner_segment = str(user_id) if user_id is not None else "system"
+    return f"asset/{asset_kind.value}/user/{owner_segment}/{uuid4().hex}{extension}"
+
+
 def _as_aware_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
@@ -74,8 +85,8 @@ async def create_upload_session(db: AsyncSession, user_id: int, payload: UploadS
     max_size = MAX_UPLOAD_BYTES[payload.purpose]
     if payload.byte_size is not None and payload.byte_size > max_size:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="文件大小超过当前上传类型限制")
-    extension = PurePosixPath(payload.filename).suffix.lower()
-    storage_key = f"uploads/{payload.purpose.value}/{user_id}/{uuid4().hex}{extension}"
+    asset_kind = _guess_asset_kind(payload.mime_type)
+    storage_key = _asset_storage_key(asset_kind, user_id, payload.filename)
     upload_headers = {"Content-Type": payload.mime_type}
     upload_url = _sign_oss_url("PUT", storage_key, settings.OSS_UPLOAD_EXPIRE_SECONDS, headers=upload_headers)
     session = StorageUploadSession(
@@ -113,6 +124,8 @@ async def complete_upload(
     user_id: int,
     upload_session_id: int,
     payload: UploadCompleteRequest,
+    *,
+    allow_system_visibility: bool = False,
 ) -> AssetStorageDTO:
     session = await db.get(StorageUploadSession, upload_session_id)
     if session is None or session.user_id != user_id:
@@ -132,6 +145,8 @@ async def complete_upload(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OSS 文件大小超过当前上传类型限制")
     if payload.byte_size is not None and payload.byte_size != object_size:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="上传文件大小与 OSS 文件不一致")
+    if payload.visibility == AssetVisibility.SYSTEM and not allow_system_visibility:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权创建系统素材")
 
     asset = Asset(
         owner_user_id=user_id,
@@ -182,7 +197,47 @@ async def save_generated_data_url(
         content = base64.b64decode(base64_payload)
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="生成结果 base64 无法解码") from exc
-    storage_key = f"generated/{asset_kind.value}/{user_id}/{uuid4().hex}{filename_extension}"
+    storage_key = _asset_storage_key(asset_kind, user_id, f"generated{filename_extension}")
+    await asyncio.to_thread(_get_oss_bucket().put_object, storage_key, content, headers={"Content-Type": mime_type})
+    asset = Asset(
+        owner_user_id=user_id,
+        asset_kind=asset_kind,
+        storage_key=storage_key,
+        mime_type=mime_type,
+        byte_size=len(content),
+        visibility=visibility,
+        status=AssetStatus.READY,
+    )
+    db.add(asset)
+    await db.flush()
+    return AssetStorageDTO(
+        id=asset.id,
+        storage_key=asset.storage_key,
+        url=get_file_url(asset.storage_key),
+        mime_type=asset.mime_type,
+        byte_size=asset.byte_size,
+    )
+
+
+async def save_base64_asset(
+    db: AsyncSession,
+    user_id: int | None,
+    *,
+    base64_data: str,
+    mime_type: str,
+    asset_kind: AssetKind,
+    filename: str,
+    visibility: AssetVisibility = AssetVisibility.PRIVATE,
+) -> AssetStorageDTO:
+    payload = base64_data
+    if payload.startswith("data:") and ";base64," in payload:
+        metadata, payload = payload.split(";base64,", 1)
+        mime_type = metadata.removeprefix("data:") or mime_type
+    try:
+        content = base64.b64decode(payload, validate=True)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="base64 内容无法解码") from exc
+    storage_key = _asset_storage_key(asset_kind, user_id, filename)
     await asyncio.to_thread(_get_oss_bucket().put_object, storage_key, content, headers={"Content-Type": mime_type})
     asset = Asset(
         owner_user_id=user_id,

@@ -1,5 +1,6 @@
 from app.schema.asset.asset import (
     ArtStyleListRead,
+    ArtStyleImageUploadRequest,
     ArtStyleRead,
     AssetInternalDTO,
     AssetRead,
@@ -10,6 +11,8 @@ from app.schema.asset.asset import (
     CharacterSummary,
     CharacterUpdateRequest,
     CustomArtStyleCreate,
+    SystemArtStyleCreate,
+    SystemArtStyleUpdate,
     VoiceCreateRequest,
     VoiceListRead,
     VoiceRead,
@@ -19,6 +22,7 @@ from app.schema.asset.asset import (
 
 __all__ = [
     "ArtStyleListRead",
+    "ArtStyleImageUploadRequest",
     "ArtStyleRead",
     "AssetInternalDTO",
     "AssetRead",
@@ -29,6 +33,8 @@ __all__ = [
     "CharacterSummary",
     "CharacterUpdateRequest",
     "CustomArtStyleCreate",
+    "SystemArtStyleCreate",
+    "SystemArtStyleUpdate",
     "VoiceCreateRequest",
     "VoiceListRead",
     "VoiceRead",

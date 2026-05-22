@@ -30,3 +30,14 @@ async def test_uploaded_object_size_rejects_invalid_content_length(monkeypatch):
         await storage_service._get_uploaded_object_size("uploads/voice/1/sample.mp3")
 
     assert exc_info.value.status_code == 400
+
+
+def test_get_file_url_returns_public_oss_url(monkeypatch):
+    monkeypatch.setattr(storage_service.settings, "OSS_BUCKET_NAME", "airchieve")
+    monkeypatch.setattr(storage_service.settings, "OSS_ENDPOINT", "https://oss-cn-beijing.aliyuncs.com")
+
+    url = storage_service.get_file_url("generated/image/2/test image.jpg", expires_in=60)
+
+    assert url == "https://airchieve.oss-cn-beijing.aliyuncs.com/generated/image/2/test%20image.jpg"
+    assert "Signature=" not in url
+    assert "Expires=" not in url
