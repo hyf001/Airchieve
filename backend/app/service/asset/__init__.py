@@ -5,6 +5,7 @@ from app.service.asset.service import (
     create_system_art_style,
     create_voice,
     delete_character,
+    delete_custom_art_style,
     delete_system_art_style,
     delete_voice,
     get_art_style,
@@ -19,6 +20,7 @@ from app.service.asset.service import (
     set_default_character,
     set_default_voice,
     update_character,
+    update_custom_art_style,
     update_system_art_style,
     update_voice,
 )
@@ -30,6 +32,7 @@ __all__ = [
     "create_system_art_style",
     "create_voice",
     "delete_character",
+    "delete_custom_art_style",
     "delete_system_art_style",
     "delete_voice",
     "get_art_style",
@@ -44,6 +47,7 @@ __all__ = [
     "set_default_character",
     "set_default_voice",
     "update_character",
+    "update_custom_art_style",
     "update_system_art_style",
     "update_voice",
 ]

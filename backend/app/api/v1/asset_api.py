@@ -13,6 +13,7 @@ from app.schema.asset import (
     CharacterRead,
     CharacterUpdateRequest,
     CustomArtStyleCreate,
+    CustomArtStyleUpdate,
     VoiceCreateRequest,
     VoiceListRead,
     VoiceRead,
@@ -110,6 +111,26 @@ async def create_custom_art_style(
     user_id: int = Depends(current_user_id),
 ) -> ArtStyleRead:
     return await asset.create_custom_art_style(db, user_id, payload)
+
+
+@router.patch("/custom-art-styles/{style_id}", response_model=ArtStyleRead)
+async def update_custom_art_style(
+    style_id: int,
+    payload: CustomArtStyleUpdate,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(current_user_id),
+) -> ArtStyleRead:
+    return await asset.update_custom_art_style(db, user_id, style_id, payload)
+
+
+@router.delete("/custom-art-styles/{style_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_custom_art_style(
+    style_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(current_user_id),
+) -> Response:
+    await asset.delete_custom_art_style(db, user_id, style_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/voices", response_model=VoiceListRead)

@@ -15,11 +15,13 @@ from app.service import generation_task
 from app.service.asset.art_style import (
     create_custom_art_style,
     create_system_art_style,
+    delete_custom_art_style,
     delete_system_art_style,
     get_admin_system_art_style,
     get_art_style,
     list_admin_system_art_styles,
     list_art_styles,
+    update_custom_art_style,
     update_system_art_style,
 )
 from app.service.asset.character import (
@@ -85,6 +87,7 @@ __all__ = [
     "create_system_art_style",
     "create_voice",
     "delete_character",
+    "delete_custom_art_style",
     "delete_system_art_style",
     "delete_voice",
     "get_admin_system_art_style",
@@ -99,6 +102,7 @@ __all__ = [
     "set_default_character",
     "set_default_voice",
     "update_character",
+    "update_custom_art_style",
     "update_system_art_style",
     "update_voice",
 ]

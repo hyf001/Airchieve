@@ -65,9 +65,35 @@ class ArtStyleListRead(BaseModel):
 
 
 class CustomArtStyleCreate(BaseModel):
+    code: str | None = Field(default=None, min_length=1, max_length=80)
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(min_length=1, max_length=1000)
     prompt: str | None = Field(default=None, max_length=2000)
+    example_asset_id: int | None = None
+    example_url: str | None = Field(default=None, max_length=500)
+    example_image_base64: str | None = Field(default=None, min_length=1)
+    example_image_mime_type: str = Field(default="image/png", min_length=1, max_length=120)
+    example_image_filename: str = Field(default="art-style-preview.png", min_length=1, max_length=240)
+    age_range_codes: list[str] = Field(default_factory=list)
+    access_level: AssetAccessLevel = AssetAccessLevel.FREE
+    sort_order: int = 0
+    status: ArtStyleStatus = ArtStyleStatus.ACTIVE
+
+
+class CustomArtStyleUpdate(BaseModel):
+    code: str | None = Field(default=None, min_length=1, max_length=80)
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = Field(default=None, min_length=1, max_length=1000)
+    prompt: str | None = Field(default=None, max_length=2000)
+    example_asset_id: int | None = None
+    example_url: str | None = Field(default=None, max_length=500)
+    example_image_base64: str | None = Field(default=None, min_length=1)
+    example_image_mime_type: str | None = Field(default=None, min_length=1, max_length=120)
+    example_image_filename: str | None = Field(default=None, min_length=1, max_length=240)
+    age_range_codes: list[str] | None = None
+    access_level: AssetAccessLevel | None = None
+    sort_order: int | None = None
+    status: ArtStyleStatus | None = None
 
 
 class SystemArtStyleCreate(BaseModel):
@@ -76,6 +102,7 @@ class SystemArtStyleCreate(BaseModel):
     description: str = Field(min_length=1, max_length=1000)
     prompt: str | None = Field(default=None, max_length=2000)
     example_asset_id: int | None = None
+    example_url: str | None = Field(default=None, max_length=500)
     example_image_base64: str | None = Field(default=None, min_length=1)
     example_image_mime_type: str = Field(default="image/png", min_length=1, max_length=120)
     example_image_filename: str = Field(default="art-style-preview.png", min_length=1, max_length=240)
@@ -91,6 +118,7 @@ class SystemArtStyleUpdate(BaseModel):
     description: str | None = Field(default=None, min_length=1, max_length=1000)
     prompt: str | None = Field(default=None, max_length=2000)
     example_asset_id: int | None = None
+    example_url: str | None = Field(default=None, max_length=500)
     example_image_base64: str | None = Field(default=None, min_length=1)
     example_image_mime_type: str | None = Field(default=None, min_length=1, max_length=120)
     example_image_filename: str | None = Field(default=None, min_length=1, max_length=240)
