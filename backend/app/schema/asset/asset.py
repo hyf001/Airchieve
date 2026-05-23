@@ -13,6 +13,7 @@ from app.model.asset import (
     LibraryItemStatus,
     VoiceProcessingStatus,
 )
+from app.model.generation_task import GenerationTaskStatus
 
 
 class AssetRead(BaseModel):
@@ -151,27 +152,25 @@ class CharacterSummary(BaseModel):
     id: int
     owner_user_id: int | None = None
     name: str
-    identity_tag: str | None = None
     description: str | None = None
-    image_asset_id: int | None = None
     image_url: str | None = None
     art_style_id: int | None = None
-    art_style_code: str | None = None
-    custom_art_style_prompt: str | None = None
-    age_range_codes: list[str] = Field(default_factory=list)
+    category_code: str | None = None
     access_level: AssetAccessLevel
     source_type: AssetSourceType
     is_default: bool
-    moderation_status: AssetModerationStatus
+    generation_task_id: int | None = None
+    generation_status: GenerationTaskStatus | None = None
+    generation_progress_percent: int | None = None
+    generation_error_message: str | None = None
     status: LibraryItemStatus
     created_at: datetime
     updated_at: datetime
 
 
 class CharacterRead(CharacterSummary):
-    reference_asset_id: int | None = None
+    reference_character_id: int | None = None
     generation_prompt: str | None = None
-    category_code: str | None = None
     art_style: ArtStyleRead | None = None
 
 
@@ -184,27 +183,58 @@ class CharacterListRead(BaseModel):
 
 class CharacterCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    identity_tag: str | None = Field(default=None, max_length=80)
     description: str | None = Field(default=None, max_length=1000)
+    reference_character_id: int | None = None
     reference_asset_id: int | None = None
     upload_consent_id: int | None = None
     art_style_id: int | None = None
-    custom_art_style_prompt: str | None = Field(default=None, max_length=2000)
-    generation_prompt: str = Field(min_length=1, max_length=2000)
+    generation_prompt: str | None = Field(default=None, max_length=2000)
     category_code: str | None = None
-    age_range_codes: list[str] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def require_art_style(self) -> "CharacterCreateRequest":
-        if self.art_style_id is None and not (self.custom_art_style_prompt and self.custom_art_style_prompt.strip()):
-            raise ValueError("必须选择系统画风或填写自定义画风描述")
-        return self
 
 
 class CharacterUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
-    identity_tag: str | None = Field(default=None, max_length=80)
     description: str | None = Field(default=None, max_length=1000)
+    image_url: str | None = Field(default=None, max_length=500)
+    art_style_id: int | None = None
+    generation_prompt: str | None = Field(default=None, max_length=2000)
+    category_code: str | None = Field(default=None, max_length=64)
+
+
+class SystemCharacterCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=1000)
+    image_url: str | None = Field(default=None, max_length=500)
+    art_style_id: int | None = None
+    generation_prompt: str | None = Field(default=None, max_length=2000)
+    category_code: str | None = Field(default=None, max_length=64)
+    access_level: AssetAccessLevel = AssetAccessLevel.FREE
+    status: LibraryItemStatus = LibraryItemStatus.ACTIVE
+
+    @model_validator(mode="after")
+    def require_image(self) -> "SystemCharacterCreate":
+        if not (self.image_url and self.image_url.strip()):
+            raise ValueError("必须填写系统形象图片地址")
+        if self.status == LibraryItemStatus.DELETED:
+            raise ValueError("创建系统形象时不能使用删除状态")
+        return self
+
+
+class SystemCharacterUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=1000)
+    image_url: str | None = Field(default=None, max_length=500)
+    art_style_id: int | None = None
+    generation_prompt: str | None = Field(default=None, max_length=2000)
+    category_code: str | None = Field(default=None, max_length=64)
+    access_level: AssetAccessLevel | None = None
+    status: LibraryItemStatus | None = None
+
+    @model_validator(mode="after")
+    def reject_deleted_status(self) -> "SystemCharacterUpdate":
+        if self.status == LibraryItemStatus.DELETED:
+            raise ValueError("请使用删除接口删除系统形象")
+        return self
 
 
 class VoiceSummary(BaseModel):

@@ -21,8 +21,11 @@ from app.model.asset import (
     VoiceProcessingStatus,
 )
 from app.model.privacy import UploadConsentTargetType
+from app.model.taxonomy import TaxonomyItem, TaxonomyItemStatus, TaxonomyType
 from app.schema.asset import CharacterCreateRequest, CharacterUpdateRequest, VoiceCreateRequest, VoiceUpdateRequest
+from app.schema.privacy import UploadConsentCreate
 from app.service import asset as asset_service
+from app.service import privacy as privacy_service
 
 
 # ---------------------------------------------------------------------------
@@ -139,7 +142,7 @@ async def test_create_character_basic(mock_entitlement, mock_create_task, db: As
 
 @patch("app.service.asset.service.generation_task.create_task", new_callable=AsyncMock)
 @patch("app.service.asset.service.entitlement_service.assert_can_create", new_callable=AsyncMock)
-async def test_create_character_with_custom_art_style(mock_entitlement, mock_create_task, db: AsyncSession):
+async def test_create_character_allows_without_art_style(mock_entitlement, mock_create_task, db: AsyncSession):
     mock_entitlement.return_value = None
     mock_create_task.return_value = AsyncMock()
 
@@ -147,48 +150,27 @@ async def test_create_character_with_custom_art_style(mock_entitlement, mock_cre
         db,
         user_id=1,
         payload=CharacterCreateRequest(
-            name="Custom Style Character",
-            custom_art_style_prompt="温暖水粉质感",
-            generation_prompt="一个勇敢的男孩",
+            name="No Style",
+            generation_prompt="描述",
         ),
     )
 
-    assert result.name == "Custom Style Character"
-    assert result.custom_art_style_prompt == "温暖水粉质感"
+    assert result.art_style_id is None
+    mock_create_task.assert_called_once()
+    task_payload = mock_create_task.call_args.args[1]
+    assert task_payload.input_payload["art_style_id"] is None
 
 
 @patch("app.service.asset.service.generation_task.create_task", new_callable=AsyncMock)
 @patch("app.service.asset.service.entitlement_service.assert_can_create", new_callable=AsyncMock)
-async def test_create_character_rejects_without_art_style(mock_entitlement, mock_create_task, db: AsyncSession):
-    with pytest.raises(ValueError, match="画风"):
-        CharacterCreateRequest(
-            name="No Style",
-            generation_prompt="描述",
-        )
-
-
-@patch("app.service.asset.service.generation_task.create_task", new_callable=AsyncMock)
-@patch("app.service.asset.service.entitlement_service.assert_can_create", new_callable=AsyncMock)
-async def test_create_character_with_reference_image_and_consent(mock_entitlement, mock_create_task, db: AsyncSession):
+async def test_create_character_with_reference_character(mock_entitlement, mock_create_task, db: AsyncSession):
     mock_entitlement.return_value = None
     mock_create_task.return_value = AsyncMock()
 
-    ref = await _make_user_asset(db, user_id=1, kind=AssetKind.IMAGE)
+    ref = await _make_character(db, owner_user_id=1)
+    ref.image_url = "https://cdn.example.com/ref.png"
     style = await _make_art_style(db)
-
-    from app.model.privacy import PrivacyUploadConsent
-
-    consent = PrivacyUploadConsent(
-        user_id=1,
-        target_type=UploadConsentTargetType.CHARACTER_REFERENCE_IMAGE,
-        target_id=ref.id,
-        consent_text_version="2026-05-asset-upload",
-        confirmed_rights=True,
-        confirmed_privacy=True,
-    )
-    db.add(consent)
     await db.commit()
-    await db.refresh(consent)
 
     result = await asset_service.create_character(
         db,
@@ -197,20 +179,73 @@ async def test_create_character_with_reference_image_and_consent(mock_entitlemen
             name="With Ref",
             art_style_id=style.id,
             generation_prompt="描述",
-            reference_asset_id=ref.id,
-            upload_consent_id=consent.id,
+            reference_character_id=ref.id,
         ),
     )
 
-    assert result.reference_asset_id == ref.id
+    assert result.reference_character_id == ref.id
 
 
 @patch("app.service.asset.service.generation_task.create_task", new_callable=AsyncMock)
 @patch("app.service.asset.service.entitlement_service.assert_can_create", new_callable=AsyncMock)
-async def test_create_character_rejects_reference_from_other_user(mock_entitlement, mock_create_task, db: AsyncSession):
+async def test_create_character_with_uploaded_reference_image_returns_image_url(mock_entitlement, mock_create_task, db: AsyncSession):
+    mock_entitlement.return_value = None
+    mock_create_task.return_value = AsyncMock()
+
+    asset = await _make_user_asset(db, user_id=1)
+    consent = await privacy_service.record_upload_consent(
+        db,
+        user_id=1,
+        payload=UploadConsentCreate(
+            target_type=UploadConsentTargetType.CHARACTER_REFERENCE_IMAGE,
+            target_id=asset.id,
+            confirmed_rights=True,
+            confirmed_privacy=True,
+        ),
+    )
+
+    result = await asset_service.create_character(
+        db,
+        user_id=1,
+        payload=CharacterCreateRequest(
+            name="Uploaded Ref",
+            reference_asset_id=asset.id,
+            upload_consent_id=consent.id,
+        ),
+    )
+
+    assert result.image_url
+    assert result.image_url.endswith(asset.storage_key)
+    assert result.generation_prompt is None
+    assert result.source_type == AssetSourceType.USER_UPLOAD
+    mock_create_task.assert_not_called()
+
+
+@patch("app.service.asset.service.generation_task.create_task", new_callable=AsyncMock)
+@patch("app.service.asset.service.entitlement_service.assert_can_create", new_callable=AsyncMock)
+async def test_create_character_rejects_ai_generated_without_prompt(mock_entitlement, mock_create_task, db: AsyncSession):
     mock_entitlement.return_value = None
 
-    _ref = await _make_user_asset(db, user_id=999, kind=AssetKind.IMAGE)
+    with pytest.raises(HTTPException) as exc:
+        await asset_service.create_character(
+            db,
+            user_id=1,
+            payload=CharacterCreateRequest(
+                name="No Prompt",
+                generation_prompt=" ",
+            ),
+        )
+
+    assert exc.value.status_code == 400
+    mock_create_task.assert_not_called()
+
+
+@patch("app.service.asset.service.generation_task.create_task", new_callable=AsyncMock)
+@patch("app.service.asset.service.entitlement_service.assert_can_create", new_callable=AsyncMock)
+async def test_create_character_rejects_reference_character_from_other_user(mock_entitlement, mock_create_task, db: AsyncSession):
+    mock_entitlement.return_value = None
+
+    _ref = await _make_character(db, owner_user_id=999)
     style = await _make_art_style(db)
 
     with pytest.raises(HTTPException) as exc:
@@ -221,10 +256,10 @@ async def test_create_character_rejects_reference_from_other_user(mock_entitleme
                 name="Steal Ref",
                 art_style_id=style.id,
                 generation_prompt="描述",
-                reference_asset_id=_ref.id,
+                reference_character_id=_ref.id,
             ),
         )
-    assert exc.value.status_code == 400
+    assert exc.value.status_code == 404
 
 
 @patch("app.service.asset.service.generation_task.create_task", new_callable=AsyncMock)
@@ -249,6 +284,85 @@ async def test_create_character_rejects_vip_system_style_for_free_user(
             ),
         )
     assert exc.value.status_code == 403
+
+
+@patch("app.service.asset.service.generation_task.create_task", new_callable=AsyncMock)
+@patch("app.service.asset.service.entitlement_service.assert_can_create", new_callable=AsyncMock)
+@patch("app.service.asset.service.entitlement_service.assert_can_use_vip_resource", new_callable=AsyncMock)
+async def test_create_character_rejects_vip_system_reference_for_free_user(
+    mock_vip, mock_entitlement, mock_create_task, db: AsyncSession
+):
+    mock_entitlement.return_value = None
+    mock_vip.side_effect = HTTPException(status_code=403, detail="需要会员")
+
+    ref = await _make_character(db, owner_user_id=None)
+    ref.image_url = "https://cdn.example.com/vip-ref.png"
+    ref.access_level = AssetAccessLevel.VIP
+    await db.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        await asset_service.create_character(
+            db,
+            user_id=1,
+            payload=CharacterCreateRequest(
+                name="VIP Ref",
+                reference_character_id=ref.id,
+                generation_prompt="描述",
+            ),
+        )
+
+    assert exc.value.status_code == 403
+    mock_vip.assert_called_once()
+    mock_create_task.assert_not_called()
+
+
+@patch("app.service.asset.service.generation_task.create_task", new_callable=AsyncMock)
+@patch("app.service.asset.service.entitlement_service.assert_can_create", new_callable=AsyncMock)
+async def test_create_character_rejects_invalid_category_code(mock_entitlement, mock_create_task, db: AsyncSession):
+    mock_entitlement.return_value = None
+
+    with pytest.raises(HTTPException) as exc:
+        await asset_service.create_character(
+            db,
+            user_id=1,
+            payload=CharacterCreateRequest(
+                name="Bad Category",
+                generation_prompt="描述",
+                category_code="missing",
+            ),
+        )
+
+    assert exc.value.status_code == 400
+    mock_create_task.assert_not_called()
+
+
+@patch("app.service.asset.service.generation_task.create_task", new_callable=AsyncMock)
+@patch("app.service.asset.service.entitlement_service.assert_can_create", new_callable=AsyncMock)
+async def test_create_character_allows_valid_category_code(mock_entitlement, mock_create_task, db: AsyncSession):
+    mock_entitlement.return_value = None
+    mock_create_task.return_value = AsyncMock()
+    db.add(
+        TaxonomyItem(
+            type=TaxonomyType.CHARACTER_CATEGORY,
+            code="child",
+            name="儿童",
+            status=TaxonomyItemStatus.ACTIVE,
+        )
+    )
+    await db.commit()
+
+    result = await asset_service.create_character(
+        db,
+        user_id=1,
+        payload=CharacterCreateRequest(
+            name="Good Category",
+            generation_prompt="描述",
+            category_code="child",
+        ),
+    )
+
+    assert result.category_code == "child"
+    mock_create_task.assert_called_once()
 
 
 async def test_get_character_owner_only(db: AsyncSession):

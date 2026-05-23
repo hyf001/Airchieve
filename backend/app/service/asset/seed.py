@@ -2,6 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.model.asset import ArtStyle, ArtStyleStatus, AssetAccessLevel
+from app.model.taxonomy import TaxonomyItem, TaxonomyItemStatus, TaxonomyType
 
 
 SYSTEM_ART_STYLES = [
@@ -61,6 +62,51 @@ SYSTEM_ART_STYLES = [
     },
 ]
 
+CHARACTER_CATEGORIES = [
+    {
+        "code": "child",
+        "name": "儿童",
+        "name_en": "Child",
+        "description": "儿童主角、同学和朋友角色。",
+        "sort_order": 10,
+    },
+    {
+        "code": "family",
+        "name": "家人",
+        "name_en": "Family",
+        "description": "爸爸、妈妈、爷爷奶奶等家庭角色。",
+        "sort_order": 20,
+    },
+    {
+        "code": "teacher",
+        "name": "老师",
+        "name_en": "Teacher",
+        "description": "教师、辅导员和课堂引导者角色。",
+        "sort_order": 30,
+    },
+    {
+        "code": "friend",
+        "name": "朋友",
+        "name_en": "Friend",
+        "description": "故事伙伴、同伴和陪伴型角色。",
+        "sort_order": 40,
+    },
+    {
+        "code": "fantasy",
+        "name": "幻想角色",
+        "name_en": "Fantasy",
+        "description": "精灵、魔法师、机器人等非现实角色。",
+        "sort_order": 50,
+    },
+    {
+        "code": "animal",
+        "name": "动物伙伴",
+        "name_en": "Animal Companion",
+        "description": "动物主角、宠物和拟人动物伙伴。",
+        "sort_order": 60,
+    },
+]
+
 
 async def seed_system_art_styles(db: AsyncSession) -> None:
     result = await db.execute(select(ArtStyle).where(ArtStyle.code.in_([item["code"] for item in SYSTEM_ART_STYLES])))
@@ -70,6 +116,32 @@ async def seed_system_art_styles(db: AsyncSession) -> None:
     for item in SYSTEM_ART_STYLES:
         if item["code"] not in existing:
             db.add(ArtStyle(owner_user_id=None, status=ArtStyleStatus.ACTIVE, **item))
+            changed = True
+
+    if changed:
+        await db.commit()
+
+
+async def seed_character_categories(db: AsyncSession) -> None:
+    result = await db.execute(
+        select(TaxonomyItem).where(
+            TaxonomyItem.type == TaxonomyType.CHARACTER_CATEGORY,
+            TaxonomyItem.code.in_([item["code"] for item in CHARACTER_CATEGORIES]),
+        )
+    )
+    existing = {item.code for item in result.scalars().all()}
+
+    changed = False
+    for item in CHARACTER_CATEGORIES:
+        if item["code"] not in existing:
+            db.add(
+                TaxonomyItem(
+                    type=TaxonomyType.CHARACTER_CATEGORY,
+                    metadata_=None,
+                    status=TaxonomyItemStatus.ACTIVE,
+                    **item,
+                )
+            )
             changed = True
 
     if changed:

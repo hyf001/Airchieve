@@ -33,7 +33,7 @@ export const AdminDashboard: React.FC = () => {
     ["故事", overview.stories],
     ["绘本", overview.books],
     ["模板", overview.templates],
-    ["形象", overview.characters],
+    ["角色", overview.characters],
     ["声音", overview.voices],
     ["分享", overview.share_links],
     ["导出", overview.export_jobs],

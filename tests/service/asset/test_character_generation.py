@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.model.asset import AssetAccessLevel, AssetModerationStatus, AssetSourceType, Character, LibraryItemStatus
+from app.model.asset import AssetAccessLevel, AssetSourceType, Character, LibraryItemStatus
 from app.model.generation_task import GenerationTask, GenerationTaskStatus, GenerationTaskType
 from app.service.asset.character_generation import run_character_image_task
 
@@ -11,13 +11,10 @@ async def test_run_character_image_task_persists_generated_image(db: AsyncSessio
     character = Character(
         owner_user_id=1,
         name="小勇",
-        identity_tag="brave_child",
         description="A brave child explorer",
         generation_prompt="red jacket, warm smile",
-        age_range_codes=["age_5_6"],
         access_level=AssetAccessLevel.FREE,
         source_type=AssetSourceType.AI_GENERATED,
-        moderation_status=AssetModerationStatus.APPROVED,
         status=LibraryItemStatus.ACTIVE,
     )
     db.add(character)
@@ -43,11 +40,9 @@ async def test_run_character_image_task_persists_generated_image(db: AsyncSessio
 
         await run_character_image_task(db, task)
 
-    assert character.image_asset_id == 99
     assert character.image_url == "https://cdn.example.com/character.png"
     assert task.status == GenerationTaskStatus.SUCCEEDED
     assert task.output_payload == {
         "character_id": character.id,
-        "image_asset_id": 99,
         "image_url": "https://cdn.example.com/character.png",
     }

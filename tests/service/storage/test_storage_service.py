@@ -41,3 +41,15 @@ def test_get_file_url_returns_public_oss_url(monkeypatch):
     assert url == "https://airchieve.oss-cn-beijing.aliyuncs.com/generated/image/2/test%20image.jpg"
     assert "Signature=" not in url
     assert "Expires=" not in url
+
+
+def test_asset_storage_key_uses_character_reference_scope():
+    key = storage_service._asset_storage_key(
+        storage_service.AssetKind.IMAGE,
+        42,
+        "portrait.png",
+        path_scope="character/reference",
+    )
+
+    assert key.startswith("asset/character/reference/user/42/")
+    assert key.endswith(".png")

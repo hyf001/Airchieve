@@ -69,9 +69,11 @@ def _guess_asset_kind(mime_type: str) -> AssetKind:
     return AssetKind.OTHER
 
 
-def _asset_storage_key(asset_kind: AssetKind, user_id: int | None, filename: str) -> str:
+def _asset_storage_key(asset_kind: AssetKind, user_id: int | None, filename: str, *, path_scope: str | None = None) -> str:
     extension = PurePosixPath(filename).suffix.lower()
     owner_segment = str(user_id) if user_id is not None else "system"
+    if path_scope:
+        return f"asset/{path_scope}/user/{owner_segment}/{uuid4().hex}{extension}"
     return f"asset/{asset_kind.value}/user/{owner_segment}/{uuid4().hex}{extension}"
 
 
@@ -188,6 +190,7 @@ async def save_generated_data_url(
     asset_kind: AssetKind,
     filename_extension: str,
     visibility: AssetVisibility = AssetVisibility.PRIVATE,
+    path_scope: str | None = None,
 ) -> AssetStorageDTO:
     if not data_url.startswith("data:") or ";base64," not in data_url:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="生成结果不是有效 data URL")
@@ -197,7 +200,7 @@ async def save_generated_data_url(
         content = base64.b64decode(base64_payload)
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="生成结果 base64 无法解码") from exc
-    storage_key = _asset_storage_key(asset_kind, user_id, f"generated{filename_extension}")
+    storage_key = _asset_storage_key(asset_kind, user_id, f"generated{filename_extension}", path_scope=path_scope)
     await asyncio.to_thread(_get_oss_bucket().put_object, storage_key, content, headers={"Content-Type": mime_type})
     asset = Asset(
         owner_user_id=user_id,
@@ -228,6 +231,7 @@ async def save_base64_asset(
     asset_kind: AssetKind,
     filename: str,
     visibility: AssetVisibility = AssetVisibility.PRIVATE,
+    path_scope: str | None = None,
 ) -> AssetStorageDTO:
     payload = base64_data
     if payload.startswith("data:") and ";base64," in payload:
@@ -237,7 +241,7 @@ async def save_base64_asset(
         content = base64.b64decode(payload, validate=True)
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="base64 内容无法解码") from exc
-    storage_key = _asset_storage_key(asset_kind, user_id, filename)
+    storage_key = _asset_storage_key(asset_kind, user_id, filename, path_scope=path_scope)
     await asyncio.to_thread(_get_oss_bucket().put_object, storage_key, content, headers={"Content-Type": mime_type})
     asset = Asset(
         owner_user_id=user_id,

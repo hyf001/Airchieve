@@ -10,7 +10,7 @@ import { AppLink } from "@/shared/ui/AppLink";
 const navItems: Array<{ label: string; to: AppRoute }> = [
   { label: "故事库", to: "/stories" },
   { label: "画风", to: "/artstyle" },
-  { label: "形象", to: "/characters" },
+  { label: "角色", to: "/characters" },
   { label: "声音", to: "/voices" },
   { label: "分享", to: "/share" },
   { label: "会员", to: "/membership" },

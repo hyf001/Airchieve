@@ -17,6 +17,7 @@ class TaxonomyType(StrEnum):
     SCENE = "scene"
     VOICE_STYLE = "voice_style"
     ASSET_CATEGORY = "asset_category"
+    CHARACTER_CATEGORY = "character_category"
 
 
 class TaxonomyItemStatus(StrEnum):

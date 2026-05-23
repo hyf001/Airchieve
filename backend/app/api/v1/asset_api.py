@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.account_api import current_user_id, optional_current_user_id
 from app.db.session import get_db
-from app.model.asset import AssetAccessLevel, AssetSourceType
+from app.model.asset import AssetAccessLevel, AssetKind, AssetSourceType, AssetVisibility
 from app.schema.asset import (
     ArtStyleListRead,
     ArtStyleRead,
+    ArtStyleImageUploadRequest,
     AssetStorageDTO,
     CharacterCreateRequest,
     CharacterListRead,
@@ -53,6 +54,28 @@ async def create_character(
     user_id: int = Depends(current_user_id),
 ) -> CharacterRead:
     return await asset.create_character(db, user_id, payload)
+
+
+@router.post("/characters/image", response_model=AssetStorageDTO, status_code=status.HTTP_201_CREATED)
+async def upload_character_reference_image(
+    payload: ArtStyleImageUploadRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(current_user_id),
+) -> AssetStorageDTO:
+    if not payload.mime_type.startswith("image/"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请上传图片文件")
+    image = await storage.save_base64_asset(
+        db,
+        user_id,
+        base64_data=payload.base64_data or "",
+        mime_type=payload.mime_type,
+        asset_kind=AssetKind.IMAGE,
+        filename=payload.filename,
+        visibility=AssetVisibility.PRIVATE,
+        path_scope="character/reference",
+    )
+    await db.commit()
+    return image
 
 
 @router.patch("/characters/{character_id}", response_model=CharacterRead)
@@ -197,6 +220,8 @@ async def create_upload_session(
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(current_user_id),
 ) -> UploadSessionRead:
+    if payload.purpose.value == "character":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="角色图片请使用后端图片上传接口")
     return await storage.create_upload_session(db, user_id, payload)
 
 

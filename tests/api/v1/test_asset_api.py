@@ -24,22 +24,16 @@ def _character_payload(**overrides):
         "id": 1,
         "owner_user_id": USER_ID,
         "name": "Char",
-        "identity_tag": None,
         "description": None,
-        "image_asset_id": None,
         "image_url": None,
         "art_style_id": None,
-        "art_style_code": None,
-        "custom_art_style_prompt": None,
-        "age_range_codes": [],
         "access_level": "free",
         "source_type": "ai_generated",
         "is_default": False,
-        "moderation_status": "approved",
         "status": "active",
         "created_at": _now_iso(),
         "updated_at": _now_iso(),
-        "reference_asset_id": None,
+        "reference_character_id": None,
         "generation_prompt": None,
         "category_code": None,
         "art_style": None,
@@ -142,7 +136,7 @@ class TestCharacterEndpoints:
                 CharacterSummary(
                     id=1, owner_user_id=USER_ID, name="Test",
                     source_type="ai_generated", access_level="free",
-                    is_default=False, moderation_status="approved",
+                    is_default=False,
                     status="active", created_at=datetime.now(timezone.utc),
                     updated_at=datetime.now(timezone.utc),
                 )
@@ -171,11 +165,31 @@ class TestCharacterEndpoints:
         assert resp.status_code == 201
 
     @patch("app.service.asset.service.create_character", new_callable=AsyncMock)
-    def test_create_character_rejects_missing_art_style(self, mock_create):
+    def test_create_character_allows_missing_art_style(self, mock_create):
+        mock_create.return_value = _character_payload(id=11, name="No Style", art_style_id=None)
         resp = client.post("/api/v1/assets/characters", json={
-            "name": "Bad", "generation_prompt": "test",
+            "name": "No Style", "generation_prompt": "test",
         })
-        assert resp.status_code == 422  # Pydantic validation error
+        assert resp.status_code == 201
+
+    @patch("app.service.storage.service.save_base64_asset", new_callable=AsyncMock)
+    def test_upload_character_reference_image_returns_201(self, mock_save):
+        mock_save.return_value = {
+            "id": 7,
+            "storage_key": "asset/character/reference/user/42/test.png",
+            "url": "https://cdn.example.com/test.png",
+            "mime_type": "image/png",
+            "byte_size": 12,
+        }
+        resp = client.post("/api/v1/assets/characters/image", json={
+            "base64": "data:image/png;base64,aGVsbG8=",
+            "mime_type": "image/png",
+            "filename": "test.png",
+        })
+        assert resp.status_code == 201
+        _, user_id = mock_save.call_args.args[:2]
+        assert user_id == USER_ID
+        assert mock_save.call_args.kwargs["path_scope"] == "character/reference"
 
     @patch("app.service.asset.service.update_character", new_callable=AsyncMock)
     def test_update_character_returns_200(self, mock_update):
@@ -278,18 +292,26 @@ class TestStorageEndpoints:
     @patch("app.service.storage.service.create_upload_session", new_callable=AsyncMock)
     def test_create_upload_session_returns_201(self, mock_create):
         mock_create.return_value = {
-            "id": 1, "user_id": USER_ID, "purpose": "character",
-            "filename": "test.jpg", "mime_type": "image/jpeg",
-            "max_byte_size": 20971520, "storage_key": "key",
+            "id": 1, "user_id": USER_ID, "purpose": "voice",
+            "filename": "test.wav", "mime_type": "audio/wav",
+            "max_byte_size": 52428800, "storage_key": "key",
             "upload_url": "https://oss.example.com/upload",
             "upload_method": "PUT", "upload_headers": {},
             "status": "created", "expires_at": "2026-05-19T12:00:00Z",
             "created_at": "2026-05-19T11:00:00Z", "updated_at": "2026-05-19T11:00:00Z",
         }
         resp = client.post("/api/v1/assets/uploads", json={
-            "purpose": "character", "filename": "test.jpg", "mime_type": "image/jpeg",
+            "purpose": "voice", "filename": "test.wav", "mime_type": "audio/wav",
         })
         assert resp.status_code == 201
+
+    @patch("app.service.storage.service.create_upload_session", new_callable=AsyncMock)
+    def test_create_upload_session_rejects_character_purpose(self, mock_create):
+        resp = client.post("/api/v1/assets/uploads", json={
+            "purpose": "character", "filename": "test.jpg", "mime_type": "image/jpeg",
+        })
+        assert resp.status_code == 400
+        mock_create.assert_not_called()
 
     @patch("app.service.storage.service.complete_upload", new_callable=AsyncMock)
     def test_complete_upload_returns_200(self, mock_complete):

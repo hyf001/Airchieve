@@ -1,5 +1,5 @@
 import type { OperationDashboard } from "@/features/analytics";
-import type { AssetAccessLevel } from "@/entities/asset";
+import type { AssetAccessLevel, LibraryItemStatus } from "@/entities/asset";
 
 export interface AdminDashboardRead {
   pending_moderation_count: number;
@@ -28,4 +28,17 @@ export interface SystemArtStyleWrite {
   access_level: AssetAccessLevel;
   sort_order: number;
   status: "active" | "inactive";
+}
+
+export interface SystemCharacterWrite {
+  name: string;
+  identity_tag?: string | null;
+  description?: string | null;
+  image_asset_id?: number | null;
+  image_url?: string | null;
+  art_style_id: number | null;
+  generation_prompt?: string | null;
+  category_code?: string | null;
+  access_level: AssetAccessLevel;
+  status: Exclude<LibraryItemStatus, "deleted">;
 }

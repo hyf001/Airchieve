@@ -17,7 +17,7 @@ export const CharacterSelector: React.FC<CharacterSelectorProps> = ({ characters
       <AssetCard
         key={character.id}
         title={character.name}
-        subtitle={character.identity_tag ?? character.custom_art_style_prompt ?? "角色形象"}
+        subtitle={character.identity_tag ?? character.custom_art_style_prompt ?? "角色"}
         imageUrl={character.image_url}
         icon={character.source_type === "system" ? <Sparkles /> : <UserRound />}
         accessLevel={character.access_level}

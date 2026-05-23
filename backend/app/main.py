@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.db.session import async_session_maker, init_db
-from app.service.asset.seed import seed_system_art_styles
+from app.service.asset.seed import seed_character_categories, seed_system_art_styles
 from app.worker.runner import run_worker
 
 
@@ -17,6 +17,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await init_db()
     async with async_session_maker() as session:
         await seed_system_art_styles(session)
+        await seed_character_categories(session)
     worker_task: asyncio.Task | None = None
     stop_worker = asyncio.Event()
     if settings.WORKER_ENABLED:

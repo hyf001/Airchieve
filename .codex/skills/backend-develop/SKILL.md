@@ -238,6 +238,14 @@ uv run alembic revision --autogenerate -m "describe_change"
 18. 代码改动后，至少运行与改动相关的测试；无法运行时必须在最终说明中说明原因。
 19. 对已知优化项、临时方案、后续增强或未完成但不阻塞当前交付的事项，必须在最相关的代码位置留下清晰 `TODO(scope): ...` 注释，说明触发条件和后续动作；不要用 TODO 掩盖当前必须修复的 bug、安全问题或数据一致性问题。
 
+## 资产上传与存储规则
+
+- 用户图片、声音、示例图等业务资产优先走后端上传接口；前端不得为业务资产直接拿 OSS 签名 URL 直传，除非该模块已有明确例外。
+- 后端上传接口接收 base64/data URL 或后端可控文件流，统一调用 `storage_service.save_base64_asset`、`save_generated_data_url` 等 storage service。
+- 业务资产必须使用业务语义化存储路径模板，例如 `asset/character/reference/user/{user_id}/...`、`asset/character/generated/user/{user_id}/...`，不要混用泛化 `asset/image/...` 路径。
+- 上传前需要版权、授权、隐私确认的资产，必须先走 `privacy_service` 记录确认，再把确认结果关联到业务流程。
+- 生成任务只产出结果并回写自己的 owner 业务对象；存储文件落地仍通过 storage service，不能在任务里手写 OSS key 或直连基础设施。
+
 ## 开发流程
 
 新增一个后端业务接口时，按这个顺序执行：

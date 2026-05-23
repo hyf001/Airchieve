@@ -2,7 +2,7 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.model.asset import ArtStyle, Asset, AssetAccessLevel, AssetKind, AssetModerationStatus, AssetStatus, AssetVisibility, Character, Voice
+from app.model.asset import ArtStyle, Asset, AssetAccessLevel, AssetKind, AssetStatus, AssetVisibility, Character, Voice
 from app.model.privacy import PrivacyVisibilityPolicy, UploadConsentTargetType
 from app.schema.asset import CharacterCreateRequest, VoiceCreateRequest
 from app.schema.privacy import PrivacyTarget, UploadConsentCreate
@@ -71,20 +71,18 @@ async def test_assert_asset_usable_rejects_processing_voice(db: AsyncSession):
     assert exc_info.value.status_code == 409
 
 
-async def test_assert_asset_usable_rejects_hidden_system_character(db: AsyncSession):
+async def test_assert_asset_usable_allows_system_character_without_moderation(db: AsyncSession):
     character = Character(
         owner_user_id=None,
-        name="隐藏系统形象",
+        name="系统形象",
         source_type="system",
-        moderation_status=AssetModerationStatus.HIDDEN,
     )
     db.add(character)
     await db.commit()
 
-    with pytest.raises(HTTPException) as exc_info:
-        await asset_service.assert_asset_usable(db, user_id=1, asset_type="character", asset_id=character.id)
+    result = await asset_service.assert_asset_usable(db, user_id=1, asset_type="character", asset_id=character.id)
 
-    assert exc_info.value.status_code == 404
+    assert result.usable is True
 
 
 async def test_create_voice_keeps_processed_sample_empty_until_ready(db: AsyncSession):

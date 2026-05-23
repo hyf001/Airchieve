@@ -8,7 +8,8 @@ export type TaxonomyType =
   | "narrative_style"
   | "scene"
   | "voice_style"
-  | "asset_category";
+  | "asset_category"
+  | "character_category";
 
 export type TaxonomyItemStatus = "active" | "inactive";
 
@@ -24,4 +25,14 @@ export interface TaxonomyItem {
   status: TaxonomyItemStatus;
   created_at: string;
   updated_at: string;
+}
+
+export interface TaxonomyItemWrite {
+  type: TaxonomyType;
+  code: string;
+  name: string;
+  name_en?: string | null;
+  description?: string | null;
+  metadata?: Record<string, unknown> | null;
+  sort_order: number;
 }

@@ -3,7 +3,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.model.asset import (
     AssetAccessLevel,
-    AssetModerationStatus,
     Character,
     LibraryItemStatus,
     VoiceProcessingStatus,
@@ -26,11 +25,16 @@ from app.service.asset.art_style import (
 )
 from app.service.asset.character import (
     create_character,
+    create_system_character,
     delete_character,
+    delete_system_character,
+    get_admin_system_character,
     get_character,
+    list_admin_system_characters,
     list_characters,
     set_default_character,
     update_character,
+    update_system_character,
 )
 from app.service.asset.file_asset import get_asset
 from app.service.asset.voice import (
@@ -50,8 +54,6 @@ async def assert_asset_usable(db: AsyncSession, user_id: int, asset_type: str, a
         if character is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="角色形象不存在")
         if character.owner_user_id is not None and character.owner_user_id != user_id:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="角色形象不存在")
-        if character.moderation_status != AssetModerationStatus.APPROVED:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="角色形象不存在")
         if character.owner_user_id is None and character.access_level == AssetAccessLevel.VIP:
             await entitlement_service.assert_can_use_vip_resource(db, user_id, EntitlementResourceType.CHARACTER, str(character.id))
@@ -83,25 +85,30 @@ async def assert_asset_usable(db: AsyncSession, user_id: int, asset_type: str, a
 __all__ = [
     "assert_asset_usable",
     "create_character",
+    "create_system_character",
     "create_custom_art_style",
     "create_system_art_style",
     "create_voice",
     "delete_character",
+    "delete_system_character",
     "delete_custom_art_style",
     "delete_system_art_style",
     "delete_voice",
     "get_admin_system_art_style",
+    "get_admin_system_character",
     "get_art_style",
     "get_asset",
     "get_character",
     "get_voice",
     "list_admin_system_art_styles",
+    "list_admin_system_characters",
     "list_art_styles",
     "list_characters",
     "list_voices",
     "set_default_character",
     "set_default_voice",
     "update_character",
+    "update_system_character",
     "update_custom_art_style",
     "update_system_art_style",
     "update_voice",

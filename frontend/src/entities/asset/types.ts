@@ -1,5 +1,6 @@
 export type AssetAccessLevel = "free" | "vip";
 export type AssetSourceType = "system" | "ai_generated" | "user_upload" | "voice_clone";
+export type GenerationTaskStatus = "queued" | "running" | "succeeded" | "failed" | "canceled";
 export type VoiceProcessingStatus = "pending" | "processing" | "ready" | "failed";
 export type LibraryItemStatus = "active" | "deleted" | "disabled";
 
@@ -31,10 +32,14 @@ export interface CharacterSummary {
   art_style_id: number | null;
   art_style_code: string | null;
   custom_art_style_prompt: string | null;
-  age_range_codes: string[];
+  category_code: string | null;
   access_level: AssetAccessLevel;
   source_type: AssetSourceType;
   is_default: boolean;
+  generation_task_id: number | null;
+  generation_status: GenerationTaskStatus | null;
+  generation_progress_percent: number | null;
+  generation_error_message: string | null;
   moderation_status: "pending" | "approved" | "rejected" | "hidden";
   status: LibraryItemStatus;
   created_at: string;
@@ -42,9 +47,8 @@ export interface CharacterSummary {
 }
 
 export interface CharacterRead extends CharacterSummary {
-  reference_asset_id: number | null;
+  reference_character_id: number | null;
   generation_prompt: string | null;
-  category_code: string | null;
   art_style: ArtStyle | null;
 }
 

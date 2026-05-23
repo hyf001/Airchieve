@@ -1,6 +1,6 @@
 import { apiClient } from "@/shared/api/client";
-import type { ArtStyle, AssetStorageDTO, ListResponse } from "@/entities/asset";
-import type { AdminContentOverviewRead, AdminDashboardRead, SystemArtStyleWrite } from "./types";
+import type { ArtStyle, AssetStorageDTO, CharacterRead, CharacterSummary, ListResponse } from "@/entities/asset";
+import type { AdminContentOverviewRead, AdminDashboardRead, SystemArtStyleWrite, SystemCharacterWrite } from "./types";
 
 export const adminApi = {
   getDashboard: () => apiClient.get<AdminDashboardRead>("/v1/admin/dashboard"),
@@ -12,4 +12,11 @@ export const adminApi = {
   deleteArtStyle: (id: number) => apiClient.delete<void>(`/v1/admin/art-styles/${id}`),
   uploadArtStyleImage: (payload: { base64: string; mime_type: string; filename: string }) =>
     apiClient.post<AssetStorageDTO>("/v1/admin/art-styles/image", payload),
+  listCharacters: () => apiClient.get<ListResponse<CharacterSummary>>("/v1/admin/characters"),
+  createCharacter: (payload: SystemCharacterWrite) => apiClient.post<CharacterRead>("/v1/admin/characters", payload),
+  updateCharacter: (id: number, payload: Partial<SystemCharacterWrite>) =>
+    apiClient.patch<CharacterRead>(`/v1/admin/characters/${id}`, payload),
+  deleteCharacter: (id: number) => apiClient.delete<void>(`/v1/admin/characters/${id}`),
+  uploadCharacterImage: (payload: { base64: string; mime_type: string; filename: string }) =>
+    apiClient.post<AssetStorageDTO>("/v1/admin/characters/image", payload),
 };

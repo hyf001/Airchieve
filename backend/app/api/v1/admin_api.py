@@ -11,8 +11,12 @@ from app.schema.asset import (
     ArtStyleListRead,
     ArtStyleRead,
     AssetStorageDTO,
+    CharacterListRead,
+    CharacterRead,
     SystemArtStyleCreate,
     SystemArtStyleUpdate,
+    SystemCharacterCreate,
+    SystemCharacterUpdate,
 )
 from app.schema.audit import AuditLogCreateInternal, AuditSnapshot
 from app.schema.audit import AuditLogListRead, AuditLogRead
@@ -68,7 +72,7 @@ async def upload_admin_art_style_image(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请上传图片文件")
     image = await storage_service.save_base64_asset(
         db,
-        operator_id,
+        None,
         base64_data=payload.base64_data or "",
         mime_type=payload.mime_type,
         asset_kind=AssetKind.IMAGE,
@@ -152,6 +156,116 @@ async def delete_admin_art_style(
             action="admin.art_style.delete",
             target_type="art_style",
             target_id=style_id,
+            before_snapshot=AuditSnapshot(values=before.model_dump(mode="json")),
+        ),
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/characters", response_model=CharacterListRead)
+async def list_admin_characters(
+    limit: int = Query(default=100, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    _: int = Depends(current_admin_user_id),
+) -> CharacterListRead:
+    return await asset_service.list_admin_system_characters(db, limit=limit, offset=offset)
+
+
+@router.post("/characters/image", response_model=AssetStorageDTO, status_code=status.HTTP_201_CREATED)
+async def upload_admin_character_image(
+    payload: ArtStyleImageUploadRequest,
+    db: AsyncSession = Depends(get_db),
+    operator_id: int = Depends(current_admin_user_id),
+) -> AssetStorageDTO:
+    if not payload.mime_type.startswith("image/"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请上传图片文件")
+    image = await storage_service.save_base64_asset(
+        db,
+        None,
+        base64_data=payload.base64_data or "",
+        mime_type=payload.mime_type,
+        asset_kind=AssetKind.IMAGE,
+        filename=payload.filename,
+        visibility=AssetVisibility.SYSTEM,
+    )
+    await audit_service.write_audit_log(
+        db,
+        AuditLogCreateInternal(
+            operator_type=AuditOperatorType.ADMIN,
+            operator_id=operator_id,
+            action="admin.character.image_upload",
+            target_type="asset",
+            target_id=image.id,
+            after_snapshot=AuditSnapshot(values=image.model_dump(mode="json")),
+        ),
+        commit=False,
+    )
+    await db.commit()
+    return image
+
+
+@router.post("/characters", response_model=CharacterRead, status_code=status.HTTP_201_CREATED)
+async def create_admin_character(
+    payload: SystemCharacterCreate,
+    db: AsyncSession = Depends(get_db),
+    operator_id: int = Depends(current_admin_user_id),
+) -> CharacterRead:
+    character = await asset_service.create_system_character(db, payload)
+    await audit_service.write_audit_log(
+        db,
+        AuditLogCreateInternal(
+            operator_type=AuditOperatorType.ADMIN,
+            operator_id=operator_id,
+            action="admin.character.create",
+            target_type="character",
+            target_id=character.id,
+            after_snapshot=AuditSnapshot(values=character.model_dump(mode="json")),
+        ),
+    )
+    return character
+
+
+@router.patch("/characters/{character_id}", response_model=CharacterRead)
+async def update_admin_character(
+    character_id: int,
+    payload: SystemCharacterUpdate,
+    db: AsyncSession = Depends(get_db),
+    operator_id: int = Depends(current_admin_user_id),
+) -> CharacterRead:
+    before = await asset_service.get_admin_system_character(db, character_id)
+    character = await asset_service.update_system_character(db, character_id, payload)
+    await audit_service.write_audit_log(
+        db,
+        AuditLogCreateInternal(
+            operator_type=AuditOperatorType.ADMIN,
+            operator_id=operator_id,
+            action="admin.character.update",
+            target_type="character",
+            target_id=character.id,
+            before_snapshot=AuditSnapshot(values=before.model_dump(mode="json")),
+            after_snapshot=AuditSnapshot(values=character.model_dump(mode="json")),
+        ),
+    )
+    return character
+
+
+@router.delete("/characters/{character_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_admin_character(
+    character_id: int,
+    db: AsyncSession = Depends(get_db),
+    operator_id: int = Depends(current_admin_user_id),
+) -> Response:
+    before = await asset_service.get_admin_system_character(db, character_id)
+    await asset_service.delete_system_character(db, character_id)
+    await audit_service.write_audit_log(
+        db,
+        AuditLogCreateInternal(
+            operator_type=AuditOperatorType.ADMIN,
+            operator_id=operator_id,
+            action="admin.character.delete",
+            target_type="character",
+            target_id=character_id,
             before_snapshot=AuditSnapshot(values=before.model_dump(mode="json")),
         ),
     )
