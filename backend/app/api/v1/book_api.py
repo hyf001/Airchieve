@@ -43,9 +43,23 @@ async def list_books(
     )
 
 
+@router.get("/mine", response_model=BookListRead)
+async def list_my_books(
+    limit: int = Query(default=20, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(current_user_id),
+) -> BookListRead:
+    return await book.list_user_books(db, user_id=user_id, limit=limit, offset=offset)
+
+
 @router.get("/{book_id}", response_model=BookDetailRead)
-async def get_book_detail(book_id: int, db: AsyncSession = Depends(get_db)) -> BookDetailRead:
-    return await book.get_book_detail(db, book_id)
+async def get_book_detail(
+    book_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int | None = Depends(optional_current_user_id),
+) -> BookDetailRead:
+    return await book.get_book_detail(db, book_id, user_id=user_id)
 
 
 @router.get("/{book_id}/player", response_model=BookPlayerPayload)

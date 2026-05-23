@@ -82,6 +82,25 @@ async def list_books(
     return BookListRead(items=[_book_summary(book) for book in rows], total=total or 0, limit=limit, offset=offset)
 
 
+async def list_user_books(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    limit: int = 20,
+    offset: int = 0,
+) -> BookListRead:
+    conditions = [
+        Book.owner_user_id == user_id,
+        Book.publish_status != BookPublishStatus.DELETED,
+    ]
+    stmt = select(Book).where(*conditions).order_by(Book.created_at.desc())
+    count_stmt = select(func.count()).select_from(Book).where(*conditions)
+    result = await db.execute(stmt.offset(offset).limit(limit))
+    rows = result.scalars().all()
+    total = await db.scalar(count_stmt)
+    return BookListRead(items=[_book_summary(book) for book in rows], total=total or 0, limit=limit, offset=offset)
+
+
 async def get_book_detail(db: AsyncSession, book_id: int, user_id: int | None = None) -> BookDetailRead:
     book = await db.get(Book, book_id)
     owner_can_view = user_id is not None and book is not None and book.owner_user_id == user_id

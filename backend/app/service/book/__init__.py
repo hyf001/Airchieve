@@ -5,6 +5,7 @@ from app.service.book.book_service import (
     get_player_payload,
     list_books,
     list_related_books,
+    list_user_books,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "get_player_payload",
     "list_books",
     "list_related_books",
+    "list_user_books",
 ]

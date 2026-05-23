@@ -1,12 +1,15 @@
 import React from "react";
-import { BookOpen, Heart, Palette, Plus, Trash2, UserRound, Volume2, Wand2, X } from "lucide-react";
+import { BookOpen, Clock, Heart, History, LibraryBig, Palette, Plus, Trash2, UserRound, Volume2, Wand2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AccountSummary } from "@/entities/account";
+import { type BookSummary } from "@/entities/book";
 import { ChildProfileCard } from "@/entities/child-profile";
 import { useTaxonomyGroup } from "@/entities/taxonomy/useTaxonomyGroup";
 import { RequireAuth } from "@/features/auth";
+import { creationApi, type CreationSession } from "@/features/creation";
+import { discoveryApi } from "@/features/discovery";
 import {
   useProfiles,
   type ChildProfile,
@@ -14,6 +17,7 @@ import {
   type ChildProfileInterestTag,
   type ChildProfilePayload,
 } from "@/features/profile-management";
+import { readingApi, type RecentReadSummary } from "@/features/reading";
 import { cn } from "@/lib/utils";
 import { AppShell } from "@/shared/layout/AppShell";
 import { LoadingSpinner } from "@/shared/ui/loading";
@@ -28,6 +32,36 @@ const emptyPayload: ChildProfilePayload = {
   default_character: null,
   default_voice: null,
   default_art_style: null,
+};
+
+interface ProfileActivityState {
+  recentReads: RecentReadSummary[];
+  favoriteBooks: BookSummary[];
+  creationSessions: CreationSession[];
+  isLoading: boolean;
+  error: string | null;
+}
+
+const emptyActivityState: ProfileActivityState = {
+  recentReads: [],
+  favoriteBooks: [],
+  creationSessions: [],
+  isLoading: false,
+  error: null,
+};
+
+interface AccountActivityState {
+  personalBooks: BookSummary[];
+  creationSessions: CreationSession[];
+  isLoading: boolean;
+  error: string | null;
+}
+
+const emptyAccountActivityState: AccountActivityState = {
+  personalBooks: [],
+  creationSessions: [],
+  isLoading: false,
+  error: null,
 };
 
 export const ProfilesPage: React.FC = () => (
@@ -52,7 +86,35 @@ const ProfilesContent: React.FC = () => {
   const [editingProfile, setEditingProfile] = React.useState<ChildProfile | null>(null);
   const [detailProfile, setDetailProfile] = React.useState<ChildProfile | null>(null);
   const [modalOpen, setModalOpen] = React.useState(false);
+  const [accountActivity, setAccountActivity] = React.useState<AccountActivityState>(emptyAccountActivityState);
   const activeDetail = detailProfile ?? currentProfile;
+
+  React.useEffect(() => {
+    let ignore = false;
+    setAccountActivity((current) => ({ ...current, isLoading: true, error: null }));
+
+    const loadAccountActivity = async () => {
+      const [personalBooks, creationSessions] = await Promise.allSettled([
+        discoveryApi.listMyBooks(8),
+        creationApi.listSessions(null, 8),
+      ]);
+      if (ignore) return;
+      const firstError = [personalBooks, creationSessions].find(
+        (result): result is PromiseRejectedResult => result.status === "rejected",
+      );
+      setAccountActivity({
+        personalBooks: personalBooks.status === "fulfilled" ? personalBooks.value.items : [],
+        creationSessions: creationSessions.status === "fulfilled" ? creationSessions.value : [],
+        isLoading: false,
+        error: firstError ? "账号内容暂时加载失败，请稍后重试。" : null,
+      });
+    };
+
+    void loadAccountActivity();
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const handleAddProfile = () => {
     setEditingProfile(null);
@@ -95,8 +157,14 @@ const ProfilesContent: React.FC = () => {
         </Button>
       </header>
 
-      <section className="mx-auto grid max-w-[1320px] grid-cols-[minmax(0,1fr)_320px] gap-7 px-8 pb-10 max-lg:grid-cols-1 max-sm:px-4">
-        <div>
+      <section className="mx-auto grid max-w-[1320px] grid-cols-[minmax(0,0.95fr)_minmax(360px,0.55fr)] gap-7 px-8 pb-10 max-xl:grid-cols-1 max-sm:px-4">
+        <section>
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <div>
+              <h2 className="font-display text-2xl">孩子档案</h2>
+              <p className="mt-1 text-sm text-[var(--text-light)]">阅读进度、收藏和孩子专属创作会按档案分开记录。</p>
+            </div>
+          </div>
           {error ? (
             <div className="mb-5 rounded-[var(--radius-md)] border border-[rgba(245,166,35,0.22)] bg-[rgba(245,166,35,0.08)] px-4 py-3 text-sm text-[var(--text-mid)]">
               {error}
@@ -129,11 +197,12 @@ const ProfilesContent: React.FC = () => {
               </Button>
             </section>
           )}
-        </div>
+        </section>
 
         <aside className="space-y-5">
           <AccountSummary />
           <CurrentProfileSummary profile={currentProfile} />
+          <AccountContentPanel activity={accountActivity} />
         </aside>
       </section>
 
@@ -189,17 +258,75 @@ const CurrentProfileSummary: React.FC<{ profile: ChildProfile | null }> = ({ pro
   );
 };
 
+const AccountContentPanel: React.FC<{ activity: AccountActivityState }> = ({ activity }) => (
+  <section className="app-card p-6">
+    <div className="mb-5 flex items-start justify-between gap-3">
+      <div>
+        <h2 className="font-display text-xl">我的内容</h2>
+        <p className="mt-1 text-xs text-[var(--text-light)]">账号维度的创作成果与创作流水</p>
+      </div>
+      <span className="rounded-full bg-[rgba(212,114,92,0.08)] px-3 py-1 text-[11px] font-bold text-[var(--terracotta)]">
+        账号
+      </span>
+    </div>
+
+    <DetailSection icon={<LibraryBig className="h-5 w-5" />} title="个人绘本库">
+      {activity.isLoading ? (
+        <LoadingSpinner label="正在加载个人绘本库" />
+      ) : (
+        <BookMiniList books={activity.personalBooks} emptyMessage="保存后的创作成果会出现在这里。" compact />
+      )}
+    </DetailSection>
+
+    <DetailSection icon={<History className="h-5 w-5" />} title="创作记录">
+      <CreationSessionList sessions={activity.creationSessions} isLoading={activity.isLoading} />
+    </DetailSection>
+
+    {activity.error ? <p className="text-xs text-[var(--terracotta)]">{activity.error}</p> : null}
+  </section>
+);
+
 const ProfileDetailPanel: React.FC<{
   profile: ChildProfile;
   onClose: () => void;
   onDelete: (profile: ChildProfile) => void;
   onEdit: (profile: ChildProfile) => void;
 }> = ({ profile, onClose, onDelete, onEdit }) => {
+  const [activity, setActivity] = React.useState<ProfileActivityState>(emptyActivityState);
   const { labelMap: ageLabels } = useTaxonomyGroup("age_range");
   const { items: interestItems } = useTaxonomyGroup("interest_tag");
   const { items: educationItems } = useTaxonomyGroup("education_goal");
   const { items: characterItems } = useTaxonomyGroup("asset_category");
   const { items: voiceStyleItems } = useTaxonomyGroup("voice_style");
+
+  React.useEffect(() => {
+    let ignore = false;
+    setActivity((current) => ({ ...current, isLoading: true, error: null }));
+
+    const loadActivity = async () => {
+      const [recentReads, favoriteBooks, creationSessions] = await Promise.allSettled([
+        readingApi.listRecent(profile.id, 4),
+        readingApi.listFavorites(profile.id, 4),
+        creationApi.listSessions(profile.id, 6),
+      ]);
+      if (ignore) return;
+      const firstError = [recentReads, favoriteBooks, creationSessions].find(
+        (result): result is PromiseRejectedResult => result.status === "rejected",
+      );
+      setActivity({
+        recentReads: recentReads.status === "fulfilled" ? recentReads.value : [],
+        favoriteBooks: favoriteBooks.status === "fulfilled" ? favoriteBooks.value : [],
+        creationSessions: creationSessions.status === "fulfilled" ? creationSessions.value : [],
+        isLoading: false,
+        error: firstError ? "部分记录暂时加载失败，请稍后重试。" : null,
+      });
+    };
+
+    void loadActivity();
+    return () => {
+      ignore = true;
+    };
+  }, [profile.id]);
 
   const ageLabel = profile.age_range ? ageLabels[profile.age_range] ?? profile.age_range_label : undefined;
   const characterLabel = characterItems.find((item) => item.code === profile.default_character)?.name ?? profile.default_character;
@@ -215,9 +342,14 @@ const ProfileDetailPanel: React.FC<{
               🌟
             </span>
             <div className="min-w-0">
-              <h2 className="font-display truncate text-[28px]">{profile.nickname}</h2>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <h2 className="font-display truncate text-[28px]">{profile.nickname}</h2>
+                <span className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-[var(--terracotta)]">
+                  孩子档案
+                </span>
+              </div>
               <p className="mt-1 text-sm text-[var(--text-light)]">
-                {ageLabel ?? profile.age_range_label ?? "未设置年龄"}
+                {ageLabel ?? profile.age_range_label ?? "未设置年龄"} · 阅读、收藏和孩子相关创作单独归档
               </p>
             </div>
           </div>
@@ -226,7 +358,7 @@ const ProfileDetailPanel: React.FC<{
           </Button>
         </header>
 
-        <div className="grid grid-cols-2 max-lg:grid-cols-1">
+        <div className="grid grid-cols-[0.9fr_1.1fr] max-lg:grid-cols-1">
           <div className="border-r border-[rgba(212,114,92,0.08)] p-9 max-lg:border-b max-lg:border-r-0 max-md:p-5">
             <DetailSection icon={<Wand2 className="h-5 w-5" />} title="偏好配置">
               <TaxonomyTagList codes={profile.interest_tags} items={interestItems} />
@@ -247,13 +379,22 @@ const ProfileDetailPanel: React.FC<{
           </div>
 
           <div className="p-9 max-md:p-5">
-            <DetailSection icon={<BookOpen className="h-5 w-5" />} title="阅读历史">
-              <EmptyFactState message="当前没有可展示的阅读历史。" />
+            <div className="mb-5 rounded-[var(--radius-md)] border border-[rgba(94,160,122,0.16)] bg-[rgba(94,160,122,0.08)] px-4 py-3 text-xs font-semibold text-[var(--sage-deep)]">
+              这里展示带有当前孩子档案 ID 的记录；账号级“个人绘本库”已移动到右侧“我的内容”。
+            </div>
+
+            <DetailSection icon={<BookOpen className="h-5 w-5" />} title="孩子阅读历史">
+              <RecentReadList items={activity.recentReads} isLoading={activity.isLoading} />
             </DetailSection>
 
-            <DetailSection icon={<Heart className="h-5 w-5" />} title="收藏绘本">
-              <EmptyFactState message="当前没有可展示的收藏绘本。" />
+            <DetailSection icon={<Heart className="h-5 w-5" />} title="孩子收藏绘本">
+              <BookMiniList books={activity.favoriteBooks} emptyMessage="当前没有可展示的收藏绘本。" />
             </DetailSection>
+
+            <DetailSection icon={<History className="h-5 w-5" />} title="孩子相关创作">
+              <CreationSessionList sessions={activity.creationSessions} isLoading={activity.isLoading} />
+            </DetailSection>
+            {activity.error ? <p className="text-xs text-[var(--terracotta)]">{activity.error}</p> : null}
           </div>
         </div>
       </div>
@@ -270,6 +411,122 @@ const DetailSection: React.FC<React.PropsWithChildren<{ icon: React.ReactNode; t
     {children}
   </section>
 );
+
+const formatDateTime = (value: string) =>
+  new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+
+const bookDetailHref = (bookId: number) => `/book-detail?bookId=${bookId}`;
+const playerHref = (bookId: number) => `/player?bookId=${bookId}`;
+
+const BookMiniList: React.FC<{ books: BookSummary[]; emptyMessage: string; compact?: boolean }> = ({ books, emptyMessage, compact = false }) => {
+  if (books.length === 0) return <EmptyFactState message={emptyMessage} />;
+
+  return (
+    <div className="space-y-2.5">
+      {books.map((book) => (
+        <a
+          key={book.id}
+          className="flex items-center gap-3 rounded-[var(--radius-md)] border border-[rgba(212,114,92,0.1)] bg-white p-3 text-inherit no-underline transition hover:border-[rgba(212,114,92,0.22)] hover:shadow-sm"
+          href={bookDetailHref(book.id)}
+        >
+          {book.cover_url ? (
+            <img className={cn("shrink-0 rounded-[10px] object-cover", compact ? "h-12 w-9" : "h-14 w-11")} src={book.cover_url} alt="" />
+          ) : (
+            <span className={cn("flex shrink-0 items-center justify-center rounded-[10px] bg-[linear-gradient(135deg,#FAD2C4,#EF7B67)] px-1 text-center text-[11px] font-bold leading-tight text-white", compact ? "h-12 w-9" : "h-14 w-11")}>
+              {book.title.slice(0, 4)}
+            </span>
+          )}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-bold text-[var(--text-dark)]">{book.title}</span>
+            <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-light)]">
+              <span>{book.page_count} 页</span>
+              <span>{Math.max(1, Math.round(book.duration_seconds / 60))} 分钟</span>
+            </span>
+          </span>
+        </a>
+      ))}
+    </div>
+  );
+};
+
+const RecentReadList: React.FC<{ items: RecentReadSummary[]; isLoading: boolean }> = ({ items, isLoading }) => {
+  if (isLoading) return <LoadingSpinner label="正在加载阅读记录" />;
+  if (items.length === 0) return <EmptyFactState message="当前没有可展示的阅读历史。" />;
+
+  return (
+    <div className="space-y-2.5">
+      {items.map(({ book, progress }) => (
+        <a
+          key={`${book.id}-${progress.id}`}
+          className="flex items-center gap-3 rounded-[var(--radius-md)] border border-[rgba(212,114,92,0.1)] bg-white p-3 text-inherit no-underline transition hover:border-[rgba(212,114,92,0.22)] hover:shadow-sm"
+          href={playerHref(book.id)}
+          onClick={() => window.sessionStorage.setItem("airchieve.current_book_id", String(book.id))}
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[rgba(94,160,122,0.12)] text-[var(--sage-deep)]">
+            <Clock className="h-4 w-4" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-bold text-[var(--text-dark)]">{book.title}</span>
+            <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-[rgba(212,114,92,0.08)]">
+              <span className="block h-full rounded-full bg-[var(--sage-deep)]" style={{ width: `${progress.progress_percent}%` }} />
+            </span>
+          </span>
+          <span className="shrink-0 text-xs font-bold text-[var(--sage-deep)]">{Math.round(progress.progress_percent)}%</span>
+        </a>
+      ))}
+    </div>
+  );
+};
+
+const creationTypeLabels: Record<CreationSession["creation_type"], string> = {
+  story_to_book: "故事生成",
+  template_book: "模板创作",
+  similar_book: "类似作品",
+};
+
+const creationStatusLabels: Record<CreationSession["status"], string> = {
+  draft: "草稿",
+  generating: "生成中",
+  preview: "待保存",
+  saved: "已保存",
+  failed: "失败",
+  canceled: "已取消",
+};
+
+const CreationSessionList: React.FC<{ sessions: CreationSession[]; isLoading: boolean }> = ({ sessions, isLoading }) => {
+  if (isLoading) return <LoadingSpinner label="正在加载创作记录" />;
+  if (sessions.length === 0) return <EmptyFactState message="还没有创作记录。" />;
+
+  return (
+    <div className="space-y-2.5">
+      {sessions.map((session) => (
+        <div key={session.id} className="rounded-[var(--radius-md)] border border-[rgba(212,114,92,0.1)] bg-white p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold text-[var(--text-dark)]">
+                {creationTypeLabels[session.creation_type]} · {session.target_page_count} 页
+              </p>
+              <p className="mt-1 text-xs text-[var(--text-light)]">更新于 {formatDateTime(session.updated_at)}</p>
+            </div>
+            <span className="shrink-0 rounded-full bg-[rgba(245,166,35,0.12)] px-2.5 py-1 text-[11px] font-bold text-[#B8751A]">
+              {creationStatusLabels[session.status]}
+            </span>
+          </div>
+          {session.saved_book_id ? (
+            <a className="mt-2 inline-flex text-xs font-bold text-[var(--terracotta)]" href={bookDetailHref(session.saved_book_id)}>
+              查看保存的绘本
+            </a>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+};
 
 const EmptyFactState: React.FC<{ message: string }> = ({ message }) => (
   <div className="rounded-[var(--radius-md)] border border-[rgba(212,114,92,0.1)] bg-[var(--cream)] px-4 py-5 text-sm text-[var(--text-light)]">

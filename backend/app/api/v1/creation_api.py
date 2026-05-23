@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.account_api import current_user_id
@@ -26,6 +26,23 @@ async def create_session(
     user_id: int = Depends(current_user_id),
 ) -> CreationSessionRead:
     return await creation.create_session(db, user_id, payload)
+
+
+@router.get("/sessions", response_model=list[CreationSessionRead])
+async def list_sessions(
+    child_profile_id: int | None = None,
+    limit: int = Query(default=20, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(current_user_id),
+) -> list[CreationSessionRead]:
+    return await creation.list_sessions(
+        db,
+        user_id,
+        child_profile_id=child_profile_id,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/sessions/{session_id}", response_model=CreationSessionRead)

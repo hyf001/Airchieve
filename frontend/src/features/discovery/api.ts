@@ -25,6 +25,8 @@ export const discoveryApi = {
     const qs = toQuery(query);
     return apiClient.get<BookListRead>(`/v1/books${qs ? `?${qs}` : ""}`);
   },
+  listMyBooks: (limit = 12, offset = 0) =>
+    apiClient.get<BookListRead>(`/v1/books/mine?limit=${limit}&offset=${offset}`),
   getBook: (bookId: number) => apiClient.get<BookDetail>(`/v1/books/${bookId}`),
   startSimilarCreation: (bookId: number) =>
     apiClient.post<{ guidance: string }>(`/v1/books/${bookId}/similar-creation-session`, {}),

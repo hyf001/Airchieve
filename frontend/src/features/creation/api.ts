@@ -13,6 +13,11 @@ import type {
 export const creationApi = {
   createSession: (payload: CreationSessionCreatePayload) =>
     apiClient.post<CreationSession>("/v1/creation/sessions", payload),
+  listSessions: (childProfileId?: number | null, limit = 10, offset = 0) => {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (childProfileId) params.set("child_profile_id", String(childProfileId));
+    return apiClient.get<CreationSession[]>(`/v1/creation/sessions?${params.toString()}`);
+  },
   updateConfig: (
     sessionId: number,
     payload: {

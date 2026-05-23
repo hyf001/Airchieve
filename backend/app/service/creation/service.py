@@ -75,6 +75,29 @@ async def get_session(db: AsyncSession, user_id: int, session_id: int) -> Creati
     return _session_read(session)
 
 
+async def list_sessions(
+    db: AsyncSession,
+    user_id: int,
+    *,
+    child_profile_id: int | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> list[CreationSessionRead]:
+    conditions = [CreationSession.user_id == user_id]
+    if child_profile_id is not None:
+        await account_service.assert_profile_belongs_to_user(db, child_profile_id, user_id)
+        conditions.append(CreationSession.child_profile_id == child_profile_id)
+    result = await db.execute(
+        select(CreationSession)
+        .options(selectinload(CreationSession.storyboard_pages))
+        .where(*conditions)
+        .order_by(CreationSession.updated_at.desc(), CreationSession.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    return [_session_read(session) for session in result.scalars().unique().all()]
+
+
 async def update_session_config(
     db: AsyncSession,
     user_id: int,

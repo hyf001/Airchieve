@@ -65,6 +65,8 @@ export interface CreationSession {
   voice_ref?: Record<string, unknown> | null;
   saved_book_id?: number | null;
   storyboard_pages: StoryboardPage[];
+  created_at: string;
+  updated_at: string;
 }
 
 export interface GenerationTaskRead {
