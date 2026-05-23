@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     KLING_AVATAR_PROMPT: str = "A natural talking avatar facing the camera, warm children's picture book performance."
     KLING_AVATAR_TIMEOUT_SECONDS: int = 600
     KLING_AVATAR_POLL_INTERVAL_SECONDS: float = 5.0
+    WORKER_ENABLED: bool = False
+    WORKER_POLL_INTERVAL_SECONDS: float = 2.0
+    WORKER_SHUTDOWN_TIMEOUT_SECONDS: float = 30.0
 
     @field_validator("DEBUG", mode="before")
     @classmethod

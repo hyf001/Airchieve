@@ -187,6 +187,48 @@ async def generate_image(db: AsyncSession, *, task_id: int | None, pages: list[d
         raise
 
 
+async def generate_character_image(
+    db: AsyncSession,
+    *,
+    task_id: int | None,
+    prompt: str,
+    reference_image_url: str | None = None,
+) -> str:
+    provider = _provider_for(AiProviderCapability.IMAGE)
+    model = _model_for(provider, AiProviderCapability.IMAGE)
+    started = perf_counter()
+    full_prompt = _build_character_image_prompt(prompt, reference_image_url=reference_image_url)
+    request_snapshot = {
+        "prompt_preview": prompt[:120],
+        "has_reference_image": bool(reference_image_url),
+    }
+    try:
+        image_url = await _generate_image_with_provider(provider, model, full_prompt)
+        await record_provider_call(
+            db,
+            capability=AiProviderCapability.IMAGE,
+            task_id=task_id,
+            provider=provider,
+            model=model,
+            request_payload=request_snapshot,
+            response_payload={"image_result_type": "data_url" if image_url.startswith("data:") else "url"},
+            latency_ms=_elapsed_ms(started),
+        )
+        return image_url
+    except Exception as exc:
+        await _record_provider_failure(
+            db,
+            capability=AiProviderCapability.IMAGE,
+            task_id=task_id,
+            provider=provider,
+            model=model,
+            started=started,
+            request_payload=request_snapshot,
+            exc=exc,
+        )
+        raise
+
+
 async def generate_audio(db: AsyncSession, *, task_id: int | None, pages: list[dict], voice_ref: dict | None = None) -> dict:
     provider = _provider_for(AiProviderCapability.AUDIO)
     model = _model_for(provider, AiProviderCapability.AUDIO)
@@ -374,6 +416,22 @@ def _build_picture_book_image_prompt(page: dict, *, page_index: int, page_count:
         "- 保持绘本插画质感，构图完整，主体清晰。\n"
         "- 图片中不要出现任何文字、字母、标题、标签或边框。\n"
         "- 只画当前页，不要把其它页内容画进来。"
+    )
+
+
+def _build_character_image_prompt(prompt: str, *, reference_image_url: str | None) -> str:
+    reference_section = f"\n参考图片 URL：{reference_image_url}\n请参考该图片中的人物特征，但不要复制背景或水印。\n" if reference_image_url else ""
+    return (
+        "你是一名专业儿童绘本角色设计师。\n\n"
+        "请生成一张单个角色形象图，用于儿童绘本角色库。\n\n"
+        f"角色需求：\n{prompt.strip()}\n"
+        f"{reference_section}\n"
+        "要求：\n"
+        "- 角色主体清晰，适合在多页绘本中复用。\n"
+        "- 儿童友好、温暖、有亲和力。\n"
+        "- 保持完整身体或半身形象，避免复杂背景。\n"
+        "- 图片中不要出现任何文字、字母、标题、标签、边框或水印。\n"
+        "- 不要生成多个不同角色。"
     )
 
 

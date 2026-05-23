@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.model.book import Book, BookPublishStatus
 from app.model.export import ExportJob, ExportJobStatus, ExportQuality
+from app.model.generation_task import GenerationTask
 from app.model.privacy import PrivacyAction
 from app.schema.entitlement import EntitlementQuotaKey
 from app.schema.export import ExportFileUrlRead, ExportJobCreate, ExportJobListRead, ExportJobRead
@@ -69,27 +70,14 @@ async def create_export_job(db: AsyncSession, user_id: int, book_id: int, payloa
         EntitlementQuotaKey.PDF_EXPORT_MONTHLY,
         idempotency_key=payload.idempotency_key,
     )
-    task = await generation_task_service.create_task(
-        db,
-        GenerationTaskCreate(
-            task_type="pdf_export",
-            owner_type="export_job",
-            owner_id=0,
-            user_id=user_id,
-            input_payload={"book_id": book.id, "quality": payload.quality.value},
-            provider="placeholder",
-        ),
-    )
     job = ExportJob(
         user_id=user_id,
         book_id=book.id,
         export_type=payload.export_type,
         quality=payload.quality,
-        # MVP placeholder: create the generation task record now, then mark this demo export as immediately downloadable.
-        # A real PDF worker should transition the job through queued/running/succeeded and fill file_asset_id/file_url.
-        status=ExportJobStatus.SUCCEEDED,
-        generation_task_id=task.id,
-        file_url="",
+        status=ExportJobStatus.QUEUED,
+        generation_task_id=None,
+        file_url=None,
         idempotency_key=payload.idempotency_key,
         book_snapshot={
             "id": book.id,
@@ -104,14 +92,48 @@ async def create_export_job(db: AsyncSession, user_id: int, book_id: int, payloa
     )
     db.add(job)
     await db.flush()
-    job.file_url = f"/api/v1/export/jobs/{job.id}/file-download"
-    task_model = await generation_task_service.mark_task_running(db, task.id)
-    task_model.owner_id = job.id
-    await generation_task_service.mark_task_succeeded(db, task.id, result_refs={"export_job_id": job.id, "file_url": job.file_url})
+    task = await generation_task_service.create_task(
+        db,
+        GenerationTaskCreate(
+            task_type="pdf_export",
+            owner_type="export_job",
+            owner_id=job.id,
+            user_id=user_id,
+            input_payload={"book_id": book.id, "quality": payload.quality.value},
+            provider="placeholder",
+        ),
+    )
+    job.generation_task_id = task.id
     await db.commit()
     await db.refresh(job)
     _ = quota
     return _read_job(job)
+
+
+async def run_pdf_export_task(db: AsyncSession, task: GenerationTask) -> None:
+    if task.owner_type != "export_job":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="PDF_EXPORT_OWNER_INVALID")
+    job = await db.get(ExportJob, task.owner_id)
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="导出任务不存在")
+    job.status = ExportJobStatus.RUNNING
+    job.file_url = f"/api/v1/export/jobs/{job.id}/file-download"
+    job.status = ExportJobStatus.SUCCEEDED
+    job.expires_at = job.expires_at or (_now() + timedelta(days=30))
+    await generation_task_service.mark_task_succeeded(
+        db,
+        task.id,
+        result_refs={"export_job_id": job.id, "file_url": job.file_url, "placeholder": True},
+    )
+
+
+async def mark_pdf_export_task_failed(db: AsyncSession, task: GenerationTask, exc: BaseException) -> None:
+    if task.owner_type != "export_job":
+        return
+    job = await db.get(ExportJob, task.owner_id)
+    if job is not None:
+        job.status = ExportJobStatus.FAILED
+        job.error_message = (str(exc) or exc.__class__.__name__)[:500]
 
 
 async def get_export_job(db: AsyncSession, user_id: int, export_id: int) -> ExportJobRead:

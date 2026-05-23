@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.model.generation_task import GenerationTaskStatus, GenerationTaskType
 from app.schema.generation_task import GenerationTaskCreate
 from app.service.generation_task import (
+    claim_next_task,
     create_task,
     get_task,
     mark_task_failed,
@@ -48,6 +49,35 @@ class TestMarkTaskRunning:
         assert updated.status == GenerationTaskStatus.RUNNING
         assert updated.progress_percent >= 10
         assert updated.started_at is not None
+
+
+class TestClaimNextTask:
+    async def test_claim_next_task_marks_running(self, db: AsyncSession):
+        payload = GenerationTaskCreate(
+            task_type=GenerationTaskType.CHARACTER_IMAGE,
+            owner_type="character",
+            owner_id=1,
+            user_id=10,
+        )
+        created = await create_task(db, payload)
+        claimed = await claim_next_task(db, task_types={GenerationTaskType.CHARACTER_IMAGE})
+        assert claimed is not None
+        assert claimed.id == created.id
+        assert claimed.status == GenerationTaskStatus.RUNNING
+        assert claimed.progress_percent >= 10
+        assert claimed.started_at is not None
+
+    async def test_claim_next_task_filters_task_type(self, db: AsyncSession):
+        await create_task(
+            db,
+            GenerationTaskCreate(
+                task_type=GenerationTaskType.STORY,
+                owner_type="creation",
+                owner_id=1,
+            ),
+        )
+        claimed = await claim_next_task(db, task_types={GenerationTaskType.CHARACTER_IMAGE})
+        assert claimed is None
 
 
 class TestMarkTaskSucceeded:

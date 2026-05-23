@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.model.book import Book, BookPublishStatus
 from app.model.creation import CreationSession, CreationSessionStatus, CreationStep, CreationStoryboardPage, CreationType
+from app.model.generation_task import GenerationTask, GenerationTaskStatus
 from app.schema.creation import CreationSessionCreate
 
 
@@ -29,11 +30,11 @@ async def _create_test_session(db: AsyncSession, user_id: int = 1, **overrides) 
     return session
 
 
-class TestGenerateStoryAIError:
-    """Verify P0 bug: AI provider exception must mark task as FAILED."""
+class TestGenerateStoryTask:
+    """Verify story generation is queued for the worker."""
 
-    @patch("app.service.ai_provider.generate_text", new_callable=AsyncMock, side_effect=RuntimeError("LLM timeout"))
-    async def test_generate_story_marks_task_failed_on_ai_error(self, mock_gen, db: AsyncSession):
+    @patch("app.service.ai_provider.generate_text", new_callable=AsyncMock)
+    async def test_generate_story_returns_queued_task(self, mock_gen, db: AsyncSession):
         session = await _create_test_session(db)
         await db.commit()
 
@@ -46,15 +47,13 @@ class TestGenerateStoryAIError:
             session_id=session.id,
             payload=IdeaStoryGenerateRequest(idea_prompt="a brave little cat"),
         )
-        assert result.task.status == "failed"
-        assert result.task.error_code == "PROVIDER_FAILED"
-        assert "LLM timeout" in result.task.error_message
-        assert result.session.status == CreationSessionStatus.FAILED
+        assert result.task.status == GenerationTaskStatus.QUEUED
+        mock_gen.assert_not_called()
 
 
 class TestGenerateImagesAIError:
-    @patch("app.service.ai_provider.generate_image", new_callable=AsyncMock, side_effect=RuntimeError("Image API down"))
-    async def test_generate_images_marks_task_failed_on_ai_error(self, mock_gen, db: AsyncSession):
+    @patch("app.service.ai_provider.generate_image", new_callable=AsyncMock)
+    async def test_generate_images_returns_queued_task(self, mock_gen, db: AsyncSession):
         session = await _create_test_session(db)
         await db.commit()
 
@@ -67,13 +66,13 @@ class TestGenerateImagesAIError:
             session_id=session.id,
             payload=GeneratePagesRequest(page_ids=None),
         )
-        assert result.task.status == "failed"
-        assert result.task.error_code == "PROVIDER_FAILED"
+        assert result.task.status == GenerationTaskStatus.QUEUED
+        mock_gen.assert_not_called()
 
 
 class TestGenerateAudioAIError:
-    @patch("app.service.ai_provider.generate_audio", new_callable=AsyncMock, side_effect=RuntimeError("Audio API down"))
-    async def test_generate_audio_marks_task_failed_on_ai_error(self, mock_gen, db: AsyncSession):
+    @patch("app.service.ai_provider.generate_audio", new_callable=AsyncMock)
+    async def test_generate_audio_returns_queued_task(self, mock_gen, db: AsyncSession):
         session = await _create_test_session(db)
         await db.commit()
 
@@ -86,8 +85,8 @@ class TestGenerateAudioAIError:
             session_id=session.id,
             payload=GeneratePagesRequest(page_ids=None),
         )
-        assert result.task.status == "failed"
-        assert result.task.error_code == "PROVIDER_FAILED"
+        assert result.task.status == GenerationTaskStatus.QUEUED
+        mock_gen.assert_not_called()
 
 
 class TestGenerateLipSync:
@@ -109,7 +108,7 @@ class TestGenerateLipSync:
         mock_gen.return_value = {"page_results": [{"page_id": page.id, "lip_sync_url": "https://example.com/lip.mp4"}]}
 
         from app.schema.creation import GeneratePagesRequest
-        from app.service.creation import generate_lip_sync
+        from app.service.creation import generate_lip_sync, run_creation_lip_sync_task
 
         result = await generate_lip_sync(
             db,
@@ -118,8 +117,15 @@ class TestGenerateLipSync:
             payload=GeneratePagesRequest(page_ids=[page.id]),
         )
 
-        assert result.task.status == "succeeded"
-        assert result.session.storyboard_pages[0].lip_sync_url == "https://example.com/lip.mp4"
+        assert result.task.status == GenerationTaskStatus.QUEUED
+        task = await db.get(GenerationTask, result.task.id)
+        assert task is not None
+        await run_creation_lip_sync_task(db, task)
+        await db.commit()
+        refreshed_task = await db.get(GenerationTask, task.id)
+        refreshed_page = await db.get(CreationStoryboardPage, page.id)
+        assert refreshed_task.status == GenerationTaskStatus.SUCCEEDED
+        assert refreshed_page.lip_sync_url == "https://example.com/lip.mp4"
 
 
 class TestRegenerateUnsupported:

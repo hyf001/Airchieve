@@ -28,6 +28,7 @@ sources: [raw/articles/source-name.md]
 ## Raw Source Layout
 - `raw/articles/module-design.md` — complete module design overview.
 - `raw/articles/module-design/*.md` — complete detailed module design files.
+- `raw/articles/generation-task-execution-design.md` — complete generation task execution design.
 - `raw/articles/picture-book-website-prd.md` — complete PRD and acceptance criteria.
 - `raw/articles/external-dependencies.md` — complete external dependency notes.
 - `raw/prototypes/*.html` — complete frontend HTML prototypes preserved as original HTML files.
@@ -39,7 +40,7 @@ sources: [raw/articles/source-name.md]
 - User: account, child-profile, auth, privacy
 - Business: membership, entitlement, payment, share, export
 - Platform: admin, moderation, audit, analytics, domain-event, taxonomy, recommendation, discovery
-- Architecture: module-design, api, frontend, backend, database, collaboration
+- Architecture: module-design, api, frontend, backend, database, collaboration, ai-provider
 
 ## Page Thresholds
 - **Create a page** when a module or concept has dedicated design documentation

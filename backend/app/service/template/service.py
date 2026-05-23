@@ -14,6 +14,7 @@ from app.model.book import (
     BookSourceType,
 )
 from app.model.generation_task import GenerationTaskType
+from app.model.generation_task import GenerationTask
 from app.model.template import (
     BookTemplate,
     TemplateCharacter,
@@ -147,14 +148,8 @@ async def preview_template_replacement(
             input_payload={"template_id": template_id, "mode": "preview"},
         ),
     )
-    await generation_task.mark_task_running(db, task.id)
-    completed = await generation_task.mark_task_succeeded(
-        db,
-        task.id,
-        result_refs={"template_id": template_id, "record_id": record.id, "preview": True},
-    )
     await db.commit()
-    return TemplatePreviewResponse(validation=validation, task=completed)
+    return TemplatePreviewResponse(validation=validation, task=task)
 
 
 async def create_book_from_template(
@@ -185,22 +180,51 @@ async def create_book_from_template(
             input_payload={"template_id": template_id, "mode": "create_book"},
         ),
     )
-    await generation_task.mark_task_running(db, task.id)
-    book = await create_personal_book_from_template(
-        db,
-        user_id=user_id,
-        template_id=template_id,
-        voice_ref=payload.voice_ref.model_dump(mode="json") if payload.voice_ref else None,
-    )
-    completed = await generation_task.mark_task_succeeded(
-        db,
-        task.id,
-        result_refs={"template_id": template_id, "record_id": record.id, "book_id": book.id},
-    )
-    record.result_book_id = book.id
-    record.status = TemplateCreationStatus.SAVED
     await db.commit()
-    return TemplateCreateBookResponse(validation=validation, task=completed, book=await book_service.get_book_detail(db, book.id, user_id))
+    return TemplateCreateBookResponse(validation=validation, task=task, book=None)
+
+
+async def run_template_composite_task(db: AsyncSession, task: GenerationTask) -> None:
+    if task.owner_type != "template":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="TEMPLATE_TASK_OWNER_INVALID")
+    record = await db.get(TemplateCreationRecord, task.owner_id)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="模板生成记录不存在")
+    mode = str((task.input_payload or {}).get("mode") or "")
+    if mode == "preview":
+        record.status = TemplateCreationStatus.PREVIEWING
+        await generation_task.mark_task_succeeded(
+            db,
+            task.id,
+            result_refs={"template_id": record.template_id, "record_id": record.id, "preview": True},
+        )
+        return
+    if mode == "create_book":
+        voice_ref = (record.replacements or {}).get("voice_ref")
+        book = await create_personal_book_from_template(
+            db,
+            user_id=record.user_id,
+            template_id=record.template_id,
+            voice_ref=voice_ref,
+        )
+        record.result_book_id = book.id
+        record.status = TemplateCreationStatus.SAVED
+        await generation_task.mark_task_succeeded(
+            db,
+            task.id,
+            result_refs={"template_id": record.template_id, "record_id": record.id, "book_id": book.id},
+        )
+        return
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="TEMPLATE_TASK_MODE_INVALID")
+
+
+async def mark_template_task_failed(db: AsyncSession, task: GenerationTask, exc: BaseException) -> None:
+    if task.owner_type != "template":
+        return
+    record = await db.get(TemplateCreationRecord, task.owner_id)
+    if record is not None:
+        record.status = TemplateCreationStatus.FAILED
+    _ = exc
 
 
 async def create_personal_book_from_template(

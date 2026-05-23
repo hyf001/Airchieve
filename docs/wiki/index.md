@@ -1,7 +1,7 @@
 # Wiki Index
 
 > AIrchieve 绘本网站项目知识库。每个模块页面包含前后端归属、数据模型、接口、边界和跨模块引用。
-> Last updated: 2026-05-20 | Total pages: 21
+> Last updated: 2026-05-23 | Total pages: 22
 
 ## Start Here
 
@@ -12,6 +12,7 @@
 - [多人协作分组](concepts/collaboration-groups.md) — A-H 组模块分工和协作流程
 - [产品需求与用户故事](concepts/product-requirements.md) — PRD 用户画像、15 个 User Stories 和验收标准归属索引
 - [前端原型索引](concepts/frontend-prototypes.md) — `docs/frontend/*.html` 原型的无损 raw 来源和模块归属
+- [Generation Task Execution](concepts/generation-task-execution.md) — 生成任务的 worker claim、handler 分发、事务、重试和 task 类型执行规则
 - [Source Inventory](concepts/source-inventory.md) — wiki raw 层完整来源清单和无损使用原则
 
 ## Module Map

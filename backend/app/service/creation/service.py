@@ -14,6 +14,7 @@ from app.model.creation import (
     StoryboardGenerationStatus,
 )
 from app.model.generation_task import GenerationTaskType
+from app.model.generation_task import GenerationTask
 from app.schema.creation import (
     CreationConfigPatch,
     CreationSessionCreate,
@@ -139,18 +140,8 @@ async def generate_story(
             input_payload={"idea_prompt": payload.idea_prompt},
         ),
     )
-    await generation_task.mark_task_running(db, task.id)
-    try:
-        generated_text = await ai_provider.generate_text(db, task_id=task.id, prompt=payload.idea_prompt)
-    except Exception as exc:
-        failed = await _mark_generation_failed(db, session, task.id, exc)
-        await db.commit()
-        return CreationTaskResponse(session=await get_session(db, user_id, session_id), task=failed)
-    session.status = CreationSessionStatus.DRAFT
-    session.current_step = CreationStep.CHARACTER
-    completed = await generation_task.mark_task_succeeded(db, task.id, result_refs={"story_preview": generated_text})
     await db.commit()
-    return CreationTaskResponse(session=await get_session(db, user_id, session_id), task=completed)
+    return CreationTaskResponse(session=await get_session(db, user_id, session_id), task=task)
 
 
 async def generate_storyboard(db: AsyncSession, user_id: int, session_id: int) -> CreationTaskResponse:
@@ -165,29 +156,8 @@ async def generate_storyboard(db: AsyncSession, user_id: int, session_id: int) -
             input_payload={"target_page_count": session.target_page_count, "story_id": session.story_id},
         ),
     )
-    await generation_task.mark_task_running(db, task.id)
-    try:
-        title = "专属绘本"
-        story_content = title
-        if session.story_id is not None:
-            story = await story_service.assert_story_usable(db, user_id, session.story_id)
-            title = story.title
-            story_content = story.body
-        structured = await ai_provider.generate_structured(
-            db,
-            task_id=task.id,
-            request={"title": title, "story_content": story_content, "target_page_count": session.target_page_count},
-        )
-    except Exception as exc:
-        failed = await _mark_generation_failed(db, session, task.id, exc)
-        await db.commit()
-        return CreationTaskResponse(session=await get_session(db, user_id, session_id), task=failed)
-    await _replace_storyboard_pages(db, session, structured["pages"])
-    session.status = CreationSessionStatus.PREVIEW
-    session.current_step = CreationStep.STORYBOARD
-    completed = await generation_task.mark_task_succeeded(db, task.id, result_refs={"storyboard_page_count": len(structured["pages"])})
     await db.commit()
-    return CreationTaskResponse(session=await get_session(db, user_id, session_id), task=completed)
+    return CreationTaskResponse(session=await get_session(db, user_id, session_id), task=task)
 
 
 async def update_storyboard_page(
@@ -254,41 +224,11 @@ async def regenerate(db: AsyncSession, user_id: int, session_id: int, payload: R
             input_payload=payload.model_dump(mode="json"),
         ),
     )
-    await generation_task.mark_task_running(db, task.id)
     for page in session.storyboard_pages:
         if payload.page_ids is None or page.id in payload.page_ids:
             page.generation_status = StoryboardGenerationStatus.PENDING
-    try:
-        if task_type == GenerationTaskType.IMAGE:
-            image_result = await ai_provider.generate_image(db, task_id=task.id, pages=_page_payloads(session, payload.page_ids))
-            await _persist_media_result_urls(db, user_id, image_result, url_key="image_url", asset_kind=AssetKind.IMAGE, extension=".png")
-            _apply_image_results(session, image_result)
-        elif task_type == GenerationTaskType.AUDIO:
-            audio_result = await ai_provider.generate_audio(
-                db,
-                task_id=task.id,
-                pages=_page_payloads(session, payload.page_ids),
-                voice_ref=session.voice_ref,
-            )
-            await _persist_media_result_urls(db, user_id, audio_result, url_key="audio_url", asset_kind=AssetKind.AUDIO, extension=".wav")
-            _apply_audio_results(session, audio_result)
-        else:
-            lip_sync_result = await ai_provider.generate_lip_sync(db, task_id=task.id, pages=_page_payloads(session, payload.page_ids))
-            _apply_lip_sync_results(session, lip_sync_result)
-    except Exception as exc:
-        failed = await _mark_generation_failed(db, session, task.id, exc)
-        for page in session.storyboard_pages:
-            if payload.page_ids is None or page.id in payload.page_ids:
-                page.generation_status = StoryboardGenerationStatus.FAILED
-        await db.commit()
-        return CreationTaskResponse(session=await get_session(db, user_id, session_id), task=failed)
-    completed = await generation_task.mark_task_succeeded(
-        db,
-        task.id,
-        result_refs={"target_type": payload.target_type, "page_ids": payload.page_ids or []},
-    )
     await db.commit()
-    return CreationTaskResponse(session=await get_session(db, user_id, session_id), task=completed)
+    return CreationTaskResponse(session=await get_session(db, user_id, session_id), task=task)
 
 
 async def save_book(db: AsyncSession, user_id: int, session_id: int) -> SaveBookResponse:
@@ -379,42 +319,97 @@ async def _generate_media_task(
             input_payload={"page_ids": payload.page_ids or []},
         ),
     )
-    await generation_task.mark_task_running(db, task.id)
-    try:
-        if task_type == GenerationTaskType.IMAGE:
-            image_result = await ai_provider.generate_image(db, task_id=task.id, pages=_page_payloads(session, payload.page_ids))
-            await _persist_media_result_urls(db, user_id, image_result, url_key="image_url", asset_kind=AssetKind.IMAGE, extension=".png")
-            _apply_image_results(session, image_result)
-        elif task_type == GenerationTaskType.AUDIO:
-            audio_result = await ai_provider.generate_audio(
-                db,
-                task_id=task.id,
-                pages=_page_payloads(session, payload.page_ids),
-                voice_ref=session.voice_ref,
-            )
-            await _persist_media_result_urls(db, user_id, audio_result, url_key="audio_url", asset_kind=AssetKind.AUDIO, extension=".wav")
-            _apply_audio_results(session, audio_result)
-        else:
-            lip_sync_result = await ai_provider.generate_lip_sync(db, task_id=task.id, pages=_page_payloads(session, payload.page_ids))
-            _apply_lip_sync_results(session, lip_sync_result)
-    except Exception as exc:
-        failed = await _mark_generation_failed(db, session, task.id, exc)
-        for page in session.storyboard_pages:
-            if payload.page_ids is None or page.id in payload.page_ids:
-                page.generation_status = StoryboardGenerationStatus.FAILED
-        await db.commit()
-        return CreationTaskResponse(session=await get_session(db, user_id, session_id), task=failed)
     for page in session.storyboard_pages:
         if payload.page_ids is None or page.id in payload.page_ids:
-            page.generation_status = StoryboardGenerationStatus.READY
-    session.current_step = CreationStep.VOICE if task_type == GenerationTaskType.IMAGE else CreationStep.PREVIEW
-    completed = await generation_task.mark_task_succeeded(
-        db,
-        task.id,
-        result_refs={"page_ids": payload.page_ids or [page.id for page in session.storyboard_pages]},
-    )
+            page.generation_status = StoryboardGenerationStatus.PENDING
     await db.commit()
-    return CreationTaskResponse(session=await get_session(db, user_id, session_id), task=completed)
+    return CreationTaskResponse(session=await get_session(db, user_id, session_id), task=task)
+
+
+async def run_story_task(db: AsyncSession, task: GenerationTask) -> None:
+    session = await _get_task_session_model(db, task)
+    prompt = str((task.input_payload or {}).get("idea_prompt") or session.idea_prompt or "").strip()
+    if not prompt:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="STORY_PROMPT_MISSING")
+    generated_text = await ai_provider.generate_text(db, task_id=task.id, prompt=prompt)
+    session.idea_prompt = prompt
+    session.status = CreationSessionStatus.DRAFT
+    session.current_step = CreationStep.CHARACTER
+    await generation_task.mark_task_succeeded(db, task.id, result_refs={"story_preview": generated_text})
+
+
+async def run_storyboard_task(db: AsyncSession, task: GenerationTask) -> None:
+    session = await _get_task_session_model(db, task)
+    title = "专属绘本"
+    story_content = title
+    if session.story_id is not None:
+        story = await story_service.assert_story_usable(db, session.user_id, session.story_id)
+        title = story.title
+        story_content = story.body
+    structured = await ai_provider.generate_structured(
+        db,
+        task_id=task.id,
+        request={"title": title, "story_content": story_content, "target_page_count": session.target_page_count},
+    )
+    await _replace_storyboard_pages(db, session, structured["pages"])
+    session.status = CreationSessionStatus.PREVIEW
+    session.current_step = CreationStep.STORYBOARD
+    await generation_task.mark_task_succeeded(db, task.id, result_refs={"storyboard_page_count": len(structured["pages"])})
+
+
+async def run_creation_image_task(db: AsyncSession, task: GenerationTask) -> None:
+    session = await _get_task_session_model(db, task)
+    page_ids = _task_page_ids(task)
+    try:
+        image_result = await ai_provider.generate_image(db, task_id=task.id, pages=_page_payloads(session, page_ids))
+        await _persist_media_result_urls(db, session.user_id, image_result, url_key="image_url", asset_kind=AssetKind.IMAGE, extension=".png")
+        _apply_image_results(session, image_result)
+        for page in session.storyboard_pages:
+            if page_ids is None or page.id in page_ids:
+                page.generation_status = StoryboardGenerationStatus.READY
+        session.current_step = CreationStep.VOICE
+        await generation_task.mark_task_succeeded(db, task.id, result_refs={"page_ids": page_ids or [page.id for page in session.storyboard_pages]})
+    except Exception:
+        _mark_target_pages_failed(session, page_ids)
+        raise
+
+
+async def run_creation_audio_task(db: AsyncSession, task: GenerationTask) -> None:
+    session = await _get_task_session_model(db, task)
+    page_ids = _task_page_ids(task)
+    try:
+        audio_result = await ai_provider.generate_audio(
+            db,
+            task_id=task.id,
+            pages=_page_payloads(session, page_ids),
+            voice_ref=session.voice_ref,
+        )
+        await _persist_media_result_urls(db, session.user_id, audio_result, url_key="audio_url", asset_kind=AssetKind.AUDIO, extension=".wav")
+        _apply_audio_results(session, audio_result)
+        for page in session.storyboard_pages:
+            if page_ids is None or page.id in page_ids:
+                page.generation_status = StoryboardGenerationStatus.READY
+        session.current_step = CreationStep.PREVIEW
+        await generation_task.mark_task_succeeded(db, task.id, result_refs={"page_ids": page_ids or [page.id for page in session.storyboard_pages]})
+    except Exception:
+        _mark_target_pages_failed(session, page_ids)
+        raise
+
+
+async def run_creation_lip_sync_task(db: AsyncSession, task: GenerationTask) -> None:
+    session = await _get_task_session_model(db, task)
+    page_ids = _task_page_ids(task)
+    try:
+        lip_sync_result = await ai_provider.generate_lip_sync(db, task_id=task.id, pages=_page_payloads(session, page_ids))
+        _apply_lip_sync_results(session, lip_sync_result)
+        for page in session.storyboard_pages:
+            if page_ids is None or page.id in page_ids:
+                page.generation_status = StoryboardGenerationStatus.READY
+        session.current_step = CreationStep.PREVIEW
+        await generation_task.mark_task_succeeded(db, task.id, result_refs={"page_ids": page_ids or [page.id for page in session.storyboard_pages]})
+    except Exception:
+        _mark_target_pages_failed(session, page_ids)
+        raise
 
 
 def _page_payloads(session: CreationSession, page_ids: list[int] | None) -> list[dict]:
@@ -539,6 +534,41 @@ async def _mark_generation_failed(
         error_code="PROVIDER_FAILED",
         error_message=message[:500],
     )
+
+
+async def mark_task_owner_failed(db: AsyncSession, task: GenerationTask, exc: BaseException) -> None:
+    if task.owner_type != "creation" or task.user_id is None:
+        return
+    try:
+        session = await _get_task_session_model(db, task)
+    except HTTPException:
+        return
+    if task.task_type in {GenerationTaskType.IMAGE, GenerationTaskType.AUDIO, GenerationTaskType.LIP_SYNC}:
+        _mark_target_pages_failed(session, _task_page_ids(task))
+    else:
+        session.status = CreationSessionStatus.FAILED
+    _ = exc
+
+
+async def _get_task_session_model(db: AsyncSession, task: GenerationTask) -> CreationSession:
+    if task.owner_type != "creation" or task.user_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="CREATION_TASK_OWNER_INVALID")
+    return await _get_session_model(db, task.user_id, task.owner_id)
+
+
+def _task_page_ids(task: GenerationTask) -> list[int] | None:
+    page_ids = (task.input_payload or {}).get("page_ids")
+    if page_ids is None:
+        return None
+    if not page_ids:
+        return None
+    return [int(page_id) for page_id in page_ids]
+
+
+def _mark_target_pages_failed(session: CreationSession, page_ids: list[int] | None) -> None:
+    for page in session.storyboard_pages:
+        if page_ids is None or page.id in page_ids:
+            page.generation_status = StoryboardGenerationStatus.FAILED
 
 
 async def _get_session_model(db: AsyncSession, user_id: int, session_id: int) -> CreationSession:

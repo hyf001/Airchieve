@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock, patch
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.model.ai_provider import AiProviderCall, AiProviderCallStatus, AiProviderCapability
@@ -48,14 +50,30 @@ class TestGenerateStructured:
 
 
 class TestGenerateImage:
-    async def test_returns_dict(self, db: AsyncSession):
-        result = await generate_image(db, task_id=1, page_ids=[10, 20])
-        assert result["page_ids"] == [10, 20]
-        assert result["asset_refs"] == []
+    @patch("app.service.ai_provider.service._generate_image_with_provider", new_callable=AsyncMock)
+    async def test_returns_dict(self, mock_generate, db: AsyncSession):
+        mock_generate.return_value = "data:image/png;base64,abc"
+        result = await generate_image(
+            db,
+            task_id=1,
+            pages=[
+                {"id": 10, "page_no": 1, "title": "Page 1", "visual_prompt": "森林"},
+                {"id": 20, "page_no": 2, "title": "Page 2", "visual_prompt": "河边"},
+            ],
+        )
+        assert result["page_results"] == [
+            {"page_id": 10, "image_url": "data:image/png;base64,abc"},
+            {"page_id": 20, "image_url": "data:image/png;base64,abc"},
+        ]
 
 
 class TestGenerateAudio:
-    async def test_returns_dict(self, db: AsyncSession):
-        result = await generate_audio(db, task_id=1, page_ids=[10])
-        assert result["page_ids"] == [10]
-        assert result["asset_refs"] == []
+    @patch("app.service.ai_provider.service._generate_audio_with_provider", new_callable=AsyncMock)
+    async def test_returns_dict(self, mock_generate, db: AsyncSession):
+        mock_generate.return_value = "data:audio/wav;base64,abc"
+        result = await generate_audio(
+            db,
+            task_id=1,
+            pages=[{"id": 10, "page_no": 1, "narration_text": "你好"}],
+        )
+        assert result["page_results"] == [{"page_id": 10, "audio_url": "data:audio/wav;base64,abc"}]

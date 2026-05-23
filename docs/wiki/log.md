@@ -51,3 +51,9 @@
 - Added `raw/articles/external/kling-avatar-20-lip-sync.md` from Kling Avatar 2.0 product documentation and a compatible API reference.
 - Updated `entities/creation-generation.md` so the retained lip-sync provider path is Kling Avatar 2.0 image-plus-audio generation.
 - Updated `concepts/source-inventory.md` with the new external raw source and removed the previous lip-sync source entry.
+
+## [2026-05-23] ingest | Generation task execution design
+
+- Moved `docs/generation-task-execution-design.md` into `raw/articles/generation-task-execution-design.md` with sha256 metadata.
+- Created `concepts/generation-task-execution.md` as the structured wiki page for worker claim, handler dispatch, task lifecycle, retry, and task type execution rules.
+- Updated `entities/creation-generation.md`, `concepts/source-inventory.md`, `SCHEMA.md`, and `index.md` to reference the new raw source and concept page.

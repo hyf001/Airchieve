@@ -50,6 +50,42 @@ async def create_task(db: AsyncSession, payload: GenerationTaskCreate) -> Genera
     return _task_read(task)
 
 
+async def claim_next_task(
+    db: AsyncSession,
+    *,
+    task_types: set[GenerationTaskType] | None = None,
+) -> GenerationTask | None:
+    conditions = [GenerationTask.status == GenerationTaskStatus.QUEUED]
+    if task_types:
+        conditions.append(GenerationTask.task_type.in_(task_types))
+    # TODO(worker-concurrency): PostgreSQL/MySQL honor FOR UPDATE SKIP LOCKED,
+    # but SQLite ignores row locks. Before enabling multiple consumer loops in
+    # one worker process, make this claim path atomic for SQLite as well.
+    stmt = (
+        select(GenerationTask)
+        .where(*conditions)
+        .order_by(GenerationTask.created_at.asc(), GenerationTask.id.asc())
+        .limit(1)
+        .with_for_update(skip_locked=True)
+    )
+    task = (await db.execute(stmt)).scalar_one_or_none()
+    if task is None:
+        return None
+    now = datetime.now(timezone.utc)
+    task.status = GenerationTaskStatus.RUNNING
+    task.progress_percent = max(task.progress_percent, 10)
+    task.started_at = task.started_at or now
+    attempt = GenerationTaskAttempt(
+        task_id=task.id,
+        attempt_no=task.retry_count + 1,
+        status=GenerationAttemptStatus.RUNNING,
+        started_at=now,
+    )
+    db.add(attempt)
+    await db.flush()
+    return task
+
+
 async def mark_task_running(db: AsyncSession, task_id: int) -> GenerationTask:
     task = await _get_task_model(db, task_id)
     now = datetime.now(timezone.utc)
@@ -65,6 +101,13 @@ async def mark_task_running(db: AsyncSession, task_id: int) -> GenerationTask:
     db.add(attempt)
     await db.flush()
     return task
+
+
+async def update_task_progress(db: AsyncSession, task_id: int, progress_percent: int) -> GenerationTaskRead:
+    task = await _get_task_model(db, task_id)
+    task.progress_percent = min(99, max(0, progress_percent))
+    await db.flush()
+    return _task_read(task)
 
 
 async def mark_task_succeeded(db: AsyncSession, task_id: int, *, result_refs: dict | None = None) -> GenerationTaskRead:
