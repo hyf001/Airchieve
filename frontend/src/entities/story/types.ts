@@ -16,6 +16,7 @@ export interface StorySummary {
   theme_codes: string[];
   education_goal_codes: string[];
   language: StoryLanguage;
+  narrative_style_code?: string | null;
   access_level: StoryAccessLevel;
   publish_status: "draft" | "published" | "unpublished" | "deleted";
   view_count: number;
@@ -25,7 +26,6 @@ export interface StorySummary {
 
 export interface StoryDetail extends StorySummary {
   body: string;
-  narrative_style_code?: string | null;
   moderation_status: "pending" | "approved" | "rejected" | "hidden";
   generated_books: BookSummary[];
 }

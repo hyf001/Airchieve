@@ -26,6 +26,7 @@ class StorySummary(BaseModel):
     theme_codes: list[str] = Field(default_factory=list)
     education_goal_codes: list[str] = Field(default_factory=list)
     language: StoryLanguage
+    narrative_style_code: str | None = None
     access_level: StoryAccessLevel
     publish_status: StoryPublishStatus
     view_count: int
@@ -35,7 +36,6 @@ class StorySummary(BaseModel):
 
 class StoryRead(StorySummary):
     body: str
-    narrative_style_code: str | None = None
     moderation_status: StoryModerationStatus
     generated_books: list[BookSummary] = Field(default_factory=list)
 

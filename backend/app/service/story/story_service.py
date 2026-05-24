@@ -95,7 +95,6 @@ async def get_story(db: AsyncSession, story_id: int, user_id: int | None = None)
     return StoryRead(
         **_story_summary(story).model_dump(),
         body=story.body,
-        narrative_style_code=story.narrative_style_code,
         moderation_status=story.moderation_status,
         generated_books=await list_generated_books(db, story.id, user_id=user_id),
     )

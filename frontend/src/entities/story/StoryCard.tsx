@@ -6,7 +6,9 @@ import { type StorySummary } from "./types";
 import { cn } from "@/lib/utils";
 
 interface StoryCardProps {
+  hideActions?: boolean;
   labels?: StoryLabelMaps;
+  selected?: boolean;
   story: StorySummary;
   onDelete?: (story: StorySummary) => void;
   onEdit?: (story: StorySummary) => void;
@@ -20,9 +22,14 @@ interface StoryLabelMaps {
   educationGoal?: Record<string, string>;
 }
 
-export const StoryCard: React.FC<StoryCardProps> = ({ labels, story, onDelete, onEdit, onOpen, onStartCreation }) => (
-  <article className="group relative flex h-full flex-col overflow-hidden rounded-[20px] border-[2.5px] border-transparent bg-white shadow-[var(--shadow-soft)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_8px_32px_rgba(61,44,44,0.12)]">
-    <div className="absolute right-3.5 top-3.5 z-20 flex gap-2">
+export const StoryCard: React.FC<StoryCardProps> = ({ hideActions = false, labels, selected = false, story, onDelete, onEdit, onOpen, onStartCreation }) => (
+  <article
+    className={cn(
+      "group relative flex h-full flex-col overflow-hidden rounded-[20px] border-[2.5px] bg-white shadow-[var(--shadow-soft)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_8px_32px_rgba(61,44,44,0.12)]",
+      selected ? "border-[var(--terracotta)] shadow-[0_0_0_3px_rgba(212,114,92,0.12),0_8px_32px_rgba(61,44,44,0.12)]" : "border-transparent",
+    )}
+  >
+    {!hideActions ? <div className="absolute right-3.5 top-3.5 z-20 flex gap-2">
       {onEdit ? (
         <Button aria-label={`编辑${story.title}`} className="bg-white/90" size="icon" type="button" variant="ghost" onClick={() => onEdit(story)}>
           <Pencil className="h-4 w-4" />
@@ -33,7 +40,7 @@ export const StoryCard: React.FC<StoryCardProps> = ({ labels, story, onDelete, o
           <Trash2 className="h-4 w-4" />
         </Button>
       ) : null}
-    </div>
+    </div> : null}
     <button className="block flex-1 text-left" type="button" onClick={() => onOpen?.(story)}>
       <div
         className={cn(
@@ -80,7 +87,7 @@ export const StoryCard: React.FC<StoryCardProps> = ({ labels, story, onDelete, o
         </div>
       </div>
     </button>
-    <div className="flex flex-wrap gap-2 px-5 pb-5">
+    {!hideActions ? <div className="flex flex-wrap gap-2 px-5 pb-5">
       <Button size="sm" type="button" variant="outline" onClick={() => onOpen?.(story)}>
         详情
       </Button>
@@ -88,7 +95,7 @@ export const StoryCard: React.FC<StoryCardProps> = ({ labels, story, onDelete, o
         <BookOpenText className="h-3.5 w-3.5" />
         生成绘本
       </Button>
-    </div>
+    </div> : null}
   </article>
 );
 

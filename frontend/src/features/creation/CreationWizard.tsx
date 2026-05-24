@@ -1,45 +1,47 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { BookOpen, Check, Image, Mic2, Palette, Sparkles, UserRound } from "lucide-react";
+import { BookOpen, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { GenerationTaskStatus } from "@/entities/generation-task";
-import { TemplateLockedNotice, TemplateSelector, templateApi, type TemplateSummary } from "@/entities/template";
+import { type StoryDetail, type StorySummary } from "@/entities/story";
+import { templateApi, type TemplateSummary } from "@/entities/template";
+import { useTaxonomyGroup } from "@/entities/taxonomy";
+import { storyLibraryApi } from "@/features/story-library";
 
 import { creationApi } from "./api";
+import { PathButton } from "./components";
+import { SelectedStoryBodyPanel } from "./SelectedStoryBodyPanel";
+import { CharacterStep } from "./steps/CharacterStep";
+import { PreviewStep } from "./steps/PreviewStep";
+import { StoryboardStep } from "./steps/StoryboardStep";
+import { StorySourceStep } from "./steps/StorySourceStep";
+import { StyleStep } from "./steps/StyleStep";
+import { TemplateSourceStep } from "./steps/TemplateSourceStep";
+import { VoiceStep } from "./steps/VoiceStep";
+import { sourceLabel, steps, type WizardPath, type WizardStep } from "./constants";
 import type { ArtStyleRef, CharacterRef, CreationSession, CreationStorySourceType, GenerationTaskRead, VoiceRef } from "./types";
-
-type WizardPath = "story" | "template";
-type WizardStep = "source" | "character" | "style" | "storyboard" | "voice" | "preview";
-
-const storySources: Array<{ value: CreationStorySourceType; title: string; desc: string }> = [
-  { value: "system_story", title: "系统故事", desc: "使用平台精选故事作为蓝本" },
-  { value: "user_story", title: "我的故事", desc: "从个人故事库选择已有故事" },
-  { value: "uploaded_story", title: "上传/粘贴", desc: "粘贴 3000 字以内故事文本" },
-  { value: "idea", title: "一个想法", desc: "先生成可确认的故事内容" },
-];
-
-const steps: Array<{ value: WizardStep; label: string }> = [
-  { value: "source", label: "故事/模板" },
-  { value: "character", label: "形象" },
-  { value: "style", label: "画风" },
-  { value: "storyboard", label: "分镜" },
-  { value: "voice", label: "声音" },
-  { value: "preview", label: "预览" },
-];
 
 export const CreationWizard: React.FC = () => {
   const [path, setPath] = useState<WizardPath>("story");
   const [step, setStep] = useState<WizardStep>("source");
   const [storySource, setStorySource] = useState<CreationStorySourceType>("system_story");
-  const [language, setLanguage] = useState<"zh" | "en" | "bilingual">("zh");
-  const [pageCount, setPageCount] = useState(8);
-  const [ideaPrompt, setIdeaPrompt] = useState("一只小熊在夜晚寻找月亮，最后学会勇敢和等待。");
+  const [stories, setStories] = useState<StorySummary[]>([]);
+  const [storiesLoading, setStoriesLoading] = useState(true);
+  const [selectedStory, setSelectedStory] = useState<StorySummary | null>(null);
+  const [selectedStoryDetail, setSelectedStoryDetail] = useState<StoryDetail | null>(null);
+  const [storyQuery, setStoryQuery] = useState("");
+  const [ageFilter, setAgeFilter] = useState("");
+  const [themeFilter, setThemeFilter] = useState("");
+  const [storyPage, setStoryPage] = useState(1);
   const [session, setSession] = useState<CreationSession | null>(null);
   const [task, setTask] = useState<GenerationTaskRead | null>(null);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateSummary | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const ageRanges = useTaxonomyGroup("age_range");
+  const themes = useTaxonomyGroup("theme");
+  const educationGoals = useTaxonomyGroup("education_goal");
 
   useEffect(() => {
     templateApi
@@ -48,19 +50,97 @@ export const CreationWizard: React.FC = () => {
       .catch(() => setTemplates([]));
   }, []);
 
+  useEffect(() => {
+    storyLibraryApi
+      .listStories()
+      .then((response) => setStories(response.items))
+      .catch(() => setStories([]))
+      .finally(() => setStoriesLoading(false));
+  }, []);
+
+  const storyLabels = useMemo(
+    () => ({
+      ageRange: ageRanges.labelMap,
+      theme: themes.labelMap,
+      educationGoal: educationGoals.labelMap,
+    }),
+    [ageRanges.labelMap, educationGoals.labelMap, themes.labelMap],
+  );
+
+  const visibleStories = useMemo(() => {
+    const query = storyQuery.trim().toLowerCase();
+    return stories.filter((story) => {
+      const sourceMatched = storySource === "system_story" ? story.source_type === "system" : story.source_type !== "system";
+      if (!sourceMatched) return false;
+      if (ageFilter && !story.age_range_codes.includes(ageFilter)) return false;
+      if (themeFilter && !story.theme_codes.includes(themeFilter)) return false;
+      if (!query) return true;
+      return `${story.title} ${story.summary ?? ""}`.toLowerCase().includes(query);
+    });
+  }, [ageFilter, stories, storyQuery, storySource, themeFilter]);
+
+  const pageSize = 4;
+  const totalStoryPages = Math.max(1, Math.ceil(visibleStories.length / pageSize));
+  const pagedStories = useMemo(
+    () => visibleStories.slice((storyPage - 1) * pageSize, storyPage * pageSize),
+    [storyPage, visibleStories],
+  );
+
+  const resetCreationProgress = () => {
+    setSession(null);
+    setTask(null);
+    setStep("source");
+    setMessage(null);
+  };
+
+  useEffect(() => {
+    if (path !== "story") return;
+    setSelectedStory((current) => (current && visibleStories.some((story) => story.id === current.id) ? current : visibleStories[0] ?? null));
+  }, [path, visibleStories]);
+
+  useEffect(() => {
+    setStoryPage(1);
+  }, [ageFilter, storyQuery, storySource, themeFilter]);
+
+  useEffect(() => {
+    setStoryPage((current) => Math.min(current, totalStoryPages));
+  }, [totalStoryPages]);
+
+  useEffect(() => {
+    if (!selectedStory) {
+      setSelectedStoryDetail(null);
+      return;
+    }
+    let cancelled = false;
+    storyLibraryApi
+      .getStory(selectedStory.id)
+      .then((detail) => {
+        if (!cancelled) setSelectedStoryDetail(detail);
+      })
+      .catch(() => {
+        if (!cancelled) setSelectedStoryDetail(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedStory]);
+
   const activeStepIndex = steps.findIndex((item) => item.value === step);
   const canUseTemplate = path === "template" && selectedTemplate !== null;
+  const language = selectedStory?.language ?? "zh";
+  const pageCount = 8;
 
   const previewItems = useMemo(
     () => [
       ["路径", path === "story" ? "基于故事生成" : "基于模板创作"],
       ["来源", path === "story" ? sourceLabel(storySource) : selectedTemplate?.title ?? "待选择"],
+      ["故事", path === "story" ? selectedStory?.title ?? "待选择" : selectedTemplate?.title ?? "待选择"],
       ["页数", `${pageCount} 页`],
       ["语言", language === "bilingual" ? "中英双语" : language === "en" ? "英文" : "中文"],
       ["形象", session?.character_refs?.length ? `${session.character_refs.length} 个角色` : "待确认"],
       ["声音", session?.voice_ref ? String(session.voice_ref.display_name ?? "已选择") : "待选择"],
     ],
-    [language, pageCount, path, selectedTemplate?.title, session?.character_refs, session?.voice_ref, storySource],
+    [language, pageCount, path, selectedStory?.title, selectedTemplate?.title, session?.character_refs, session?.voice_ref, storySource],
   );
 
   const run = async (action: () => Promise<void>) => {
@@ -77,16 +157,20 @@ export const CreationWizard: React.FC = () => {
 
   const ensureSession = async () => {
     if (session) return session;
+    if (path === "story" && !selectedStory) {
+      throw new Error("请先选择一个故事");
+    }
     const created = await creationApi.createSession({
       creation_type: path === "template" ? "template_book" : "story_to_book",
       story_source_type: path === "story" ? storySource : null,
+      story_id: path === "story" ? selectedStory?.id ?? null : null,
       template_id: path === "template" ? selectedTemplate?.id ?? null : null,
       language,
       target_page_count: pageCount,
-      age_range_codes: ["age_5_6"],
-      theme_codes: ["adventure"],
-      education_goal_codes: ["courage"],
-      narrative_style_code: "bedtime",
+      age_range_codes: path === "story" ? selectedStory?.age_range_codes ?? [] : ["age_5_6"],
+      theme_codes: path === "story" ? selectedStory?.theme_codes ?? [] : ["adventure"],
+      education_goal_codes: path === "story" ? selectedStory?.education_goal_codes ?? [] : ["courage"],
+      narrative_style_code: path === "story" ? selectedStory?.narrative_style_code ?? null : "bedtime",
     });
     setSession(created);
     return created;
@@ -98,12 +182,11 @@ export const CreationWizard: React.FC = () => {
         setMessage("请先选择一个绘本模板");
         return;
       }
-      const current = await ensureSession();
-      if (path === "story" && storySource === "idea") {
-        const response = await creationApi.generateStory(current.id, ideaPrompt);
-        setSession(response.session);
-        setTask(response.task);
+      if (path === "story" && !selectedStory) {
+        setMessage("请先选择一个故事");
+        return;
       }
+      await ensureSession();
       setStep(path === "template" ? "character" : "character");
     });
 
@@ -172,8 +255,8 @@ export const CreationWizard: React.FC = () => {
             <p className="mt-2 text-sm text-[var(--text-light)]">从故事生成完整绘本，或用模板替换角色头像和朗读声音。</p>
           </div>
           <div className="flex rounded-[var(--radius-sm)] bg-white p-1 shadow-[var(--shadow-soft)]">
-            <PathButton active={path === "story"} onClick={() => setPath("story")} icon={<BookOpen className="h-4 w-4" />} label="故事生成" />
-            <PathButton active={path === "template"} onClick={() => setPath("template")} icon={<Sparkles className="h-4 w-4" />} label="模板创作" />
+            <PathButton active={path === "story"} onClick={() => { setPath("story"); resetCreationProgress(); }} icon={<BookOpen className="h-4 w-4" />} label="故事生成" />
+            <PathButton active={path === "template"} onClick={() => { setPath("template"); resetCreationProgress(); }} icon={<Sparkles className="h-4 w-4" />} label="模板创作" />
           </div>
         </div>
 
@@ -191,84 +274,43 @@ export const CreationWizard: React.FC = () => {
         <section className="app-card mt-5 p-6">
           {step === "source" ? (
             path === "story" ? (
-              <StorySourcePanel
+              <StorySourceStep
                 storySource={storySource}
-                setStorySource={setStorySource}
-                language={language}
-                setLanguage={setLanguage}
-                pageCount={pageCount}
-                setPageCount={setPageCount}
-                ideaPrompt={ideaPrompt}
-                setIdeaPrompt={setIdeaPrompt}
+                setStorySource={(value) => {
+                  setStorySource(value);
+                  resetCreationProgress();
+                }}
+                ageFilter={ageFilter}
+                ageRangeOptions={ageRanges.items}
+                labels={storyLabels}
+                page={storyPage}
+                stories={pagedStories}
+                storiesLoading={storiesLoading}
+                storyQuery={storyQuery}
+                selectedStoryId={selectedStory?.id ?? null}
+                themeFilter={themeFilter}
+                themeOptions={themes.items}
+                total={visibleStories.length}
+                totalPages={totalStoryPages}
+                onAgeFilterChange={setAgeFilter}
+                onPageChange={setStoryPage}
+                onSelectStory={(story) => {
+                  setSelectedStory(story);
+                  resetCreationProgress();
+                }}
+                onStoryQueryChange={setStoryQuery}
+                onThemeFilterChange={setThemeFilter}
               />
             ) : (
-              <div className="space-y-4">
-                <TemplateLockedNotice />
-                <TemplateSelector templates={templates} selectedId={selectedTemplate?.id ?? null} onSelect={setSelectedTemplate} />
-              </div>
+              <TemplateSourceStep templates={templates} selectedTemplateId={selectedTemplate?.id ?? null} onSelectTemplate={setSelectedTemplate} />
             )
           ) : null}
 
-          {step === "character" ? (
-            <StepPanel icon={<UserRound className="h-5 w-5" />} title={path === "template" ? "替换模板角色" : "选择故事形象"} desc={path === "template" ? "为必填角色选择头像或保留默认，普通画风和分镜编辑保持关闭。" : "选择故事原形象、系统形象或个人形象来参与生成。"}>
-              <div className="grid grid-cols-3 gap-3 max-sm:grid-cols-1">
-                {["故事主角", "小星星", "系统伙伴"].map((name) => (
-                  <SelectableTile key={name} selected={name === "小星星"} title={name} desc={name === "小星星" ? "儿童档案默认形象" : "可用于本次创作"} />
-                ))}
-              </div>
-            </StepPanel>
-          ) : null}
-
-          {step === "style" ? (
-            <StepPanel icon={<Palette className="h-5 w-5" />} title="确定画风" desc="基于故事生成可以选择系统画风或自定义画风；模板路径不会进入这一步。">
-              <div className="grid grid-cols-3 gap-3 max-md:grid-cols-2 max-sm:grid-cols-1">
-                {["水彩画风", "蜡笔画风", "卡通画风", "睡前温柔", "国风", "手绘线稿"].map((name) => (
-                  <SelectableTile key={name} selected={name === "水彩画风"} title={name} desc={name === "水彩画风" ? "柔和、温暖，适合 6-12 页绘本" : "可由运营配置权益状态"} />
-                ))}
-              </div>
-            </StepPanel>
-          ) : null}
-
-          {step === "storyboard" ? (
-            <StepPanel icon={<Image className="h-5 w-5" />} title="编辑分镜" desc="分镜包含每页标题、正文、画面描述、出场形象和对白标记。">
-              <div className="space-y-3">
-                {(session?.storyboard_pages ?? []).map((page) => (
-                  <div key={page.id} className="rounded-[var(--radius-md)] border border-[rgba(212,114,92,0.1)] bg-[var(--warm-bg)] p-4">
-                    <div className="flex justify-between gap-3">
-                      <h3 className="font-bold">第 {page.page_no} 页 · {page.title}</h3>
-                      <span className="text-xs font-semibold text-[var(--sage-deep)]">{page.generation_status}</span>
-                    </div>
-                    <p className="mt-2 text-sm text-[var(--text-mid)]">{page.text_zh}</p>
-                    <p className="mt-2 text-xs text-[var(--text-light)]">{page.visual_prompt}</p>
-                  </div>
-                ))}
-              </div>
-            </StepPanel>
-          ) : null}
-
-          {step === "voice" ? (
-            <StepPanel icon={<Mic2 className="h-5 w-5" />} title="选择朗读声音" desc={path === "template" ? "可使用模板默认声音；替换声音时不改变正文、对白和播放节奏。" : "系统声音和个人声音都可作为整本生成声音。"}>
-              <div className="grid grid-cols-3 gap-3 max-sm:grid-cols-1">
-                {["温柔姐姐", "活泼哥哥", path === "template" ? "模板默认声音" : "妈妈的声音"].map((name) => (
-                  <SelectableTile key={name} selected={name.includes("温柔") || name.includes("模板")} title={name} desc="中文 · 可试听 · 可使用" />
-                ))}
-              </div>
-            </StepPanel>
-          ) : null}
-
-          {step === "preview" ? (
-            <StepPanel icon={<Check className="h-5 w-5" />} title="播放预览" desc="确认图片、文字、音频与对白后保存到个人绘本库。">
-              <div className="rounded-[var(--radius-lg)] bg-[linear-gradient(135deg,#ffe0b2,#b3e5fc)] p-8 text-center text-6xl shadow-inner">📖</div>
-              <div className="mt-4 grid grid-cols-3 gap-3 text-sm max-sm:grid-cols-1">
-                {previewItems.map(([label, value]) => (
-                  <div key={label} className="rounded-[var(--radius-sm)] bg-[var(--warm-bg)] px-3 py-2">
-                    <div className="text-xs text-[var(--text-light)]">{label}</div>
-                    <div className="font-semibold text-[var(--text-mid)]">{value}</div>
-                  </div>
-                ))}
-              </div>
-            </StepPanel>
-          ) : null}
+          {step === "character" ? <CharacterStep path={path} /> : null}
+          {step === "style" ? <StyleStep /> : null}
+          {step === "storyboard" ? <StoryboardStep session={session} /> : null}
+          {step === "voice" ? <VoiceStep path={path} /> : null}
+          {step === "preview" ? <PreviewStep previewItems={previewItems} /> : null}
 
           <div className="mt-6 flex flex-wrap justify-between gap-3">
             <Button type="button" variant="ghost" disabled={step === "source" || busy} onClick={() => setStep(steps[Math.max(0, activeStepIndex - 1)].value)}>
@@ -284,93 +326,29 @@ export const CreationWizard: React.FC = () => {
         </section>
       </section>
 
-      <aside className="space-y-5">
-        <section className="app-card p-5">
-          <h2 className="font-display text-2xl">生成配置</h2>
-          <dl className="mt-4 space-y-3">
-            {previewItems.map(([label, value]) => (
-              <div key={label} className="flex justify-between gap-3 border-b border-[rgba(212,114,92,0.08)] pb-2 text-sm">
-                <dt className="text-[var(--text-light)]">{label}</dt>
-                <dd className="text-right font-semibold text-[var(--text-mid)]">{value}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-        <section className="app-card p-5 text-sm text-[var(--text-mid)]">
-          <h2 className="font-display mb-2 text-2xl">边界提示</h2>
-          <p>故事路径支持画风、分镜和局部重生成；模板路径只替换角色区域和朗读声音。</p>
-        </section>
+      <aside className="sticky top-8 space-y-5 self-start">
+        {step === "source" && path === "story" ? (
+          <SelectedStoryBodyPanel story={selectedStory} storyDetail={selectedStoryDetail} />
+        ) : (
+          <>
+            <section className="app-card p-5">
+              <h2 className="font-display text-2xl">生成配置</h2>
+              <dl className="mt-4 space-y-3">
+                {previewItems.map(([label, value]) => (
+                  <div key={label} className="flex justify-between gap-3 border-b border-[rgba(212,114,92,0.08)] pb-2 text-sm">
+                    <dt className="text-[var(--text-light)]">{label}</dt>
+                    <dd className="text-right font-semibold text-[var(--text-mid)]">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+            <section className="app-card p-5 text-sm text-[var(--text-mid)]">
+              <h2 className="font-display mb-2 text-2xl">边界提示</h2>
+              <p>故事路径支持画风、分镜和局部重生成；模板路径只替换角色区域和朗读声音。</p>
+            </section>
+          </>
+        )}
       </aside>
     </main>
   );
 };
-
-const StorySourcePanel: React.FC<{
-  storySource: CreationStorySourceType;
-  setStorySource: (value: CreationStorySourceType) => void;
-  language: "zh" | "en" | "bilingual";
-  setLanguage: (value: "zh" | "en" | "bilingual") => void;
-  pageCount: number;
-  setPageCount: (value: number) => void;
-  ideaPrompt: string;
-  setIdeaPrompt: (value: string) => void;
-}> = ({ storySource, setStorySource, language, setLanguage, pageCount, setPageCount, ideaPrompt, setIdeaPrompt }) => (
-  <div className="space-y-5">
-    <div className="grid grid-cols-2 gap-4 max-sm:grid-cols-1">
-      {storySources.map((source) => (
-        <SelectableTile key={source.value} selected={storySource === source.value} title={source.title} desc={source.desc} onClick={() => setStorySource(source.value)} />
-      ))}
-    </div>
-    {storySource === "idea" ? (
-      <textarea className="min-h-28 w-full rounded-[var(--radius-md)] border border-[rgba(212,114,92,0.14)] bg-white p-4 text-sm outline-none focus:border-[var(--terracotta)]" value={ideaPrompt} onChange={(event) => setIdeaPrompt(event.target.value)} />
-    ) : null}
-    <div className="grid grid-cols-3 gap-3 max-sm:grid-cols-1">
-      <label className="text-sm font-semibold text-[var(--text-mid)]">
-        故事长度
-        <select className="mt-1 w-full rounded-lg border border-[rgba(212,114,92,0.14)] bg-white px-3 py-2" value={pageCount} onChange={(event) => setPageCount(Number(event.target.value))}>
-          <option value={6}>短篇 6 页</option>
-          <option value={8}>中篇 8 页</option>
-          <option value={12}>长篇 12 页</option>
-        </select>
-      </label>
-      <label className="text-sm font-semibold text-[var(--text-mid)]">
-        语言
-        <select className="mt-1 w-full rounded-lg border border-[rgba(212,114,92,0.14)] bg-white px-3 py-2" value={language} onChange={(event) => setLanguage(event.target.value as "zh" | "en" | "bilingual")}>
-          <option value="zh">中文</option>
-          <option value="en">English</option>
-          <option value="bilingual">中英双语</option>
-        </select>
-      </label>
-      <div className="rounded-[var(--radius-md)] bg-[rgba(139,198,168,0.14)] p-3 text-sm text-[var(--text-mid)]">MVP 单本限定 6-12 页。</div>
-    </div>
-  </div>
-);
-
-const PathButton: React.FC<{ active: boolean; onClick: () => void; icon: React.ReactNode; label: string }> = ({ active, onClick, icon, label }) => (
-  <button type="button" className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold ${active ? "bg-[var(--terracotta)] text-white" : "text-[var(--text-mid)]"}`} onClick={onClick}>
-    {icon}
-    {label}
-  </button>
-);
-
-const StepPanel: React.FC<React.PropsWithChildren<{ icon: React.ReactNode; title: string; desc: string }>> = ({ icon, title, desc, children }) => (
-  <div>
-    <div className="mb-4 flex items-start gap-3">
-      <div className="rounded-[var(--radius-sm)] bg-[rgba(212,114,92,0.1)] p-2 text-[var(--terracotta)]">{icon}</div>
-      <div>
-        <h2 className="text-lg font-bold text-[var(--text-dark)]">{title}</h2>
-        <p className="text-sm text-[var(--text-light)]">{desc}</p>
-      </div>
-    </div>
-    {children}
-  </div>
-);
-
-const SelectableTile: React.FC<{ selected: boolean; title: string; desc: string; onClick?: () => void }> = ({ selected, title, desc, onClick }) => (
-  <button type="button" className={`rounded-[var(--radius-md)] border bg-white p-4 text-left transition hover:-translate-y-0.5 ${selected ? "border-[var(--terracotta)] shadow-[var(--shadow-hover)]" : "border-[rgba(212,114,92,0.1)] shadow-[var(--shadow-soft)]"}`} onClick={onClick}>
-    <div className="font-bold text-[var(--text-dark)]">{title}</div>
-    <div className="mt-1 text-xs text-[var(--text-light)]">{desc}</div>
-  </button>
-);
-
-const sourceLabel = (value: CreationStorySourceType) => storySources.find((source) => source.value === value)?.title ?? value;
