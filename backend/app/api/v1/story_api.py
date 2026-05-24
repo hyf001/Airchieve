@@ -7,6 +7,8 @@ from app.model.story import StorySourceType
 from app.schema.story import (
     StartCreationFromStoryRequest,
     StoryCreate,
+    StoryGenerateRequest,
+    StoryGenerationTaskResponse,
     StoryCreationSessionRead,
     StoryListRead,
     StoryRead,
@@ -40,15 +42,6 @@ async def list_stories(
     )
 
 
-@router.get("/{story_id}", response_model=StoryRead)
-async def get_story(
-    story_id: int,
-    db: AsyncSession = Depends(get_db),
-    user_id: int | None = Depends(optional_current_user_id),
-) -> StoryRead:
-    return await story.get_story(db, story_id, user_id=user_id)
-
-
 @router.post("", response_model=StoryRead, status_code=status.HTTP_201_CREATED)
 async def create_story(
     payload: StoryCreate,
@@ -56,6 +49,24 @@ async def create_story(
     user_id: int = Depends(current_user_id),
 ) -> StoryRead:
     return await story.create_user_story(db, user_id, payload)
+
+
+@router.post("/generate", response_model=StoryGenerationTaskResponse, status_code=status.HTTP_202_ACCEPTED)
+async def generate_story(
+    payload: StoryGenerateRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(current_user_id),
+) -> StoryGenerationTaskResponse:
+    return await story.generate_user_story(db, user_id, payload)
+
+
+@router.get("/{story_id}", response_model=StoryRead)
+async def get_story(
+    story_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int | None = Depends(optional_current_user_id),
+) -> StoryRead:
+    return await story.get_story(db, story_id, user_id=user_id)
 
 
 @router.patch("/{story_id}", response_model=StoryRead)

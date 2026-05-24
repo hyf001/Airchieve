@@ -33,6 +33,10 @@ async def _mark_owner_failed(db: AsyncSession, task: GenerationTask, exc: BaseEx
         from app.service.creation.service import mark_task_owner_failed
 
         await mark_task_owner_failed(db, task, exc)
+    elif task.owner_type == "story":
+        from app.service.story import mark_story_generation_failed
+
+        await mark_story_generation_failed(db, task, exc)
     elif task.owner_type == "template":
         from app.service.template.service import mark_template_task_failed
 

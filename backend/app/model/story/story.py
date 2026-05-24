@@ -53,7 +53,6 @@ class Story(TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     body: Mapped[str] = mapped_column(Text, nullable=False)
-    cover_asset_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cover_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     age_range_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     theme_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)

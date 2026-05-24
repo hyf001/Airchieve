@@ -10,6 +10,7 @@ from app.model.story import (
     StorySourceType,
 )
 from app.schema.book import BookSummary
+from app.schema.generation_task import GenerationTaskRead
 
 
 class StorySummary(BaseModel):
@@ -56,6 +57,20 @@ class StoryCreate(BaseModel):
     education_goal_codes: list[str] = Field(default_factory=list)
     language: StoryLanguage = StoryLanguage.ZH
     narrative_style_code: str | None = None
+
+
+class StoryGenerateRequest(BaseModel):
+    idea_prompt: str = Field(min_length=2, max_length=1000)
+    age_range_codes: list[str] = Field(default_factory=list)
+    theme_codes: list[str] = Field(default_factory=list)
+    education_goal_codes: list[str] = Field(default_factory=list)
+    language: StoryLanguage = StoryLanguage.ZH
+    narrative_style_code: str | None = None
+
+
+class StoryGenerationTaskResponse(BaseModel):
+    story: StoryRead
+    task: GenerationTaskRead
 
 
 class StoryUpdate(BaseModel):

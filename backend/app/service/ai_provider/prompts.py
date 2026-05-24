@@ -1,3 +1,35 @@
+def build_story_prompt(
+    *,
+    idea_prompt: str,
+    language: str,
+    age_range_codes: list[str] | None = None,
+    theme_codes: list[str] | None = None,
+    narrative_style_code: str | None = None,
+) -> str:
+    supplemental_lines = [f"- 语言：{language}"]
+    if age_range_codes:
+        supplemental_lines.append(f"- 适龄范围：{', '.join(age_range_codes)}")
+    if theme_codes:
+        supplemental_lines.append(f"- 主题方向：{', '.join(theme_codes)}")
+    if narrative_style_code:
+        supplemental_lines.append(f"- 叙事风格：{narrative_style_code}")
+    supplemental_text = "\n".join(supplemental_lines)
+
+    return (
+        "你是一名专业儿童故事作者，请根据用户提供的灵感和补充信息，创作一篇适合生成儿童绘本的故事。\n\n"
+        "输出必须是 JSON 对象，结构如下：\n"
+        "{\n"
+        '  "title": "故事标题，20字以内",\n'
+        '  "summary": "一句话简介，80字以内",\n'
+        '  "content": "完整故事正文，600到1200字，分段清晰"\n'
+        "}\n\n"
+        "要求：故事积极、温暖、适合儿童；情节完整，有开端、发展和结尾；语言适合朗读；"
+        "不要包含暴力、惊吓、歧视、成人化或不适宜儿童的内容；不要输出 Markdown；不要解释生成过程。\n\n"
+        f"补充信息：\n{supplemental_text}\n\n"
+        f"用户灵感：\n{idea_prompt.strip()}"
+    )
+
+
 def build_storyboard_prompt(*, title: str, story_content: str, page_count: int) -> str:
     return (
         "你是一名专业儿童绘本视觉导演。请把故事严格拆分为绘本分镜页。\n\n"

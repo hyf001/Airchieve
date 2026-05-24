@@ -10,10 +10,14 @@ from app.model.story import (
     StorySourceType,
 )
 from app.model.taxonomy import TaxonomyType
+from app.model.generation_task import GenerationTask, GenerationTaskType
 from app.schema.book import BookSummary
+from app.schema.generation_task import GenerationTaskCreate
 from app.schema.story import (
     StartCreationFromStoryRequest,
     StoryCreate,
+    StoryGenerateRequest,
+    StoryGenerationTaskResponse,
     StoryCreationSessionRead,
     StoryInternalDTO,
     StoryListRead,
@@ -22,6 +26,8 @@ from app.schema.story import (
     StoryUpdate,
 )
 from app.service.taxonomy import validate_taxonomy_codes
+from app.service import generation_task
+from app.service import ai_provider
 
 
 def _story_summary(story: Story) -> StorySummary:
@@ -105,7 +111,7 @@ async def create_user_story(db: AsyncSession, user_id: int, payload: StoryCreate
     )
     story = Story(
         owner_user_id=user_id,
-        source_type=StorySourceType.UPLOADED if payload.source_type == StorySourceType.UPLOADED else StorySourceType.USER,
+        source_type=payload.source_type if payload.source_type in {StorySourceType.UPLOADED, StorySourceType.GENERATED_IDEA} else StorySourceType.USER,
         title=payload.title,
         summary=payload.summary,
         body=payload.body,
@@ -121,6 +127,85 @@ async def create_user_story(db: AsyncSession, user_id: int, payload: StoryCreate
     await db.commit()
     await db.refresh(story)
     return await get_story(db, story.id, user_id=user_id)
+
+
+async def generate_user_story(db: AsyncSession, user_id: int, payload: StoryGenerateRequest) -> StoryGenerationTaskResponse:
+    await _validate_story_taxonomy(
+        db,
+        age_range_codes=payload.age_range_codes,
+        theme_codes=payload.theme_codes,
+        education_goal_codes=payload.education_goal_codes,
+        narrative_style_code=payload.narrative_style_code,
+    )
+    story = Story(
+        owner_user_id=user_id,
+        source_type=StorySourceType.GENERATED_IDEA,
+        title="AI 故事生成中",
+        summary=payload.idea_prompt[:160],
+        body=payload.idea_prompt,
+        age_range_codes=payload.age_range_codes,
+        theme_codes=payload.theme_codes,
+        education_goal_codes=payload.education_goal_codes,
+        language=payload.language,
+        narrative_style_code=payload.narrative_style_code,
+        moderation_status=StoryModerationStatus.PENDING,
+        publish_status=StoryPublishStatus.DRAFT,
+    )
+    db.add(story)
+    await db.flush()
+    task = await generation_task.create_task(
+        db,
+        GenerationTaskCreate(
+            task_type=GenerationTaskType.STORY,
+            owner_type="story",
+            owner_id=story.id,
+            user_id=user_id,
+            input_payload={
+                "idea_prompt": payload.idea_prompt,
+                "language": payload.language,
+                "age_range_codes": payload.age_range_codes,
+                "theme_codes": payload.theme_codes,
+                "narrative_style_code": payload.narrative_style_code,
+            },
+        ),
+    )
+    await db.commit()
+    await db.refresh(story)
+    return StoryGenerationTaskResponse(story=await get_story(db, story.id, user_id=user_id), task=task)
+
+
+async def run_story_generation_task(db: AsyncSession, task: GenerationTask) -> None:
+    story = await db.get(Story, task.owner_id)
+    if story is None or story.owner_user_id != task.user_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="故事不存在")
+    idea_prompt = str((task.input_payload or {}).get("idea_prompt") or story.body or "").strip()
+    if not idea_prompt:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="STORY_PROMPT_MISSING")
+    input_payload = task.input_payload or {}
+    generated_story = await ai_provider.generate_story(
+        db,
+        task_id=task.id,
+        idea_prompt=idea_prompt,
+        language=str(input_payload.get("language") or story.language),
+        age_range_codes=list(input_payload.get("age_range_codes") or story.age_range_codes or []),
+        theme_codes=list(input_payload.get("theme_codes") or story.theme_codes or []),
+        narrative_style_code=str(input_payload.get("narrative_style_code") or story.narrative_style_code or "") or None,
+    )
+    story.title = generated_story["title"]
+    story.summary = generated_story["summary"]
+    story.body = generated_story["body"]
+    story.source_type = StorySourceType.GENERATED_IDEA
+    story.moderation_status = StoryModerationStatus.APPROVED
+    story.publish_status = StoryPublishStatus.PUBLISHED
+    await generation_task.mark_task_succeeded(db, task.id, result_refs={"story_id": story.id, "story_preview": story.body[:500]})
+
+
+async def mark_story_generation_failed(db: AsyncSession, task: GenerationTask, exc: BaseException) -> None:
+    story = await db.get(Story, task.owner_id)
+    if story is None:
+        return
+    story.moderation_status = StoryModerationStatus.REJECTED
+    story.publish_status = StoryPublishStatus.DELETED
 
 
 async def update_user_story(db: AsyncSession, user_id: int, story_id: int, payload: StoryUpdate) -> StoryRead:

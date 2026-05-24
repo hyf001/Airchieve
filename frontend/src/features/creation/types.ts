@@ -1,8 +1,10 @@
+import type { GenerationTaskRead, GenerationTaskStatusValue } from "@/entities/generation-task";
+
 export type CreationType = "story_to_book" | "template_book" | "similar_book";
 export type CreationLanguage = "zh" | "en" | "bilingual";
 export type CreationStorySourceType = "system_story" | "user_story" | "uploaded_story" | "idea";
 export type CreationStep = "story" | "template" | "character" | "art_style" | "storyboard" | "voice" | "preview";
-export type GenerationTaskStatusValue = "queued" | "running" | "succeeded" | "failed" | "canceled";
+export type { GenerationTaskRead, GenerationTaskStatusValue };
 
 export interface CharacterRef {
   source: "story_original" | "child_profile_default" | "user_character" | "system_character" | "upload" | "generated";
@@ -67,20 +69,6 @@ export interface CreationSession {
   storyboard_pages: StoryboardPage[];
   created_at: string;
   updated_at: string;
-}
-
-export interface GenerationTaskRead {
-  id: number;
-  task_type: "story" | "storyboard" | "character_image" | "image" | "audio" | "lip_sync" | "template_composite" | "pdf_export";
-  owner_type: string;
-  owner_id: number;
-  status: GenerationTaskStatusValue;
-  progress_percent: number;
-  result_refs?: Record<string, unknown> | null;
-  error_code?: string | null;
-  error_message?: string | null;
-  retryable: boolean;
-  retry_count: number;
 }
 
 export interface CreationTaskResponse {

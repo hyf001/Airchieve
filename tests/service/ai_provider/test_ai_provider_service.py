@@ -9,6 +9,7 @@ from app.service.ai_provider.errors import AiProviderError
 from app.service.ai_provider import (
     generate_audio,
     generate_image,
+    generate_story,
     generate_structured,
     generate_text,
 )
@@ -32,6 +33,33 @@ class TestGenerateText:
         assert call.capability == AiProviderCapability.TEXT
         assert call.status == AiProviderCallStatus.SUCCEEDED
         assert call.latency_ms is not None
+
+
+class TestGenerateStory:
+    @patch("app.service.ai_provider.service._generate_text_with_provider", new_callable=AsyncMock)
+    async def test_returns_story_fields(self, mock_generate, db: AsyncSession):
+        mock_generate.return_value = '{"title":"月亮小船","summary":"一次温暖的夜晚冒险","content":"小星星坐上月亮小船，学会了勇敢。"}'
+
+        result = await generate_story(
+            db,
+            task_id=7,
+            idea_prompt="一个孩子寻找月亮",
+            language="zh",
+            age_range_codes=["age_5_6"],
+            theme_codes=["adventure"],
+            narrative_style_code="bedtime",
+        )
+
+        assert result == {
+            "title": "月亮小船",
+            "summary": "一次温暖的夜晚冒险",
+            "body": "小星星坐上月亮小船，学会了勇敢。",
+        }
+        mock_generate.assert_awaited_once()
+        assert "用户灵感" in mock_generate.await_args.args[2]
+        assert "age_5_6" in mock_generate.await_args.args[2]
+        assert "adventure" in mock_generate.await_args.args[2]
+        assert mock_generate.await_args.kwargs["response_json"] is True
 
 
 class TestGenerateStructured:

@@ -1,4 +1,5 @@
 import { type BookSummary } from "@/entities/book";
+import { type GenerationTaskRead } from "@/entities/generation-task";
 
 export type StorySourceType = "system" | "user" | "uploaded" | "generated_idea";
 export type StoryLanguage = "zh" | "en" | "bilingual";
@@ -46,4 +47,18 @@ export interface StoryPayload {
   education_goal_codes?: string[];
   language?: StoryLanguage;
   narrative_style_code?: string | null;
+}
+
+export interface StoryGeneratePayload {
+  idea_prompt: string;
+  age_range_codes?: string[];
+  theme_codes?: string[];
+  education_goal_codes?: string[];
+  language?: StoryLanguage;
+  narrative_style_code?: string | null;
+}
+
+export interface StoryGenerationTaskResponse {
+  story: StoryDetail;
+  task: GenerationTaskRead;
 }

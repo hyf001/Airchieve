@@ -2,7 +2,7 @@ import React from "react";
 import { AlertCircle, CheckCircle2, Loader2, RotateCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import type { GenerationTaskRead } from "@/features/creation";
+import type { GenerationTaskRead } from "./types";
 
 interface GenerationTaskStatusProps {
   task: GenerationTaskRead | null;

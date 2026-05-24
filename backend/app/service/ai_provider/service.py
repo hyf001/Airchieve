@@ -12,8 +12,8 @@ from app.model.ai_provider import (
     AiProviderUsageType,
 )
 from app.service.ai_provider.errors import AiProviderError
-from app.service.ai_provider.parsers import story_text_from_response, storyboard_from_response
-from app.service.ai_provider.prompts import build_storyboard_prompt
+from app.service.ai_provider.parsers import story_from_response, story_text_from_response, storyboard_from_response
+from app.service.ai_provider.prompts import build_story_prompt, build_storyboard_prompt
 from app.service.ai_provider.providers import (
     aliyun_generate_audio,
     doubao_generate_audio,
@@ -89,6 +89,63 @@ async def generate_text(db: AsyncSession, *, task_id: int | None, prompt: str) -
             model=model,
             request_payload=request_snapshot,
             response_payload={"text_preview": result[:120]},
+            latency_ms=_elapsed_ms(started),
+        )
+        return result
+    except Exception as exc:
+        await _record_provider_failure(
+            db,
+            capability=AiProviderCapability.TEXT,
+            task_id=task_id,
+            provider=provider,
+            model=model,
+            started=started,
+            request_payload=request_snapshot,
+            exc=exc,
+        )
+        raise
+
+
+async def generate_story(
+    db: AsyncSession,
+    *,
+    task_id: int | None,
+    idea_prompt: str,
+    language: str,
+    age_range_codes: list[str] | None = None,
+    theme_codes: list[str] | None = None,
+    narrative_style_code: str | None = None,
+) -> dict[str, str]:
+    provider = _provider_for(AiProviderCapability.TEXT)
+    model = _model_for(provider, AiProviderCapability.TEXT)
+    started = perf_counter()
+    fallback_title = idea_prompt.strip()[:40] or "专属故事"
+    fallback_summary = idea_prompt.strip()[:120]
+    prompt = build_story_prompt(
+        idea_prompt=idea_prompt,
+        language=language,
+        age_range_codes=age_range_codes,
+        theme_codes=theme_codes,
+        narrative_style_code=narrative_style_code,
+    )
+    request_snapshot = {
+        "idea_preview": idea_prompt[:120],
+        "language": language,
+        "age_range_codes": age_range_codes or [],
+        "theme_codes": theme_codes or [],
+        "narrative_style_code": narrative_style_code,
+    }
+    try:
+        raw_text = await _generate_text_with_provider(provider, model, prompt, response_json=True)
+        result = story_from_response(raw_text, fallback_title=fallback_title, fallback_summary=fallback_summary)
+        await record_provider_call(
+            db,
+            capability=AiProviderCapability.TEXT,
+            task_id=task_id,
+            provider=provider,
+            model=model,
+            request_payload=request_snapshot,
+            response_payload={"title": result["title"], "summary_preview": result["summary"][:120]},
             latency_ms=_elapsed_ms(started),
         )
         return result

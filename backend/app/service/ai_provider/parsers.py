@@ -9,6 +9,7 @@ from app.service.ai_provider.errors import AiProviderError
 
 class _StoryResponse(BaseModel):
     title: str = ""
+    summary: str = ""
     content: str = ""
 
 
@@ -38,6 +39,28 @@ def story_text_from_response(raw_text: str, *, fallback_title: str) -> str:
     except (ValueError, ValidationError, json.JSONDecodeError):
         pass
     return raw_text.strip()
+
+
+def story_from_response(raw_text: str, *, fallback_title: str, fallback_summary: str) -> dict[str, str]:
+    try:
+        data = parse_json_response(raw_text)
+        if isinstance(data, dict):
+            story = _StoryResponse.model_validate(data)
+            content = story.content.strip()
+            if content:
+                return {
+                    "title": (story.title.strip() or fallback_title or "专属故事")[:160],
+                    "summary": (story.summary.strip() or fallback_summary or content[:80])[:1000],
+                    "body": content[:3000],
+                }
+    except (ValueError, ValidationError, json.JSONDecodeError):
+        pass
+    content = raw_text.strip()
+    return {
+        "title": (fallback_title or "专属故事")[:160],
+        "summary": (fallback_summary or content[:80])[:1000],
+        "body": content[:3000],
+    }
 
 
 def storyboard_from_response(raw_text: str, *, title: str, page_count: int) -> dict:
