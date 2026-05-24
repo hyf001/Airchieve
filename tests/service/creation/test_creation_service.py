@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.model.book import Book, BookPublishStatus
+from app.model.asset import AssetAccessLevel, AssetSourceType, LibraryItemStatus, Voice
 from app.model.creation import CreationSession, CreationSessionStatus, CreationStep, CreationStoryboardPage, CreationType
 from app.model.generation_task import GenerationTask, GenerationTaskStatus
 from app.schema.creation import CreationSessionCreate
@@ -87,6 +88,44 @@ class TestGenerateAudioAIError:
         )
         assert result.task.status == GenerationTaskStatus.QUEUED
         mock_gen.assert_not_called()
+
+
+class TestUpdateSessionConfigVoiceRef:
+    async def test_system_voice_style_code_is_stored_as_provider_voice_id(self, db: AsyncSession):
+        session = await _create_test_session(db)
+        voice = Voice(
+            owner_user_id=None,
+            name="阿里云小云",
+            voice_style_code="xiaoyun",
+            emotion_type="happy",
+            access_level=AssetAccessLevel.FREE,
+            source_type=AssetSourceType.SYSTEM,
+            status=LibraryItemStatus.ACTIVE,
+        )
+        db.add(voice)
+        await db.commit()
+
+        from app.schema.creation import CreationConfigPatch, VoiceRef
+        from app.schema.creation.creation import VoiceRefSource
+        from app.service.creation import update_session_config
+
+        result = await update_session_config(
+            db,
+            user_id=1,
+            session_id=session.id,
+            payload=CreationConfigPatch(
+                voice_ref=VoiceRef(
+                    source=VoiceRefSource.SYSTEM,
+                    voice_id=voice.id,
+                    display_name="",
+                )
+            ),
+        )
+
+        assert result.voice_ref is not None
+        assert result.voice_ref["provider_voice_id"] == "xiaoyun"
+        assert result.voice_ref["emotion_type"] == "happy"
+        assert result.voice_ref["display_name"] == "阿里云小云"
 
 
 class TestGenerateLipSync:

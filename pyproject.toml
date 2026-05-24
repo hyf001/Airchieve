@@ -8,6 +8,7 @@ dependencies = [
     "aiomysql>=0.3.0",
     "aiosqlite>=0.22.0",
     "alibabacloud-dysmsapi20170525>=3.1.0",
+    "alibabacloud-nls-python-sdk>=1.0.2",
     "alibabacloud-tea-openapi>=0.3.7",
     "alibabacloud-tea-util>=0.3.13",
     "oss2>=2.19.1",

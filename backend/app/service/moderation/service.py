@@ -4,7 +4,6 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.model.asset import AssetModerationStatus, Voice
 from app.model.audit import AuditOperatorType
 from app.model.book import Book, BookModerationStatus
 from app.model.moderation import ModerationRecord, ModerationStatus, Report, ReportStatus
@@ -27,7 +26,6 @@ from app.service import audit as audit_service, domain_event
 TARGET_MODELS = {
     "story": Story,
     "book": Book,
-    "voice": Voice,
     "share_link": ShareLink,
 }
 
@@ -201,8 +199,6 @@ def _apply_target_status(target: object | None, decision: ModerationStatus) -> N
         target.moderation_status = StoryModerationStatus(decision.value)
     elif isinstance(target, Book):
         target.moderation_status = BookModerationStatus(decision.value)
-    elif isinstance(target, Voice):
-        target.moderation_status = AssetModerationStatus(decision.value)
     elif isinstance(target, ShareLink) and decision == ModerationStatus.HIDDEN:
         target.status = ShareLinkStatus.BANNED
 

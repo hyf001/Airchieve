@@ -15,6 +15,7 @@ from app.service.ai_provider.errors import AiProviderError
 from app.service.ai_provider.parsers import story_text_from_response, storyboard_from_response
 from app.service.ai_provider.prompts import build_storyboard_prompt
 from app.service.ai_provider.providers import (
+    aliyun_generate_audio,
     doubao_generate_audio,
     doubao_generate_image,
     doubao_generate_text,
@@ -238,6 +239,8 @@ async def generate_audio(db: AsyncSession, *, task_id: int | None, pages: list[d
         "page_count": len(pages),
         "voice_source": (voice_ref or {}).get("source"),
         "voice_id": (voice_ref or {}).get("voice_id"),
+        "provider_voice_id": (voice_ref or {}).get("provider_voice_id"),
+        "emotion_type": (voice_ref or {}).get("emotion_type"),
     }
     try:
         results = []
@@ -262,6 +265,44 @@ async def generate_audio(db: AsyncSession, *, task_id: int | None, pages: list[d
             db,
             capability=AiProviderCapability.AUDIO,
             task_id=task_id,
+            provider=provider,
+            model=model,
+            started=started,
+            request_payload=request_snapshot,
+            exc=exc,
+        )
+        raise
+
+
+async def generate_single_audio_sample(db: AsyncSession, *, text: str, voice_ref: dict | None = None, provider: str | None = None) -> str:
+    provider = (provider or _provider_for(AiProviderCapability.AUDIO)).strip().lower()
+    model = _model_for(provider, AiProviderCapability.AUDIO)
+    started = perf_counter()
+    request_snapshot = {
+        "text_preview": text[:120],
+        "voice_source": (voice_ref or {}).get("source"),
+        "voice_id": (voice_ref or {}).get("voice_id"),
+        "provider_voice_id": (voice_ref or {}).get("provider_voice_id"),
+        "emotion_type": (voice_ref or {}).get("emotion_type"),
+    }
+    try:
+        audio_url = await _generate_audio_with_provider(provider, model, text, voice_ref=voice_ref)
+        await record_provider_call(
+            db,
+            capability=AiProviderCapability.AUDIO,
+            task_id=None,
+            provider=provider,
+            model=model,
+            request_payload=request_snapshot,
+            response_payload={"sample": True},
+            latency_ms=_elapsed_ms(started),
+        )
+        return audio_url
+    except Exception as exc:
+        await _record_provider_failure(
+            db,
+            capability=AiProviderCapability.AUDIO,
+            task_id=None,
             provider=provider,
             model=model,
             started=started,
@@ -347,6 +388,11 @@ async def _generate_audio_with_provider(provider: str, model: str, text: str, *,
     if provider == "doubao":
         voice_type = _voice_name_from_ref(voice_ref) or settings.DOUBAO_TTS_VOICE_TYPE
         return await doubao_generate_audio(text, voice_type=voice_type)
+    if provider == "aliyun":
+        voice = _voice_name_from_ref(voice_ref)
+        if not voice:
+            raise AiProviderError("阿里云 TTS 需要从声音模块选择带 voice_style_code 的系统声音", error_code="ALIYUN_TTS_VOICE_MISSING")
+        return await aliyun_generate_audio(text, voice=voice, emotion_type=_voice_emotion_from_ref(voice_ref))
     raise AiProviderError(f"不支持的语音 AI provider: {provider}", error_code="UNSUPPORTED_PROVIDER")
 
 
@@ -372,6 +418,13 @@ def _voice_name_from_ref(voice_ref: dict | None) -> str | None:
     if not voice_ref:
         return None
     value = voice_ref.get("voice_name") or voice_ref.get("voice_type") or voice_ref.get("provider_voice_id")
+    return str(value) if value else None
+
+
+def _voice_emotion_from_ref(voice_ref: dict | None) -> str | None:
+    if not voice_ref:
+        return None
+    value = voice_ref.get("emotion_type") or voice_ref.get("emotion")
     return str(value) if value else None
 
 
@@ -474,6 +527,10 @@ def _model_for(provider: str, capability: AiProviderCapability) -> str:
         if capability == AiProviderCapability.AUDIO:
             return "doubao-tts"
         return settings.DOUBAO_TEXT_MODEL or ""
+    if provider == "aliyun":
+        if capability == AiProviderCapability.AUDIO:
+            return "aliyun-nls-tts"
+        raise AiProviderError(f"阿里云语音合成不支持该能力: {capability}", error_code="UNSUPPORTED_PROVIDER")
     if provider in {"kling", "kling_avatar"}:
         if capability == AiProviderCapability.LIP_SYNC:
             return settings.KLING_AVATAR_MODEL

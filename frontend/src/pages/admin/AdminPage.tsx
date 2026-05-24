@@ -1,18 +1,19 @@
 import React from "react";
-import { BarChart3, ClipboardCheck, FileClock, LayoutDashboard, Palette, Sparkles, Tags } from "lucide-react";
+import { BarChart3, ClipboardCheck, FileClock, LayoutDashboard, Mic2, Palette, Sparkles, Tags } from "lucide-react";
 
 import { AuditLogTable } from "@/entities/audit";
-import { AdminArtStyleManager, AdminCharacterManager, AdminDashboard, AdminTaxonomyManager } from "@/features/admin";
+import { AdminArtStyleManager, AdminCharacterManager, AdminDashboard, AdminTaxonomyManager, AdminVoiceManager } from "@/features/admin";
 import { AnalyticsDashboard } from "@/features/analytics";
 import { ModerationQueue } from "@/features/moderation";
 import { AppShell } from "@/shared/layout/AppShell";
 
-type AdminTab = "dashboard" | "art-styles" | "characters" | "taxonomy" | "moderation" | "analytics" | "audit";
+type AdminTab = "dashboard" | "art-styles" | "characters" | "voices" | "taxonomy" | "moderation" | "analytics" | "audit";
 
 const tabs: Array<{ id: AdminTab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { id: "dashboard", label: "概览", icon: LayoutDashboard },
   { id: "art-styles", label: "画风", icon: Palette },
   { id: "characters", label: "角色", icon: Sparkles },
+  { id: "voices", label: "声音", icon: Mic2 },
   { id: "taxonomy", label: "分类", icon: Tags },
   { id: "moderation", label: "审核", icon: ClipboardCheck },
   { id: "analytics", label: "统计", icon: BarChart3 },
@@ -56,6 +57,7 @@ export const AdminPage: React.FC = () => {
           {tab === "dashboard" ? <AdminDashboard /> : null}
           {tab === "art-styles" ? <AdminArtStyleManager /> : null}
           {tab === "characters" ? <AdminCharacterManager /> : null}
+          {tab === "voices" ? <AdminVoiceManager /> : null}
           {tab === "taxonomy" ? <AdminTaxonomyManager /> : null}
           {tab === "moderation" ? <ModerationQueue /> : null}
           {tab === "analytics" ? <AnalyticsDashboard /> : null}

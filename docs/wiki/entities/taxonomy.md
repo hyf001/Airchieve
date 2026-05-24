@@ -1,10 +1,10 @@
 ---
 title: 分类配置
 created: 2026-05-19
-updated: 2026-05-20
+updated: 2026-05-24
 type: entity
 tags: [taxonomy, module-design]
-sources: [raw/articles/module-design/taxonomy.md]
+sources: [raw/articles/module-design/taxonomy.md, raw/articles/external/aliyun-speech-synthesis-overview.md]
 ---
 
 # 分类配置 (taxonomy)
@@ -28,6 +28,18 @@ sources: [raw/articles/module-design/taxonomy.md]
 | `taxonomy_items` | 分类项，包含 type、code、展示名称、排序、启用状态 |
 
 分类类型：`age_range`、`theme`、`interest_tag`、`education_goal`、`reading_level`、`language`、`narrative_style`、`scene`、`voice_style`、`asset_category`
+
+## Voice Style 用法
+
+- `voice_style` 不再表示抽象风格（如“温柔姐姐”），而是可以承载 TTS provider 的稳定音色 code。
+- Aliyun TTS 系统声音使用 `voice_style` seed 官方音色，例如 `zhimiao_emo`、`zhimi_emo`、`zhiyan_emo`、`xiaoyun`、`xiaogang`、`aiqi`。
+- 多情感音色 taxonomy metadata 应包含 `provider=aliyun` 和明确的 `supported_emotions` 数组，供 [[asset-storage]] 和 [[creation-generation]] 判断能力。
+- 当前 seed 的多情感 emotion 范围：`zhimiao_emo` 支持 `serious/sad/disgust/jealousy/embarrassed/happy/fear/surprise/neutral/frustrated/affectionate/gentle/angry/newscast/customer-service/story/living`；`zhimi_emo` 支持 `angry/fear/happy/hate/neutral/sad/surprise`；`zhiyan_emo` 支持 `neutral/happy/angry/sad/fear/hate/surprise/arousal`。
+
+## TODO
+
+- [ ] 周期性复核 Aliyun 官方音色列表，新增、下线或改名时同步 taxonomy seed 和前端受控下拉。
+- [ ] 为 `voice_style` metadata 定义稳定 schema：`provider`、`supported_emotions`、`language_scope`、`scene`。
 
 ## 核心接口
 
@@ -54,3 +66,4 @@ sources: [raw/articles/module-design/taxonomy.md]
 - [[discovery-recommendation]] — 首页筛选
 - [[creation-generation]] — 创作配置
 - [[account-profile]] — 儿童档案兴趣标签
+- [[asset-storage]] — 系统声音使用 voice_style code

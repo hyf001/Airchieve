@@ -35,6 +35,7 @@ from app.service import generation_task
 from app.service import story as story_service
 from app.service import storage as storage_service
 from app.service import template as template_service
+from app.service.asset.voice import _get_voice_model
 
 
 def _session_read(session: CreationSession) -> CreationSessionRead:
@@ -109,6 +110,8 @@ async def update_session_config(
     data = payload.model_dump(exclude_unset=True, mode="json")
     if session.creation_type == CreationType.TEMPLATE_BOOK and "art_style_ref" in data:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="TEMPLATE_CONTENT_LOCKED")
+    if payload.voice_ref is not None:
+        data["voice_ref"] = await _voice_ref_with_provider_voice_id(db, user_id, data["voice_ref"])
     for field, value in data.items():
         setattr(session, field, value)
     if payload.character_refs is not None:
@@ -142,6 +145,19 @@ async def generate_story(
     )
     await db.commit()
     return CreationTaskResponse(session=await get_session(db, user_id, session_id), task=task)
+
+
+async def _voice_ref_with_provider_voice_id(db: AsyncSession, user_id: int, voice_ref: dict) -> dict:
+    if voice_ref.get("source") == "template_default" or voice_ref.get("voice_id") is None:
+        return voice_ref
+    voice = await _get_voice_model(db, int(voice_ref["voice_id"]), user_id=user_id)
+    if voice.owner_user_id is None and not voice.voice_style_code:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="系统声音缺少 voice_style_code")
+    enriched = dict(voice_ref)
+    enriched["display_name"] = str(enriched.get("display_name") or "").strip() or voice.name
+    enriched["provider_voice_id"] = voice.voice_style_code
+    enriched["emotion_type"] = voice.emotion_type
+    return enriched
 
 
 async def generate_storyboard(db: AsyncSession, user_id: int, session_id: int) -> CreationTaskResponse:

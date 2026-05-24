@@ -1,10 +1,10 @@
 ---
 title: 创作生成与异步任务
 created: 2026-05-19
-updated: 2026-05-23
+updated: 2026-05-24
 type: entity
 tags: [creation, generation-task, ai-provider, module-design]
-sources: [raw/articles/module-design/creation-generation.md, raw/articles/generation-task-execution-design.md, raw/articles/external/gemini-tts-speech-generation.md, raw/articles/external/volcengine-tts-http.md, raw/articles/external/kling-avatar-20-lip-sync.md]
+sources: [raw/articles/module-design/creation-generation.md, raw/articles/generation-task-execution-design.md, raw/articles/external/gemini-tts-speech-generation.md, raw/articles/external/volcengine-tts-http.md, raw/articles/external/aliyun-nls-python-sdk-tts.md, raw/articles/external/aliyun-speech-synthesis-overview.md, raw/articles/external/kling-avatar-20-lip-sync.md]
 ---
 
 # 创作生成与异步任务 (creation / generation_task / ai_provider)
@@ -62,7 +62,16 @@ sources: [raw/articles/module-design/creation-generation.md, raw/articles/genera
 
 - Gemini TTS：官方接口以 `response_modalities=["AUDIO"]` 返回音频 inline data；Python 示例将 24k PCM 写入 WAV 容器。AIrchieve 中应由 `ai_provider` 适配为统一音频引用，再由 `creation` 写回分镜或保存后的绘本页。
 - Volcengine / Doubao TTS：HTTP 非流式接口使用 `POST /api/v1/tts`，请求头为 `Authorization: Bearer;token`，响应 JSON 中音频为 base64；每次请求需使用唯一 `reqid`。AIrchieve 中应把 AppID、Token、Cluster、Voice Type 放在集中配置里。
-- 两条 provider 路径都不拥有业务对象：它们只生成音频并记录调用，结果归属由 `creation` / `book` / `asset-storage` 的服务边界决定。
+- Aliyun NLS TTS：Python SDK 使用 `nls.NlsSpeechSynthesizer`，通过 AppKey + Token 建立 websocket，`on_data` 回调返回音频 bytes；Token 可直接配置，也可由 `nls.token.getToken()` 基于 AccessKey 获取。AIrchieve provider 应在线程池里同步等待 SDK 完成，收集音频并返回统一音频引用。
+- Aliyun 音色：系统声音的 `voice_style_code` 承载 provider voice id，例如 `zhimiao_emo`、`zhimi_emo`、`zhiyan_emo`、`aiqi`。`creation.voice_ref` 在用户选择声音时应复制为 `provider_voice_id`，`ai_provider` 消费该值；不应使用全局 `ALIYUN_TTS_VOICE` 默认音色。
+- 所有 provider 路径都不拥有业务对象：它们只生成音频并记录调用，结果归属由 `creation` / `book` / `asset-storage` 的服务边界决定。
+
+## TODO
+
+- [ ] 为 Aliyun 多情感音色接入 SSML emotion：仅当所选系统声音的 taxonomy metadata 中 `supported_emotions` 包含目标 emotion 时才注入 `ssml-emotion`。
+- [ ] 定义故事页、对白、旁白到 Aliyun emotion 标签的映射规则，并提供中性朗读 fallback。
+- [ ] 明确情绪意图存储位置：分镜页 metadata、`dialogues` 标记，或 provider 调用前的临时推断。
+- [ ] 将 TTS 输出从长期 `data:` URL 迁移到 [[asset-storage]] 持久化文件 URL，便于后续对口型、播放器和分享稳定访问。
 
 ## AI Provider 对口型生成参考
 
@@ -77,6 +86,8 @@ sources: [raw/articles/module-design/creation-generation.md, raw/articles/genera
 - 任务执行设计全文：`raw/articles/generation-task-execution-design.md`
 - Gemini TTS 官方参考摘要：`raw/articles/external/gemini-tts-speech-generation.md`
 - Volcengine / Doubao TTS 官方参考摘要：`raw/articles/external/volcengine-tts-http.md`
+- Aliyun NLS Python SDK TTS 参考摘要：`raw/articles/external/aliyun-nls-python-sdk-tts.md`
+- Aliyun 语音合成音色与多情感参考摘要：`raw/articles/external/aliyun-speech-synthesis-overview.md`
 - Kling Avatar 2.0 对口型参考摘要：`raw/articles/external/kling-avatar-20-lip-sync.md`
 - 本页是模块索引与摘要；API、契约、Service、数据库字段、跨模块协作和边界规则以 raw 全文为准。
 

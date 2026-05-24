@@ -1,10 +1,10 @@
 ---
 title: 素材库与存储
 created: 2026-05-19
-updated: 2026-05-20
+updated: 2026-05-24
 type: entity
 tags: [asset, storage, character, voice, art-style, module-design]
-sources: [raw/articles/module-design/asset-storage.md]
+sources: [raw/articles/module-design/asset-storage.md, raw/articles/external/aliyun-speech-synthesis-overview.md]
 ---
 
 # 素材库与存储 (character-library / voice-library / art-style-library / asset / storage)
@@ -48,6 +48,18 @@ sources: [raw/articles/module-design/asset-storage.md]
 - 前端：`CharacterSelector`、`VoiceSelector`、`ArtStyleSelector`、`AssetUploadField`
 - 后端：`list_characters()`、`list_voices()`、`list_art_styles()`、`create_upload_session()`
 
+## 系统声音与供应商音色
+
+- 系统声音记录的 `voice_style_code` 承载外部 TTS provider 的 voice id。Aliyun TTS 下应使用官方音色代码，如 `zhimiao_emo`、`zhimi_emo`、`zhiyan_emo`、`xiaoyun`、`aiqi`。
+- 多情感音色属于系统声音的一类能力，不是全局配置。前端后台应通过受控音色下拉创建/更新系统声音，避免散落手写字符串。
+- `sample_url` 应保存每个系统声音的试听音频，供创作前选择；实际生成音频仍由 [[creation-generation]] 的 `ai_provider` provider 路径完成。
+
+## TODO
+
+- [ ] 为所有 seeded Aliyun 系统声音生成或上传短试听样本。
+- [ ] 增加系统声音 `voice_style_code` 校验，确保只使用受支持的 Aliyun 音色或后台 taxonomy 中启用的 provider voice id。
+- [ ] 为多情感系统声音暴露“支持情感”能力标记，供 [[creation-generation]] 决定是否注入 SSML emotion。
+
 ## 边界
 
 - 素材库不编排绘本生成流程
@@ -66,3 +78,4 @@ sources: [raw/articles/module-design/asset-storage.md]
 - [[account-profile]] — 儿童档案默认素材
 - [[share-export-privacy]] — 上传隐私确认
 - [[membership-payment]] — VIP 素材权益
+- [[taxonomy]] — Aliyun voice_style 音色分类

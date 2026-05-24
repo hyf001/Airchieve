@@ -33,13 +33,6 @@ class AssetSourceType(StrEnum):
     VOICE_CLONE = "voice_clone"
 
 
-class AssetModerationStatus(StrEnum):
-    PENDING = "pending"
-    APPROVED = "approved"
-    REJECTED = "rejected"
-    HIDDEN = "hidden"
-
-
 class LibraryItemStatus(StrEnum):
     ACTIVE = "active"
     DELETED = "deleted"
@@ -50,10 +43,3 @@ class ArtStyleStatus(StrEnum):
     ACTIVE = "active"
     INACTIVE = "inactive"
     DELETED = "deleted"
-
-
-class VoiceProcessingStatus(StrEnum):
-    PENDING = "pending"
-    PROCESSING = "processing"
-    READY = "ready"
-    FAILED = "failed"

@@ -1,6 +1,7 @@
 import { apiClient } from "@/shared/api/client";
-import type { ArtStyle, AssetStorageDTO, CharacterRead, CharacterSummary, ListResponse } from "@/entities/asset";
-import type { AdminContentOverviewRead, AdminDashboardRead, SystemArtStyleWrite, SystemCharacterWrite } from "./types";
+import type { ArtStyle, AssetStorageDTO, CharacterRead, CharacterSummary, ListResponse, VoiceSummary } from "@/entities/asset";
+import type { GenerationTaskRead } from "@/features/creation/types";
+import type { AdminContentOverviewRead, AdminDashboardRead, SystemArtStyleWrite, SystemCharacterWrite, SystemVoiceWrite } from "./types";
 
 export const adminApi = {
   getDashboard: () => apiClient.get<AdminDashboardRead>("/v1/admin/dashboard"),
@@ -19,4 +20,13 @@ export const adminApi = {
   deleteCharacter: (id: number) => apiClient.delete<void>(`/v1/admin/characters/${id}`),
   uploadCharacterImage: (payload: { base64: string; mime_type: string; filename: string }) =>
     apiClient.post<AssetStorageDTO>("/v1/admin/characters/image", payload),
+  listVoices: () => apiClient.get<ListResponse<VoiceSummary>>("/v1/admin/voices"),
+  createVoice: (payload: SystemVoiceWrite) => apiClient.post<VoiceSummary>("/v1/admin/voices", payload),
+  updateVoice: (id: number, payload: Partial<SystemVoiceWrite>) => apiClient.patch<VoiceSummary>(`/v1/admin/voices/${id}`, payload),
+  deleteVoice: (id: number) => apiClient.delete<void>(`/v1/admin/voices/${id}`),
+  uploadVoiceAudio: (payload: { base64: string; mime_type: string; filename: string }) =>
+    apiClient.post<AssetStorageDTO>("/v1/admin/voices/audio", payload),
+  generateVoiceSample: (payload: { voice_id?: number | null; voice_style_code: string; emotion_type?: string | null; sample_text: string }) =>
+    apiClient.post<GenerationTaskRead>("/v1/admin/voices/sample", payload),
+  getGenerationTask: (taskId: number) => apiClient.get<GenerationTaskRead>(`/v1/generation-tasks/${taskId}`),
 };

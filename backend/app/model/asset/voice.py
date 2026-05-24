@@ -1,12 +1,10 @@
-from sqlalchemy import Boolean, Enum, Index, Integer, JSON, String, text
+from sqlalchemy import Boolean, Enum, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.model.asset.enums import (
     AssetAccessLevel,
-    AssetModerationStatus,
     AssetSourceType,
     LibraryItemStatus,
-    VoiceProcessingStatus,
 )
 from app.model.base import Base, TimestampMixin
 
@@ -27,19 +25,10 @@ class Voice(TimestampMixin, Base):
     owner_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
     voice_style_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    sample_asset_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    emotion_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     sample_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    source_sample_asset_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    supported_languages: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     access_level: Mapped[AssetAccessLevel] = mapped_column(Enum(AssetAccessLevel), nullable=False, default=AssetAccessLevel.FREE, index=True)
     source_type: Mapped[AssetSourceType] = mapped_column(Enum(AssetSourceType), nullable=False, default=AssetSourceType.USER_UPLOAD, index=True)
-    processing_status: Mapped[VoiceProcessingStatus] = mapped_column(
-        Enum(VoiceProcessingStatus), nullable=False, default=VoiceProcessingStatus.PENDING, index=True
-    )
-    failure_reason: Mapped[str | None] = mapped_column(String(300), nullable=True)
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    moderation_status: Mapped[AssetModerationStatus] = mapped_column(
-        Enum(AssetModerationStatus), nullable=False, default=AssetModerationStatus.APPROVED, index=True
-    )
     status: Mapped[LibraryItemStatus] = mapped_column(Enum(LibraryItemStatus), nullable=False, default=LibraryItemStatus.ACTIVE, index=True)

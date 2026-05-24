@@ -5,7 +5,6 @@ from app.model.asset import (
     AssetAccessLevel,
     Character,
     LibraryItemStatus,
-    VoiceProcessingStatus,
 )
 from app.schema.asset import AssetInternalDTO
 from app.schema.entitlement import EntitlementResourceType
@@ -38,11 +37,18 @@ from app.service.asset.character import (
 )
 from app.service.asset.file_asset import get_asset
 from app.service.asset.voice import (
+    create_system_voice,
+    create_system_voice_sample_task,
     create_voice,
+    delete_system_voice,
     delete_voice,
+    get_admin_system_voice,
     get_voice,
+    list_admin_system_voices,
     list_voices,
     set_default_voice,
+    run_system_voice_sample_task,
+    update_system_voice,
     update_voice,
     _get_voice_model,
 )
@@ -69,15 +75,13 @@ async def assert_asset_usable(db: AsyncSession, user_id: int, asset_type: str, a
         voice = await _get_voice_model(db, asset_id, user_id=user_id)
         if voice.owner_user_id is None and voice.access_level == AssetAccessLevel.VIP:
             await entitlement_service.assert_can_use_vip_resource(db, user_id, EntitlementResourceType.VOICE, str(voice.id))
-        if voice.processing_status != VoiceProcessingStatus.READY:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="声音尚未处理完成")
         return AssetInternalDTO(
             asset_type=asset_type,
             asset_id=voice.id,
             owner_user_id=voice.owner_user_id,
             access_level=voice.access_level,
             source_type=voice.source_type,
-            usable=voice.status == LibraryItemStatus.ACTIVE and voice.processing_status == VoiceProcessingStatus.READY,
+            usable=voice.status == LibraryItemStatus.ACTIVE,
         )
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不支持的素材类型")
 
@@ -88,28 +92,35 @@ __all__ = [
     "create_system_character",
     "create_custom_art_style",
     "create_system_art_style",
+    "create_system_voice",
+    "create_system_voice_sample_task",
     "create_voice",
     "delete_character",
     "delete_system_character",
     "delete_custom_art_style",
     "delete_system_art_style",
+    "delete_system_voice",
     "delete_voice",
     "get_admin_system_art_style",
     "get_admin_system_character",
+    "get_admin_system_voice",
     "get_art_style",
     "get_asset",
     "get_character",
     "get_voice",
     "list_admin_system_art_styles",
     "list_admin_system_characters",
+    "list_admin_system_voices",
     "list_art_styles",
     "list_characters",
     "list_voices",
     "set_default_character",
     "set_default_voice",
+    "run_system_voice_sample_task",
     "update_character",
     "update_system_character",
     "update_custom_art_style",
     "update_system_art_style",
+    "update_system_voice",
     "update_voice",
 ]

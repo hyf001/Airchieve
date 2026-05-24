@@ -1,5 +1,5 @@
 import React from "react";
-import { LogOut, Search } from "lucide-react";
+import { LogOut, Search, UserRound } from "lucide-react";
 
 import { type AppRoute, useRouter } from "@/app/router";
 import { Button } from "@/components/ui/button";
@@ -24,11 +24,36 @@ interface AppShellProps {
 export const AppShell: React.FC<AppShellProps> = ({ children, hideSearch = false }) => {
   const { path, navigate } = useRouter();
   const { isAuthenticated, logout, user } = useAuth();
+  const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
+  const userMenuRef = React.useRef<HTMLDivElement | null>(null);
 
   const handleLogout = async () => {
+    setIsUserMenuOpen(false);
     await logout();
     navigate("/");
   };
+
+  React.useEffect(() => {
+    if (!isUserMenuOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!userMenuRef.current?.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsUserMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isUserMenuOpen]);
 
   return (
     <div className="min-h-screen bg-[var(--warm-bg)] text-[var(--text-dark)]">
@@ -85,27 +110,49 @@ export const AppShell: React.FC<AppShellProps> = ({ children, hideSearch = false
               <AppLink to="/profile">我的档案</AppLink>
             </Button>
             {isAuthenticated ? (
-              <>
-                <Button
-                  aria-label="退出登录"
-                  className="px-3.5 max-sm:w-10 max-sm:px-0"
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                  onClick={() => void handleLogout()}
-                >
-                  <LogOut className="h-4 w-4" />
-                  <span className="max-sm:hidden">退出登录</span>
-                </Button>
-                <AppLink
-                  to="/profile"
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--sage),var(--sky))] text-sm font-black text-white no-underline shadow-[0_2px_8px_rgba(139,198,168,0.3)]"
+              <div ref={userMenuRef} className="relative">
+                <button
+                  aria-expanded={isUserMenuOpen}
+                  aria-haspopup="menu"
                   aria-label={`当前账号：${user?.display_name ?? "已登录"}`}
+                  className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-[linear-gradient(135deg,var(--sage),var(--sky))] text-sm font-black text-white shadow-[0_2px_8px_rgba(139,198,168,0.3)] transition-all hover:-translate-y-0.5 hover:shadow-[0_4px_14px_rgba(139,198,168,0.38)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[rgba(139,198,168,0.22)]"
                   title={user?.display_name ?? "已登录"}
+                  type="button"
+                  onClick={() => setIsUserMenuOpen((value) => !value)}
                 >
-                  {(user?.display_name ?? "家").slice(0, 1)}
-                </AppLink>
-              </>
+                  {user?.avatar_url ? (
+                    <img alt="" className="h-full w-full object-cover" src={user.avatar_url} />
+                  ) : (
+                    (user?.display_name ?? "家").slice(0, 1)
+                  )}
+                </button>
+
+                {isUserMenuOpen ? (
+                  <div
+                    className="absolute right-0 top-[calc(100%+10px)] w-44 rounded-[var(--radius-sm)] border border-[rgba(212,114,92,0.14)] bg-white p-2 shadow-[0_12px_32px_rgba(74,55,40,0.14)]"
+                    role="menu"
+                  >
+                    <AppLink
+                      to="/profile"
+                      className="flex items-center gap-2 rounded-[var(--radius-sm)] px-3 py-2 text-sm font-semibold text-[var(--text-mid)] no-underline transition-colors hover:bg-[rgba(212,114,92,0.07)] hover:text-[var(--terracotta)]"
+                      role="menuitem"
+                      onClick={() => setIsUserMenuOpen(false)}
+                    >
+                      <UserRound className="h-4 w-4" />
+                      我的档案
+                    </AppLink>
+                    <button
+                      className="mt-1 flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-3 py-2 text-left text-sm font-semibold text-[var(--text-mid)] transition-colors hover:bg-[rgba(212,114,92,0.07)] hover:text-[var(--terracotta)]"
+                      role="menuitem"
+                      type="button"
+                      onClick={() => void handleLogout()}
+                    >
+                      <LogOut className="h-4 w-4" />
+                      退出登录
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             ) : (
               <Button asChild>
                 <AppLink to="/auth">登录</AppLink>

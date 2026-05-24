@@ -1,12 +1,11 @@
 import { apiClient } from "@/shared/api/client";
-import type { ListResponse, UploadSessionRead, VoiceSummary } from "@/entities/asset";
+import type { AssetStorageDTO, ListResponse, UploadSessionRead, VoiceSummary } from "@/entities/asset";
 
 export interface VoiceCreatePayload {
   name: string;
-  source_sample_asset_id: number;
-  supported_languages?: string[];
+  voice_style_code?: string | null;
+  sample_url?: string | null;
   duration_seconds?: number | null;
-  upload_consent_id: number;
 }
 
 export const voiceLibraryApi = {
@@ -24,12 +23,9 @@ export const voiceLibraryApi = {
       }
     }),
   completeUpload: (id: number, payload: { byte_size?: number | null; asset_kind: "audio"; visibility: "private" }) =>
-    apiClient.post<{ id: number; storage_key: string; url: string; mime_type: string; byte_size: number | null }>(
-      `/v1/assets/uploads/${id}/complete`,
-      payload,
-    ),
+    apiClient.post<AssetStorageDTO>(`/v1/assets/uploads/${id}/complete`, payload),
   create: (payload: VoiceCreatePayload) => apiClient.post<VoiceSummary>("/v1/assets/voices", payload),
-  update: (id: number, payload: { name?: string }) => apiClient.patch<VoiceSummary>(`/v1/assets/voices/${id}`, payload),
+  update: (id: number, payload: Partial<VoiceCreatePayload>) => apiClient.patch<VoiceSummary>(`/v1/assets/voices/${id}`, payload),
   remove: (id: number) => apiClient.delete<void>(`/v1/assets/voices/${id}`),
   setDefault: (id: number) => apiClient.post<VoiceSummary>(`/v1/assets/voices/${id}/default`),
 };

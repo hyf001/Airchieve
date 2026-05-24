@@ -174,13 +174,9 @@ sha256: 2b95c34fff6f458063b3ad3def07dd0b3097e05dabf2ac2b251bea3f585c4f76
 | owner_user_id | int nullable indexed | 用户声音所属人；系统声音为空 |
 | name | string | 名称 |
 | voice_style_code | string nullable | taxonomy:voice_style |
-| sample_asset_id | int nullable | 试听样本 |
-| source_sample_asset_id | int nullable | 用户原始样本 |
-| supported_languages | JSON array | 支持语言 |
 | duration_seconds | integer nullable | 样本时长 |
 | access_level | enum(`free`,`vip`) | 系统声音权益 |
 | source_type | enum(`system`,`user_upload`,`voice_clone`) | 来源 |
-| processing_status | enum(`pending`,`processing`,`ready`,`failed`) | 处理状态 |
 | failure_reason | string nullable | 失败原因 |
 | is_default | bool | 用户默认 |
 | moderation_status | enum(`pending`,`approved`,`rejected`,`hidden`) | 审核状态 |

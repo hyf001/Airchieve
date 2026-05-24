@@ -3,13 +3,6 @@ import { Mic2 } from "lucide-react";
 
 import { AssetCard, type VoiceSummary } from "@/entities/asset";
 
-const statusLabel: Record<VoiceSummary["processing_status"], string> = {
-  pending: "待处理",
-  processing: "处理中",
-  ready: "",
-  failed: "处理失败",
-};
-
 interface VoiceSelectorProps {
   voices: VoiceSummary[];
   selectedId?: number | null;
@@ -24,12 +17,11 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({ voices, selectedId
       <AssetCard
         key={voice.id}
         title={voice.name}
-        subtitle={[voice.supported_languages.join(" / "), voice.duration_seconds ? `${voice.duration_seconds} 秒` : null].filter(Boolean).join(" · ")}
+        subtitle={[voice.voice_style_code, voice.duration_seconds ? `${voice.duration_seconds} 秒` : null].filter(Boolean).join(" · ")}
         icon={<Mic2 />}
         accessLevel={voice.access_level}
         selected={selectedId === voice.id}
         isDefault={voice.is_default}
-        statusLabel={voice.failure_reason ?? (statusLabel[voice.processing_status] || undefined)}
         onSelect={() => onSelect(voice)}
         onPreview={() => undefined}
         onSetDefault={voice.owner_user_id ? () => onSetDefault?.(voice) : undefined}

@@ -17,9 +17,16 @@ from app.schema.asset import (
     SystemArtStyleUpdate,
     SystemCharacterCreate,
     SystemCharacterUpdate,
+    SystemVoiceCreate,
+    SystemVoiceSampleGenerateRequest,
+    SystemVoiceUpdate,
+    VoiceAudioUploadRequest,
+    VoiceListRead,
+    VoiceRead,
 )
 from app.schema.audit import AuditLogCreateInternal, AuditSnapshot
 from app.schema.audit import AuditLogListRead, AuditLogRead
+from app.schema.generation_task import GenerationTaskRead
 from app.schema.recommendation import (
     RecommendationItemRead,
     RecommendationItemStatusUpdate,
@@ -266,6 +273,138 @@ async def delete_admin_character(
             action="admin.character.delete",
             target_type="character",
             target_id=character_id,
+            before_snapshot=AuditSnapshot(values=before.model_dump(mode="json")),
+        ),
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/voices", response_model=VoiceListRead)
+async def list_admin_voices(
+    limit: int = Query(default=100, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    _: int = Depends(current_admin_user_id),
+) -> VoiceListRead:
+    return await asset_service.list_admin_system_voices(db, limit=limit, offset=offset)
+
+
+@router.post("/voices/audio", response_model=AssetStorageDTO, status_code=status.HTTP_201_CREATED)
+async def upload_admin_voice_audio(
+    payload: VoiceAudioUploadRequest,
+    db: AsyncSession = Depends(get_db),
+    operator_id: int = Depends(current_admin_user_id),
+) -> AssetStorageDTO:
+    if not payload.mime_type.startswith("audio/"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请上传音频文件")
+    audio = await storage_service.save_base64_asset(
+        db,
+        None,
+        base64_data=payload.base64_data or "",
+        mime_type=payload.mime_type,
+        asset_kind=AssetKind.AUDIO,
+        filename=payload.filename,
+        visibility=AssetVisibility.SYSTEM,
+        path_scope="voice/sample",
+    )
+    await audit_service.write_audit_log(
+        db,
+        AuditLogCreateInternal(
+            operator_type=AuditOperatorType.ADMIN,
+            operator_id=operator_id,
+            action="admin.voice.audio_upload",
+            target_type="asset",
+            target_id=audio.id,
+            after_snapshot=AuditSnapshot(values=audio.model_dump(mode="json")),
+        ),
+        commit=False,
+    )
+    await db.commit()
+    return audio
+
+
+@router.post("/voices/sample", response_model=GenerationTaskRead, status_code=status.HTTP_202_ACCEPTED)
+async def generate_admin_voice_sample(
+    payload: SystemVoiceSampleGenerateRequest,
+    db: AsyncSession = Depends(get_db),
+    operator_id: int = Depends(current_admin_user_id),
+) -> GenerationTaskRead:
+    task = await asset_service.create_system_voice_sample_task(db, payload)
+    await audit_service.write_audit_log(
+        db,
+        AuditLogCreateInternal(
+            operator_type=AuditOperatorType.ADMIN,
+            operator_id=operator_id,
+            action="admin.voice.sample_generate",
+            target_type="generation_task",
+            target_id=task.id,
+            after_snapshot=AuditSnapshot(values=task.model_dump(mode="json")),
+        ),
+    )
+    return task
+
+
+@router.post("/voices", response_model=VoiceRead, status_code=status.HTTP_201_CREATED)
+async def create_admin_voice(
+    payload: SystemVoiceCreate,
+    db: AsyncSession = Depends(get_db),
+    operator_id: int = Depends(current_admin_user_id),
+) -> VoiceRead:
+    voice = await asset_service.create_system_voice(db, payload)
+    await audit_service.write_audit_log(
+        db,
+        AuditLogCreateInternal(
+            operator_type=AuditOperatorType.ADMIN,
+            operator_id=operator_id,
+            action="admin.voice.create",
+            target_type="voice",
+            target_id=voice.id,
+            after_snapshot=AuditSnapshot(values=voice.model_dump(mode="json")),
+        ),
+    )
+    return voice
+
+
+@router.patch("/voices/{voice_id}", response_model=VoiceRead)
+async def update_admin_voice(
+    voice_id: int,
+    payload: SystemVoiceUpdate,
+    db: AsyncSession = Depends(get_db),
+    operator_id: int = Depends(current_admin_user_id),
+) -> VoiceRead:
+    before = await asset_service.get_admin_system_voice(db, voice_id)
+    voice = await asset_service.update_system_voice(db, voice_id, payload)
+    await audit_service.write_audit_log(
+        db,
+        AuditLogCreateInternal(
+            operator_type=AuditOperatorType.ADMIN,
+            operator_id=operator_id,
+            action="admin.voice.update",
+            target_type="voice",
+            target_id=voice.id,
+            before_snapshot=AuditSnapshot(values=before.model_dump(mode="json")),
+            after_snapshot=AuditSnapshot(values=voice.model_dump(mode="json")),
+        ),
+    )
+    return voice
+
+
+@router.delete("/voices/{voice_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_admin_voice(
+    voice_id: int,
+    db: AsyncSession = Depends(get_db),
+    operator_id: int = Depends(current_admin_user_id),
+) -> Response:
+    before = await asset_service.get_admin_system_voice(db, voice_id)
+    await asset_service.delete_system_voice(db, voice_id)
+    await audit_service.write_audit_log(
+        db,
+        AuditLogCreateInternal(
+            operator_type=AuditOperatorType.ADMIN,
+            operator_id=operator_id,
+            action="admin.voice.delete",
+            target_type="voice",
+            target_id=voice_id,
             before_snapshot=AuditSnapshot(values=before.model_dump(mode="json")),
         ),
     )

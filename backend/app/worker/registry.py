@@ -3,6 +3,7 @@ from collections.abc import Awaitable, Callable
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.model.generation_task import GenerationTask, GenerationTaskType
+from app.service.asset import run_system_voice_sample_task
 from app.service.asset.character_generation import run_character_image_task
 from app.service.creation.service import (
     run_creation_audio_task,
@@ -16,12 +17,19 @@ from app.service.template.service import run_template_composite_task
 
 GenerationTaskHandler = Callable[[AsyncSession, GenerationTask], Awaitable[None]]
 
+
+async def run_audio_task(db: AsyncSession, task: GenerationTask) -> None:
+    if task.owner_type == "voice":
+        await run_system_voice_sample_task(db, task)
+        return
+    await run_creation_audio_task(db, task)
+
 GENERATION_TASK_HANDLERS: dict[GenerationTaskType, GenerationTaskHandler] = {
     GenerationTaskType.CHARACTER_IMAGE: run_character_image_task,
     GenerationTaskType.STORY: run_story_task,
     GenerationTaskType.STORYBOARD: run_storyboard_task,
     GenerationTaskType.IMAGE: run_creation_image_task,
-    GenerationTaskType.AUDIO: run_creation_audio_task,
+    GenerationTaskType.AUDIO: run_audio_task,
     GenerationTaskType.LIP_SYNC: run_creation_lip_sync_task,
     GenerationTaskType.TEMPLATE_COMPOSITE: run_template_composite_task,
     GenerationTaskType.PDF_EXPORT: run_pdf_export_task,

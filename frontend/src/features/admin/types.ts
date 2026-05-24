@@ -42,3 +42,13 @@ export interface SystemCharacterWrite {
   access_level: AssetAccessLevel;
   status: Exclude<LibraryItemStatus, "deleted">;
 }
+
+export interface SystemVoiceWrite {
+  name: string;
+  voice_style_code?: string | null;
+  emotion_type?: string | null;
+  sample_url?: string | null;
+  duration_seconds?: number | null;
+  access_level: AssetAccessLevel;
+  status: Exclude<LibraryItemStatus, "deleted">;
+}

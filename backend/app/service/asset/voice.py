@@ -3,21 +3,33 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.model.asset import (
-    Asset,
     AssetAccessLevel,
     AssetKind,
-    AssetModerationStatus,
     AssetSourceType,
-    AssetStatus,
+    AssetVisibility,
     LibraryItemStatus,
     Voice,
-    VoiceProcessingStatus,
 )
-from app.model.privacy import UploadConsentTargetType
-from app.schema.asset import AssetInternalDTO, VoiceCreateRequest, VoiceListRead, VoiceRead, VoiceSummary, VoiceUpdateRequest
+from app.model.generation_task import GenerationTask, GenerationTaskType
+from app.schema.asset import (
+    AssetInternalDTO,
+    AssetStorageDTO,
+    SystemVoiceCreate,
+    SystemVoiceSampleGenerateRequest,
+    SystemVoiceUpdate,
+    VoiceCreateRequest,
+    VoiceListRead,
+    VoiceRead,
+    VoiceSummary,
+    VoiceUpdateRequest,
+)
 from app.schema.entitlement import EntitlementResourceType
+from app.schema.generation_task import GenerationTaskCreate, GenerationTaskRead
+from app.service import generation_task
 from app.service import entitlement as entitlement_service
-from app.service.privacy import assert_upload_consent, set_visibility_policy
+from app.service.ai_provider import service as ai_provider_service
+from app.service.privacy import set_visibility_policy
+from app.service import storage as storage_service
 
 
 def _voice_summary(voice: Voice) -> VoiceSummary:
@@ -36,7 +48,6 @@ async def list_voices(
     conditions = [
         owner_condition,
         Voice.status == LibraryItemStatus.ACTIVE,
-        Voice.moderation_status == AssetModerationStatus.APPROVED,
     ]
     if source_type:
         conditions.append(Voice.source_type == source_type)
@@ -53,26 +64,14 @@ async def get_voice(db: AsyncSession, voice_id: int, *, user_id: int | None = No
 
 async def create_voice(db: AsyncSession, user_id: int, payload: VoiceCreateRequest) -> VoiceRead:
     await entitlement_service.assert_can_create(db, user_id, EntitlementResourceType.VOICE)
-    sample = await db.get(Asset, payload.source_sample_asset_id)
-    if sample is None or sample.owner_user_id != user_id or sample.asset_kind != AssetKind.AUDIO or sample.status != AssetStatus.READY:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="声音样本不可用")
-    await assert_upload_consent(
-        db,
-        user_id=user_id,
-        consent_id=payload.upload_consent_id,
-        target_type=UploadConsentTargetType.VOICE_SAMPLE,
-        target_id=payload.source_sample_asset_id,
-    )
     voice = Voice(
         owner_user_id=user_id,
         name=payload.name,
-        source_sample_asset_id=payload.source_sample_asset_id,
-        sample_asset_id=None,
-        sample_url=None,
-        supported_languages=payload.supported_languages,
+        voice_style_code=payload.voice_style_code,
+        emotion_type=payload.emotion_type,
+        sample_url=payload.sample_url,
         duration_seconds=payload.duration_seconds,
         source_type=AssetSourceType.USER_UPLOAD,
-        processing_status=VoiceProcessingStatus.PROCESSING,
     )
     db.add(voice)
     await db.flush()
@@ -80,6 +79,127 @@ async def create_voice(db: AsyncSession, user_id: int, payload: VoiceCreateReque
     await db.commit()
     await db.refresh(voice)
     return VoiceRead.model_validate(voice)
+
+
+async def list_admin_system_voices(db: AsyncSession, *, limit: int = 100, offset: int = 0) -> VoiceListRead:
+    conditions = [Voice.owner_user_id.is_(None), Voice.status != LibraryItemStatus.DELETED]
+    stmt = select(Voice).where(*conditions).order_by(Voice.created_at.desc())
+    result = await db.execute(stmt.offset(offset).limit(limit))
+    total = await db.scalar(select(func.count()).select_from(Voice).where(*conditions))
+    return VoiceListRead(items=[_voice_summary(voice) for voice in result.scalars().all()], total=total or 0, limit=limit, offset=offset)
+
+
+async def get_admin_system_voice(db: AsyncSession, voice_id: int) -> VoiceRead:
+    voice = await db.get(Voice, voice_id)
+    if voice is None or voice.owner_user_id is not None or voice.status == LibraryItemStatus.DELETED:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="系统声音不存在")
+    return VoiceRead.model_validate(voice)
+
+
+async def create_system_voice(db: AsyncSession, payload: SystemVoiceCreate) -> VoiceRead:
+    voice = Voice(
+        owner_user_id=None,
+        name=payload.name,
+        voice_style_code=payload.voice_style_code,
+        emotion_type=payload.emotion_type,
+        sample_url=payload.sample_url,
+        duration_seconds=payload.duration_seconds,
+        access_level=payload.access_level,
+        source_type=AssetSourceType.SYSTEM,
+        status=payload.status,
+    )
+    db.add(voice)
+    await db.commit()
+    await db.refresh(voice)
+    return VoiceRead.model_validate(voice)
+
+
+async def create_system_voice_sample_task(db: AsyncSession, payload: SystemVoiceSampleGenerateRequest) -> GenerationTaskRead:
+    if payload.voice_id is not None:
+        voice = await db.get(Voice, payload.voice_id)
+        if voice is None or voice.owner_user_id is not None or voice.status == LibraryItemStatus.DELETED:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="系统声音不存在")
+    task = await generation_task.create_task(
+        db,
+        GenerationTaskCreate(
+            task_type=GenerationTaskType.AUDIO,
+            owner_type="voice",
+            owner_id=payload.voice_id or 0,
+            user_id=None,
+            input_payload=payload.model_dump(mode="json"),
+        ),
+    )
+    await db.commit()
+    return task
+
+
+async def run_system_voice_sample_task(db: AsyncSession, task: GenerationTask) -> None:
+    payload = SystemVoiceSampleGenerateRequest.model_validate(task.input_payload or {})
+    if task.owner_id and payload.voice_id is None:
+        payload.voice_id = task.owner_id
+    data_url = await ai_provider_service.generate_single_audio_sample(
+        db,
+        text=payload.sample_text,
+        voice_ref={
+            "source": "system",
+            "provider_voice_id": payload.voice_style_code,
+            "emotion_type": payload.emotion_type,
+        },
+    )
+    audio = await storage_service.save_generated_data_url(
+        db,
+        None,
+        data_url=data_url,
+        asset_kind=AssetKind.AUDIO,
+        filename_extension=_audio_extension_from_data_url(data_url),
+        visibility=AssetVisibility.SYSTEM,
+        path_scope="voice/sample",
+    )
+    if payload.voice_id is not None:
+        voice = await db.get(Voice, payload.voice_id)
+        if voice is None or voice.owner_user_id is not None or voice.status == LibraryItemStatus.DELETED:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="系统声音不存在")
+        voice.sample_url = audio.url
+    await generation_task.mark_task_succeeded(
+        db,
+        task.id,
+        result_refs={
+            "asset_id": audio.id,
+            "audio_url": audio.url,
+            "sample_url": audio.url,
+            "voice_id": payload.voice_id,
+        },
+    )
+
+
+def _audio_extension_from_data_url(data_url: str) -> str:
+    if data_url.startswith("data:audio/mpeg;") or data_url.startswith("data:audio/mp3;"):
+        return ".mp3"
+    if data_url.startswith("data:audio/wav;") or data_url.startswith("data:audio/x-wav;"):
+        return ".wav"
+    if data_url.startswith("data:audio/L16;") or data_url.startswith("data:audio/pcm;"):
+        return ".pcm"
+    return ".wav"
+
+
+async def update_system_voice(db: AsyncSession, voice_id: int, payload: SystemVoiceUpdate) -> VoiceRead:
+    voice = await db.get(Voice, voice_id)
+    if voice is None or voice.owner_user_id is not None or voice.status == LibraryItemStatus.DELETED:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="系统声音不存在")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(voice, field, value)
+    await db.commit()
+    await db.refresh(voice)
+    return VoiceRead.model_validate(voice)
+
+
+async def delete_system_voice(db: AsyncSession, voice_id: int) -> None:
+    voice = await db.get(Voice, voice_id)
+    if voice is None or voice.owner_user_id is not None or voice.status == LibraryItemStatus.DELETED:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="系统声音不存在")
+    voice.status = LibraryItemStatus.DELETED
+    voice.is_default = False
+    await db.commit()
 
 
 async def update_voice(db: AsyncSession, user_id: int, voice_id: int, payload: VoiceUpdateRequest) -> VoiceRead:
@@ -114,15 +234,13 @@ async def assert_asset_usable(db: AsyncSession, user_id: int, asset_type: str, a
         voice = await _get_voice_model(db, asset_id, user_id=user_id)
         if voice.owner_user_id is None and voice.access_level == AssetAccessLevel.VIP:
             await entitlement_service.assert_can_use_vip_resource(db, user_id, EntitlementResourceType.VOICE, str(voice.id))
-        if voice.processing_status != VoiceProcessingStatus.READY:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="声音尚未处理完成")
         return AssetInternalDTO(
             asset_type=asset_type,
             asset_id=voice.id,
             owner_user_id=voice.owner_user_id,
             access_level=voice.access_level,
             source_type=voice.source_type,
-            usable=voice.status == LibraryItemStatus.ACTIVE and voice.processing_status == VoiceProcessingStatus.READY,
+            usable=voice.status == LibraryItemStatus.ACTIVE,
         )
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不支持的素材类型")
 
@@ -130,8 +248,6 @@ async def assert_asset_usable(db: AsyncSession, user_id: int, asset_type: str, a
 async def _get_voice_model(db: AsyncSession, voice_id: int, *, user_id: int | None) -> Voice:
     voice = await db.get(Voice, voice_id)
     if voice is None or voice.status != LibraryItemStatus.ACTIVE:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="声音不存在")
-    if voice.moderation_status != AssetModerationStatus.APPROVED:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="声音不存在")
     if voice.owner_user_id is not None and voice.owner_user_id != user_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="声音不存在")
@@ -144,6 +260,4 @@ async def _get_owned_voice(db: AsyncSession, user_id: int, voice_id: int) -> Voi
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="声音不存在")
     if voice.owner_user_id != user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只能管理自己的声音")
-    if voice.moderation_status != AssetModerationStatus.APPROVED:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="声音不存在")
     return voice

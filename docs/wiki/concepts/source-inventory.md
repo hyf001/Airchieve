@@ -1,7 +1,7 @@
 ---
 title: Source Inventory
 created: 2026-05-20
-updated: 2026-05-23
+updated: 2026-05-24
 type: concept
 tags: [module-design, frontend, backend, api, database]
 sources: [raw/articles/module-design.md, raw/articles/generation-task-execution-design.md, raw/articles/picture-book-website-prd.md]
@@ -16,6 +16,8 @@ sources: [raw/articles/module-design.md, raw/articles/generation-task-execution-
 ## Raw 文件清单
 
 - `raw/articles/external-dependencies.md`
+- `raw/articles/external/aliyun-nls-python-sdk-tts.md`
+- `raw/articles/external/aliyun-speech-synthesis-overview.md`
 - `raw/articles/external/gemini-tts-speech-generation.md`
 - `raw/articles/external/kling-avatar-20-lip-sync.md`
 - `raw/articles/external/volcengine-tts-http.md`

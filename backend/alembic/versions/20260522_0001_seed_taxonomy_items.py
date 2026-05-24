@@ -122,17 +122,66 @@ SEED_ITEMS: list[dict] = [
     {"type": "scene", "code": "emotion_guidance", "name": "情绪引导", "name_en": "Emotion Guidance", "sort_order": 40},
     {"type": "scene", "code": "habit_building", "name": "习惯养成", "name_en": "Habit Building", "sort_order": 50},
     {"type": "scene", "code": "english_enlightenment", "name": "英语启蒙", "name_en": "English Enlightenment", "sort_order": 60},
-    {"type": "voice_style", "code": "gentle_sister", "name": "温柔姐姐", "name_en": "Gentle Sister", "sort_order": 10},
-    {"type": "voice_style", "code": "lively_brother", "name": "活泼哥哥", "name_en": "Lively Brother", "sort_order": 20},
-    {"type": "voice_style", "code": "adventure_uncle", "name": "冒险叔叔", "name_en": "Adventure Uncle", "sort_order": 30},
-    {"type": "voice_style", "code": "warm_mother", "name": "妈妈的声音", "name_en": "Warm Mother", "sort_order": 40},
+    {
+        "type": "voice_style",
+        "code": "zhimiao_emo",
+        "name": "知妙 - 多情感女声",
+        "name_en": "Zhimiao Emotional",
+        "sort_order": 10,
+        "metadata": {
+            "provider": "aliyun",
+            "supported_emotions": [
+                "serious",
+                "sad",
+                "disgust",
+                "jealousy",
+                "embarrassed",
+                "happy",
+                "fear",
+                "surprise",
+                "neutral",
+                "frustrated",
+                "affectionate",
+                "gentle",
+                "angry",
+                "newscast",
+                "customer-service",
+                "story",
+                "living",
+            ],
+        },
+    },
+    {
+        "type": "voice_style",
+        "code": "zhimi_emo",
+        "name": "知米 - 多情感女声",
+        "name_en": "Zhimi Emotional",
+        "sort_order": 20,
+        "metadata": {"provider": "aliyun", "supported_emotions": ["angry", "fear", "happy", "hate", "neutral", "sad", "surprise"]},
+    },
+    {
+        "type": "voice_style",
+        "code": "zhiyan_emo",
+        "name": "知燕 - 多情感女声",
+        "name_en": "Zhiyan Emotional",
+        "sort_order": 30,
+        "metadata": {"provider": "aliyun", "supported_emotions": ["neutral", "happy", "angry", "sad", "fear", "hate", "surprise", "arousal"]},
+    },
+    {"type": "voice_style", "code": "xiaoyun", "name": "小云 - 标准女声", "name_en": "Xiaoyun", "sort_order": 40, "metadata": {"provider": "aliyun"}},
+    {"type": "voice_style", "code": "xiaogang", "name": "小刚 - 标准男声", "name_en": "Xiaogang", "sort_order": 50, "metadata": {"provider": "aliyun"}},
+    {"type": "voice_style", "code": "aixia", "name": "艾夏 - 普通话女声", "name_en": "Aixia", "sort_order": 60, "metadata": {"provider": "aliyun"}},
+    {"type": "voice_style", "code": "aiqi", "name": "艾琪 - 温柔女声", "name_en": "Aiqi", "sort_order": 70, "metadata": {"provider": "aliyun"}},
+    {"type": "voice_style", "code": "aijia", "name": "艾佳 - 标准女声", "name_en": "Aijia", "sort_order": 80, "metadata": {"provider": "aliyun"}},
+    {"type": "voice_style", "code": "aicheng", "name": "艾诚 - 标准男声", "name_en": "Aicheng", "sort_order": 90, "metadata": {"provider": "aliyun"}},
+    {"type": "voice_style", "code": "aida", "name": "艾达 - 标准男声", "name_en": "Aida", "sort_order": 100, "metadata": {"provider": "aliyun"}},
+    {"type": "voice_style", "code": "siyue", "name": "思悦 - 温柔女声", "name_en": "Siyue", "sort_order": 110, "metadata": {"provider": "aliyun"}},
+    {"type": "voice_style", "code": "aiya", "name": "艾雅 - 严厉女声", "name_en": "Aiya", "sort_order": 120, "metadata": {"provider": "aliyun"}},
     {"type": "asset_category", "code": "character", "name": "角色形象", "name_en": "Character", "sort_order": 10},
     {"type": "asset_category", "code": "art_style", "name": "画风", "name_en": "Art Style", "sort_order": 20},
     {"type": "asset_category", "code": "voice", "name": "声音", "name_en": "Voice", "sort_order": 30},
     {"type": "asset_category", "code": "cover", "name": "封面", "name_en": "Cover", "sort_order": 40},
     {"type": "asset_category", "code": "book_image", "name": "绘本插图", "name_en": "Book Image", "sort_order": 50},
 ]
-
 
 def upgrade() -> None:
     bind = op.get_bind()
@@ -158,24 +207,29 @@ def upgrade() -> None:
 
     now = datetime.utcnow()
     for item in SEED_ITEMS:
-        existing_id = bind.execute(
+        existing_code = bind.execute(
             sa.select(taxonomy_items.c.code).where(
                 taxonomy_items.c.type == item["type"],
                 taxonomy_items.c.code == item["code"],
             )
         ).scalar_one_or_none()
-        if existing_id is not None:
-            continue
 
         values = {
             **item,
             "description": item.get("description"),
             "metadata": item.get("metadata"),
             "status": "active",
-            "created_at": now,
             "updated_at": now,
         }
-        bind.execute(taxonomy_items.insert().values(**values))
+        if existing_code is None:
+            bind.execute(taxonomy_items.insert().values(**values, created_at=now))
+        else:
+            bind.execute(
+                taxonomy_items.update()
+                .where(taxonomy_items.c.type == item["type"])
+                .where(taxonomy_items.c.code == item["code"])
+                .values(**values)
+            )
 
 
 def downgrade() -> None:

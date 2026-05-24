@@ -69,20 +69,15 @@ def _voice_payload(**overrides):
         "owner_user_id": USER_ID,
         "name": "Mom",
         "voice_style_code": None,
-        "sample_asset_id": None,
+        "emotion_type": None,
         "sample_url": None,
-        "supported_languages": ["zh"],
         "duration_seconds": None,
         "access_level": "free",
         "source_type": "user_upload",
-        "processing_status": "processing",
-        "failure_reason": None,
         "is_default": False,
-        "moderation_status": "approved",
         "status": "active",
         "created_at": _now_iso(),
         "updated_at": _now_iso(),
-        "source_sample_asset_id": None,
     }
     payload.update(overrides)
     return payload
@@ -266,9 +261,7 @@ class TestVoiceEndpoints:
     @patch("app.service.asset.service.create_voice", new_callable=AsyncMock)
     def test_create_voice_returns_201(self, mock_create):
         mock_create.return_value = _voice_payload()
-        resp = client.post("/api/v1/assets/voices", json={
-            "name": "Mom", "source_sample_asset_id": 1, "upload_consent_id": 1,
-        })
+        resp = client.post("/api/v1/assets/voices", json={"name": "Mom"})
         assert resp.status_code == 201
 
     @patch("app.service.asset.service.delete_voice", new_callable=AsyncMock)
@@ -411,9 +404,7 @@ class TestAuthProtection:
 
     def test_create_voice_requires_auth(self):
         _clear_overrides()
-        resp = client.post("/api/v1/assets/voices", json={
-            "name": "Test", "source_sample_asset_id": 1, "upload_consent_id": 1,
-        })
+        resp = client.post("/api/v1/assets/voices", json={"name": "Test"})
         assert resp.status_code == 401
 
     def test_create_upload_session_requires_auth(self):

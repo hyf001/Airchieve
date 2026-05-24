@@ -95,6 +95,12 @@ uv run alembic upgrade head
 uv run alembic revision --autogenerate -m "describe_change"
 ```
 
+迁移文件组织：
+
+- Alembic 迁移按表归档维护；同一张表只保留一个迁移文件，新增字段、索引、约束或 seed 数据都应合并到该表对应的迁移文件里。
+- 不要为同一张表反复新增零散迁移文件，例如 `taxonomy_items` 的结构和 seed 更新都应维护在 taxonomy 对应迁移中。
+- 只有当一次变更同时跨多张表且无法清晰归属时，才创建新的跨表迁移，并在文件名和最终说明中写明原因。
+
 配置说明：
 
 - 配置统一从 `backend/app/core/config.py` 的 `Settings` 读取。

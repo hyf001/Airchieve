@@ -18,11 +18,11 @@ from app.model.asset import (
     Character,
     LibraryItemStatus,
     Voice,
-    VoiceProcessingStatus,
 )
+from app.model.generation_task import GenerationTask, GenerationTaskStatus, GenerationTaskType
 from app.model.privacy import UploadConsentTargetType
 from app.model.taxonomy import TaxonomyItem, TaxonomyItemStatus, TaxonomyType
-from app.schema.asset import CharacterCreateRequest, CharacterUpdateRequest, VoiceCreateRequest, VoiceUpdateRequest
+from app.schema.asset import CharacterCreateRequest, CharacterUpdateRequest, SystemVoiceCreate, SystemVoiceSampleGenerateRequest, SystemVoiceUpdate, VoiceCreateRequest, VoiceUpdateRequest
 from app.schema.privacy import UploadConsentCreate
 from app.service import asset as asset_service
 from app.service import privacy as privacy_service
@@ -93,14 +93,12 @@ async def _make_voice(
     *,
     owner_user_id: int | None = None,
     is_default: bool = False,
-    processing_status: VoiceProcessingStatus = VoiceProcessingStatus.READY,
     status: LibraryItemStatus = LibraryItemStatus.ACTIVE,
 ) -> Voice:
     v = Voice(
         owner_user_id=owner_user_id,
         name="Test Voice",
         source_type=AssetSourceType.USER_UPLOAD,
-        processing_status=processing_status,
         is_default=is_default,
         status=status,
     )
@@ -473,36 +471,18 @@ async def test_list_characters_excludes_deleted(db: AsyncSession):
 async def test_create_voice_basic(mock_entitlement, db: AsyncSession):
     mock_entitlement.return_value = None
 
-    sample = await _make_user_asset(db, user_id=1, kind=AssetKind.AUDIO)
-
-    from app.model.privacy import PrivacyUploadConsent
-
-    consent = PrivacyUploadConsent(
-        user_id=1,
-        target_type=UploadConsentTargetType.VOICE_SAMPLE,
-        target_id=sample.id,
-        consent_text_version="2026-05-asset-upload",
-        confirmed_rights=True,
-        confirmed_privacy=True,
-    )
-    db.add(consent)
-    await db.commit()
-    await db.refresh(consent)
-
     result = await asset_service.create_voice(
         db,
         user_id=1,
         payload=VoiceCreateRequest(
             name="Mom Voice",
-            source_sample_asset_id=sample.id,
-            upload_consent_id=consent.id,
+            duration_seconds=12,
         )
     )
 
     assert result.name == "Mom Voice"
     assert result.owner_user_id == 1
-    assert result.processing_status == VoiceProcessingStatus.PROCESSING
-    assert result.sample_asset_id is None
+    assert result.duration_seconds == 12
     assert result.sample_url is None
 
 
@@ -579,18 +559,109 @@ async def test_assert_asset_usable_vip_system_character(mock_vip, db: AsyncSessi
 
 
 async def test_assert_asset_usable_voice_ready(db: AsyncSession):
-    v = await _make_voice(db, owner_user_id=1, processing_status=VoiceProcessingStatus.READY)
+    v = await _make_voice(db, owner_user_id=1)
 
     dto = await asset_service.assert_asset_usable(db, user_id=1, asset_type="voice", asset_id=v.id)
     assert dto.usable is True
 
 
-async def test_assert_asset_usable_voice_processing(db: AsyncSession):
-    v = await _make_voice(db, owner_user_id=1, processing_status=VoiceProcessingStatus.PROCESSING)
+async def test_admin_system_voice_crud(db: AsyncSession):
+    created = await asset_service.create_system_voice(
+        db,
+        SystemVoiceCreate(
+            name="温柔姐姐",
+            voice_style_code="gentle_sister",
+            emotion_type="gentle",
+            sample_url="https://example.com/gentle.mp3",
+            duration_seconds=32,
+            access_level=AssetAccessLevel.VIP,
+        ),
+    )
+    assert created.owner_user_id is None
+    assert created.source_type == AssetSourceType.SYSTEM
+    assert created.voice_style_code == "gentle_sister"
+    assert created.emotion_type == "gentle"
+    assert created.access_level == AssetAccessLevel.VIP
 
+    updated = await asset_service.update_system_voice(
+        db,
+        created.id,
+        SystemVoiceUpdate(name="温柔姐姐新版", status=LibraryItemStatus.DISABLED),
+    )
+    assert updated.name == "温柔姐姐新版"
+    assert updated.status == LibraryItemStatus.DISABLED
+
+    listed = await asset_service.list_admin_system_voices(db)
+    assert any(voice.id == created.id for voice in listed.items)
+
+    await asset_service.delete_system_voice(db, created.id)
     with pytest.raises(HTTPException) as exc:
-        await asset_service.assert_asset_usable(db, user_id=1, asset_type="voice", asset_id=v.id)
-    assert exc.value.status_code == 409
+        await asset_service.get_admin_system_voice(db, created.id)
+    assert exc.value.status_code == 404
+
+
+async def test_create_system_voice_sample_uses_audio_task(db: AsyncSession):
+    created = await asset_service.create_system_voice(
+        db,
+        SystemVoiceCreate(name="知妙", voice_style_code="zhimiao_emo", emotion_type="happy"),
+    )
+
+    task = await asset_service.create_system_voice_sample_task(
+        db,
+        SystemVoiceSampleGenerateRequest(
+            voice_id=created.id,
+            voice_style_code="zhimiao_emo",
+            emotion_type="happy",
+            sample_text="你好呀",
+        ),
+    )
+
+    assert task.task_type == GenerationTaskType.AUDIO
+    assert task.owner_type == "voice"
+    assert task.owner_id == created.id
+
+
+@patch("app.service.ai_provider.service.settings.AI_PROVIDER_AUDIO", "aliyun")
+@patch("app.service.ai_provider.service._generate_audio_with_provider", new_callable=AsyncMock)
+@patch("app.service.storage.save_generated_data_url", new_callable=AsyncMock)
+async def test_run_system_voice_sample_task_updates_voice_sample_url(mock_save, mock_generate, db: AsyncSession):
+    created = await asset_service.create_system_voice(
+        db,
+        SystemVoiceCreate(name="知妙", voice_style_code="zhimiao_emo", emotion_type="happy"),
+    )
+    task = GenerationTask(
+        task_type=GenerationTaskType.AUDIO,
+        owner_type="voice",
+        owner_id=created.id,
+        status=GenerationTaskStatus.RUNNING,
+        input_payload={
+            "voice_id": created.id,
+            "voice_style_code": "zhimiao_emo",
+            "emotion_type": "happy",
+            "sample_text": "你好呀",
+        },
+    )
+    db.add(task)
+    await db.flush()
+    mock_generate.return_value = "data:audio/wav;base64,abc"
+    mock_save.return_value.id = 101
+    mock_save.return_value.url = "https://cdn.example.com/voice.wav"
+
+    await asset_service.run_system_voice_sample_task(db, task)
+
+    mock_generate.assert_awaited_once()
+    assert mock_generate.await_args.args[:3] == ("aliyun", "aliyun-nls-tts", "你好呀")
+    voice = await db.get(Voice, created.id)
+    await db.refresh(task)
+    assert voice is not None
+    assert voice.sample_url == "https://cdn.example.com/voice.wav"
+    assert task.status == GenerationTaskStatus.SUCCEEDED
+    assert task.output_payload == {
+        "asset_id": 101,
+        "audio_url": "https://cdn.example.com/voice.wav",
+        "sample_url": "https://cdn.example.com/voice.wav",
+        "voice_id": created.id,
+    }
 
 
 async def test_assert_asset_usable_unsupported_type(db: AsyncSession):

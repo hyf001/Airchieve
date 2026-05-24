@@ -57,3 +57,12 @@
 - Moved `docs/generation-task-execution-design.md` into `raw/articles/generation-task-execution-design.md` with sha256 metadata.
 - Created `concepts/generation-task-execution.md` as the structured wiki page for worker claim, handler dispatch, task lifecycle, retry, and task type execution rules.
 - Updated `entities/creation-generation.md`, `concepts/source-inventory.md`, `SCHEMA.md`, and `index.md` to reference the new raw source and concept page.
+
+## [2026-05-24] ingest | Aliyun TTS provider references
+
+- Added `raw/articles/external/aliyun-nls-python-sdk-tts.md` for Aliyun NLS Python SDK synthesis integration.
+- Added `raw/articles/external/aliyun-speech-synthesis-overview.md` for Aliyun voice ids, multi-emotion voices, and SSML emotion implications.
+- Updated `entities/creation-generation.md` with Aliyun provider mapping and TODOs for multi-emotion SSML and persistent audio storage.
+- Updated `entities/asset-storage.md` with system voice `voice_style_code` ownership and TODOs for sample audio and validation.
+- Updated `entities/taxonomy.md` with Aliyun voice_style semantics and TODOs for metadata schema and periodic voice-list review.
+- Updated `concepts/source-inventory.md` and `index.md`.

@@ -64,6 +64,7 @@ class VoiceRef(BaseModel):
     source: VoiceRefSource
     voice_id: int | None = None
     display_name: str | None = Field(default=None, max_length=120)
+    provider_voice_id: str | None = Field(default=None, max_length=64)
 
 
 class CharacterAppearance(BaseModel):

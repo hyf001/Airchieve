@@ -6,12 +6,10 @@ from app.model.asset import (
     ArtStyleStatus,
     AssetAccessLevel,
     AssetKind,
-    AssetModerationStatus,
     AssetSourceType,
     AssetStatus,
     AssetVisibility,
     LibraryItemStatus,
-    VoiceProcessingStatus,
 )
 from app.model.generation_task import GenerationTaskStatus
 
@@ -146,6 +144,23 @@ class ArtStyleImageUploadRequest(BaseModel):
         return self
 
 
+class VoiceAudioUploadRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    base64_data: str | None = Field(default=None, min_length=1, alias="base64")
+    data_url: str | None = Field(default=None, min_length=1)
+    mime_type: str = Field(default="audio/mpeg", min_length=1, max_length=120)
+    filename: str = Field(default="voice-sample.mp3", min_length=1, max_length=240)
+
+    @model_validator(mode="after")
+    def normalize_base64_data(self) -> "VoiceAudioUploadRequest":
+        if self.data_url and not self.base64_data:
+            self.base64_data = self.data_url
+        if not self.base64_data:
+            raise ValueError("必须提供 base64 或 data_url")
+        return self
+
+
 class CharacterSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -244,23 +259,19 @@ class VoiceSummary(BaseModel):
     owner_user_id: int | None = None
     name: str
     voice_style_code: str | None = None
-    sample_asset_id: int | None = None
+    emotion_type: str | None = None
     sample_url: str | None = None
-    supported_languages: list[str] = Field(default_factory=list)
     duration_seconds: int | None = None
     access_level: AssetAccessLevel
     source_type: AssetSourceType
-    processing_status: VoiceProcessingStatus
-    failure_reason: str | None = None
     is_default: bool
-    moderation_status: AssetModerationStatus
     status: LibraryItemStatus
     created_at: datetime
     updated_at: datetime
 
 
 class VoiceRead(VoiceSummary):
-    source_sample_asset_id: int | None = None
+    pass
 
 
 class VoiceListRead(BaseModel):
@@ -272,14 +283,57 @@ class VoiceListRead(BaseModel):
 
 class VoiceCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    source_sample_asset_id: int
-    supported_languages: list[str] = Field(default_factory=lambda: ["zh"])
+    voice_style_code: str | None = Field(default=None, max_length=64)
+    emotion_type: str | None = Field(default=None, max_length=64)
+    sample_url: str | None = Field(default=None, max_length=500)
     duration_seconds: int | None = Field(default=None, ge=1, le=3600)
-    upload_consent_id: int
 
 
 class VoiceUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
+    voice_style_code: str | None = Field(default=None, max_length=64)
+    emotion_type: str | None = Field(default=None, max_length=64)
+    sample_url: str | None = Field(default=None, max_length=500)
+    duration_seconds: int | None = Field(default=None, ge=1, le=3600)
+
+
+class SystemVoiceCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    voice_style_code: str | None = Field(default=None, max_length=64)
+    emotion_type: str | None = Field(default=None, max_length=64)
+    sample_url: str | None = Field(default=None, max_length=500)
+    duration_seconds: int | None = Field(default=None, ge=1, le=3600)
+    access_level: AssetAccessLevel = AssetAccessLevel.FREE
+    status: LibraryItemStatus = LibraryItemStatus.ACTIVE
+
+    @model_validator(mode="after")
+    def reject_deleted_status(self) -> "SystemVoiceCreate":
+        if self.status == LibraryItemStatus.DELETED:
+            raise ValueError("创建系统声音时不能使用删除状态")
+        return self
+
+
+class SystemVoiceUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    voice_style_code: str | None = Field(default=None, max_length=64)
+    emotion_type: str | None = Field(default=None, max_length=64)
+    sample_url: str | None = Field(default=None, max_length=500)
+    duration_seconds: int | None = Field(default=None, ge=1, le=3600)
+    access_level: AssetAccessLevel | None = None
+    status: LibraryItemStatus | None = None
+
+    @model_validator(mode="after")
+    def reject_deleted_status(self) -> "SystemVoiceUpdate":
+        if self.status == LibraryItemStatus.DELETED:
+            raise ValueError("请使用删除接口删除系统声音")
+        return self
+
+
+class SystemVoiceSampleGenerateRequest(BaseModel):
+    voice_id: int | None = None
+    voice_style_code: str = Field(min_length=1, max_length=64)
+    emotion_type: str | None = Field(default=None, max_length=64)
+    sample_text: str = Field(min_length=1, max_length=500)
 
 
 class AssetInternalDTO(BaseModel):

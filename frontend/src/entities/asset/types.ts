@@ -1,7 +1,6 @@
 export type AssetAccessLevel = "free" | "vip";
 export type AssetSourceType = "system" | "ai_generated" | "user_upload" | "voice_clone";
 export type GenerationTaskStatus = "queued" | "running" | "succeeded" | "failed" | "canceled";
-export type VoiceProcessingStatus = "pending" | "processing" | "ready" | "failed";
 export type LibraryItemStatus = "active" | "deleted" | "disabled";
 
 export interface ArtStyle {
@@ -57,16 +56,12 @@ export interface VoiceSummary {
   owner_user_id: number | null;
   name: string;
   voice_style_code: string | null;
-  sample_asset_id: number | null;
+  emotion_type: string | null;
   sample_url: string | null;
-  supported_languages: string[];
   duration_seconds: number | null;
   access_level: AssetAccessLevel;
   source_type: AssetSourceType;
-  processing_status: VoiceProcessingStatus;
-  failure_reason: string | null;
   is_default: boolean;
-  moderation_status: "pending" | "approved" | "rejected" | "hidden";
   status: LibraryItemStatus;
   created_at: string;
   updated_at: string;
