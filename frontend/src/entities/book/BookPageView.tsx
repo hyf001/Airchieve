@@ -1,6 +1,6 @@
 import React from "react";
 
-import { type BookLanguage, type BookPage } from "./types";
+import { type BookLanguage, type BookPage, type BookPlaybackSegment, type BookSubtitleCue } from "./types";
 
 interface BookPageViewProps {
   page: BookPage;
@@ -12,6 +12,10 @@ interface BookPageViewProps {
 export const BookPageView: React.FC<BookPageViewProps> = ({ page, textMode, bilingualEnglishFirst, isPlaying }) => {
   const zh = page.text_zh || page.narration_text || "";
   const en = page.text_en || "";
+  const playbackSegments = page.playback_segments ?? [];
+  const dialogueSegments = playbackSegments.filter((segment) => segment.segment_type === "dialogue");
+  const lipSyncCount = playbackSegments.filter((segment) => segment.lip_sync_url || segment.media_mode === "lip_sync").length;
+  const soundEffectCount = (page.sound_effects ?? []).length + playbackSegments.reduce((total, segment) => total + segment.sound_effects.length, 0);
   const paragraphs =
     textMode === "bilingual"
       ? bilingualEnglishFirst
@@ -53,17 +57,49 @@ export const BookPageView: React.FC<BookPageViewProps> = ({ page, textMode, bili
             </p>
           ))}
         </div>
-        {page.dialogues.length > 0 ? (
+        {dialogueSegments.length > 0 ? (
           <div className="mt-5 space-y-2">
-            {page.dialogues.map((dialogue) => (
-              <div key={dialogue.id} className="rounded-[var(--radius-sm)] bg-[rgba(126,200,227,0.12)] px-3 py-2 text-sm">
-                <span className="font-bold text-[var(--sky-deep)]">{dialogue.character_ref}</span>
-                <span className="ml-2 text-[var(--text-mid)]">{dialogue.text}</span>
-              </div>
+            {dialogueSegments.map((segment) => (
+              <DialogueSegment key={segment.id} segment={segment} textMode={textMode} />
             ))}
+          </div>
+        ) : null}
+        {lipSyncCount > 0 || soundEffectCount > 0 ? (
+          <div className="mt-5 flex flex-wrap gap-2 text-xs font-bold text-[var(--text-light)]">
+            {lipSyncCount > 0 ? <span className="rounded-full bg-[rgba(94,160,122,0.1)] px-2.5 py-1 text-[var(--sage-deep)]">对口型 {lipSyncCount} 段</span> : null}
+            {soundEffectCount > 0 ? <span className="rounded-full bg-[rgba(126,200,227,0.12)] px-2.5 py-1 text-[var(--sky-deep)]">音效 {soundEffectCount} 个</span> : null}
           </div>
         ) : null}
       </div>
     </div>
   );
+};
+
+const DialogueSegment: React.FC<{ segment: BookPlaybackSegment; textMode: BookLanguage }> = ({ segment, textMode }) => {
+  const cue = preferredCue(segment.subtitle_cues, textMode);
+  const text = cueText(cue, textMode);
+  if (!text) return null;
+
+  return (
+    <div className="rounded-[var(--radius-sm)] bg-[rgba(126,200,227,0.12)] px-3 py-2 text-sm">
+      {segment.speaker_ref ? <span className="font-bold text-[var(--sky-deep)]">{segment.speaker_ref}</span> : null}
+      <span className={segment.speaker_ref ? "ml-2 text-[var(--text-mid)]" : "text-[var(--text-mid)]"}>{text}</span>
+      {segment.lip_sync_url || segment.media_mode === "lip_sync" ? <span className="ml-2 text-xs font-bold text-[var(--sage-deep)]">对口型</span> : null}
+    </div>
+  );
+};
+
+const preferredCue = (cues: BookSubtitleCue[], textMode: BookLanguage): BookSubtitleCue | null => {
+  if (!cues.length) return null;
+  if (textMode === "en") {
+    return cues.find((cue) => cue.text_en) ?? cues[0];
+  }
+  return cues.find((cue) => cue.text_zh) ?? cues[0];
+};
+
+const cueText = (cue: BookSubtitleCue | null, textMode: BookLanguage): string => {
+  if (!cue) return "";
+  if (textMode === "en") return cue.text_en || cue.text_zh || "";
+  if (textMode === "bilingual" && cue.text_en && cue.text_zh) return `${cue.text_zh} / ${cue.text_en}`;
+  return cue.text_zh || cue.text_en || "";
 };

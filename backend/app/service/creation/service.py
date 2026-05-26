@@ -3,15 +3,30 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.model.book import Book, BookLanguage, BookModerationStatus, BookPage, BookPublishStatus, BookSourceType
+from app.model.book import (
+    Book,
+    BookLipSyncStatus,
+    BookLanguage,
+    BookModerationStatus,
+    BookPage,
+    BookPlaybackMediaMode,
+    BookPlaybackSegment,
+    BookPlaybackSegmentType,
+    BookPublishStatus,
+    BookSegmentFallbackMode,
+    BookSourceType,
+    BookSubtitleCue,
+    BookSubtitleCueType,
+    BookSubtitlePosition,
+)
 from app.model.asset import AssetKind
 from app.model.creation import (
     CreationSession,
     CreationSessionStatus,
     CreationStep,
-    CreationStoryboardPage,
+    CreationPageDraft,
     CreationType,
-    StoryboardGenerationStatus,
+    PageDraftTaskStatus,
 )
 from app.model.generation_task import GenerationTaskType
 from app.model.generation_task import GenerationTask
@@ -22,9 +37,9 @@ from app.schema.creation import (
     CreationTaskResponse,
     GeneratePagesRequest,
     IdeaStoryGenerateRequest,
+    PageDraftPatch,
     RegenerateRequest,
     SaveBookResponse,
-    StoryboardPagePatch,
     TASK_TYPE_BY_REGENERATE_TARGET,
 )
 from app.schema.generation_task import GenerationTaskCreate, GenerationTaskRead
@@ -91,7 +106,7 @@ async def list_sessions(
         conditions.append(CreationSession.child_profile_id == child_profile_id)
     result = await db.execute(
         select(CreationSession)
-        .options(selectinload(CreationSession.storyboard_pages))
+        .options(selectinload(CreationSession.page_drafts))
         .where(*conditions)
         .order_by(CreationSession.updated_at.desc(), CreationSession.created_at.desc())
         .offset(offset)
@@ -119,7 +134,7 @@ async def update_session_config(
     if payload.art_style_ref is not None:
         session.current_step = CreationStep.STORYBOARD
     if payload.voice_ref is not None:
-        session.current_step = CreationStep.PREVIEW
+        session.current_step = CreationStep.VOICE
         session.status = CreationSessionStatus.PREVIEW
     await db.commit()
     return await get_session(db, user_id, session_id)
@@ -176,24 +191,31 @@ async def generate_storyboard(db: AsyncSession, user_id: int, session_id: int) -
     return CreationTaskResponse(session=await get_session(db, user_id, session_id), task=task)
 
 
-async def update_storyboard_page(
+async def update_page_draft(
     db: AsyncSession,
     user_id: int,
     session_id: int,
     page_id: int,
-    payload: StoryboardPagePatch,
+    payload: PageDraftPatch,
 ) -> CreationSessionRead:
     session = await _get_session_model(db, user_id, session_id)
-    page = next((item for item in session.storyboard_pages if item.id == page_id), None)
+    page = next((item for item in session.page_drafts if item.id == page_id), None)
     if page is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分镜页不存在")
     data = payload.model_dump(mode="json")
+    if "voice_config" in data and data["voice_config"]:
+        data["voice_config"] = await _voice_ref_with_provider_voice_id(db, user_id, data["voice_config"])
     for field, value in data.items():
         setattr(page, field, value)
     page.image_asset_id = None
+    page.image_url = None
     page.audio_asset_id = None
+    page.audio_url = None
     page.lip_sync_url = None
-    page.generation_status = StoryboardGenerationStatus.DRAFT
+    page.storyboard_status = PageDraftTaskStatus.DRAFT
+    page.image_status = PageDraftTaskStatus.DRAFT
+    page.audio_status = PageDraftTaskStatus.DRAFT
+    page.lip_sync_status = PageDraftTaskStatus.DRAFT
     await db.commit()
     return await get_session(db, user_id, session_id)
 
@@ -240,16 +262,17 @@ async def regenerate(db: AsyncSession, user_id: int, session_id: int, payload: R
             input_payload=payload.model_dump(mode="json"),
         ),
     )
-    for page in session.storyboard_pages:
+    status_field = _status_field_for_task(task_type)
+    for page in session.page_drafts:
         if payload.page_ids is None or page.id in payload.page_ids:
-            page.generation_status = StoryboardGenerationStatus.PENDING
+            setattr(page, status_field, PageDraftTaskStatus.PENDING)
     await db.commit()
     return CreationTaskResponse(session=await get_session(db, user_id, session_id), task=task)
 
 
 async def save_book(db: AsyncSession, user_id: int, session_id: int) -> SaveBookResponse:
     session = await _get_session_model(db, user_id, session_id)
-    if session.status != CreationSessionStatus.PREVIEW:
+    if session.status not in {CreationSessionStatus.PREVIEW, CreationSessionStatus.DRAFT}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请先完成生成预览后再保存")
     if session.creation_type == CreationType.TEMPLATE_BOOK:
         if session.template_id is None:
@@ -265,8 +288,9 @@ async def save_book(db: AsyncSession, user_id: int, session_id: int) -> SaveBook
         session.current_step = CreationStep.PREVIEW
         await db.commit()
         return SaveBookResponse(session=await get_session(db, user_id, session_id), book=await book_service.get_book_detail(db, book.id, user_id))
-    if not session.storyboard_pages and session.creation_type != CreationType.TEMPLATE_BOOK:
+    if not session.page_drafts and session.creation_type != CreationType.TEMPLATE_BOOK:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请先生成分镜")
+    _assert_story_book_ready_to_save(session)
     title = "我的专属绘本"
     if session.story_id is not None:
         story = await story_service.assert_story_usable(db, user_id, session.story_id)
@@ -277,44 +301,130 @@ async def save_book(db: AsyncSession, user_id: int, session_id: int) -> SaveBook
         source_story_id=session.story_id,
         title=title,
         summary="由创作向导保存的个人绘本。",
+        background_music_url=None,
         age_range_codes=session.age_range_codes or [],
         theme_codes=session.theme_codes or [],
         education_goal_codes=session.education_goal_codes or [],
         language=BookLanguage(session.language.value),
         narrative_style_code=session.narrative_style_code,
         art_style_code=(session.art_style_ref or {}).get("art_style_code") if session.art_style_ref else None,
-        custom_art_style_prompt=(session.art_style_ref or {}).get("custom_prompt") if session.art_style_ref else None,
         default_voice_id=(session.voice_ref or {}).get("voice_id") if session.voice_ref else None,
-        default_voice_name=(session.voice_ref or {}).get("display_name") if session.voice_ref else None,
-        page_count=max(len(session.storyboard_pages), session.target_page_count),
+        page_count=max(len(session.page_drafts), session.target_page_count),
         publish_status=BookPublishStatus.PUBLISHED,
         moderation_status=BookModerationStatus.PENDING,
     )
     db.add(book)
     await db.flush()
-    for page in session.storyboard_pages:
-        db.add(
-            BookPage(
-                book_id=book.id,
-                page_no=page.page_no,
-                title=page.title,
-                text_zh=page.text_zh,
-                text_en=page.text_en,
-                narration_text=page.narration_text,
-                visual_prompt=page.visual_prompt,
-                image_asset_id=page.image_asset_id,
-                image_url=page.image_url,
-                video_url=page.lip_sync_url,
-                audio_asset_id=page.audio_asset_id,
-                audio_url=page.audio_url,
-                lip_sync_status="ready" if page.lip_sync_url else "none",
-            )
+    for page_draft in session.page_drafts:
+        page = BookPage(
+            book_id=book.id,
+            page_no=page_draft.page_no,
+            title=page_draft.title,
+            text_zh=page_draft.text_zh,
+            text_en=page_draft.text_en,
+            narration_text=page_draft.narration_text,
+            visual_prompt=page_draft.visual_prompt,
+            image_url=page_draft.image_url,
+            audio_url=page_draft.audio_url,
         )
+        db.add(page)
+        await db.flush()
+        await _create_default_playback_segments(db, page, page_draft)
     session.saved_book_id = book.id
     session.status = CreationSessionStatus.SAVED
     session.current_step = CreationStep.PREVIEW
     await db.commit()
     return SaveBookResponse(session=await get_session(db, user_id, session_id), book=await book_service.get_book_detail(db, book.id, user_id))
+
+
+def _assert_story_book_ready_to_save(session: CreationSession) -> None:
+    if not session.page_drafts:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请先生成分镜")
+    pending_pages = [
+        page.page_no
+        for page in session.page_drafts
+        if page.image_status != PageDraftTaskStatus.READY
+        or page.audio_status != PageDraftTaskStatus.READY
+        or not page.image_url
+        or not page.audio_url
+    ]
+    if pending_pages:
+        page_text = "、".join(str(page_no) for page_no in pending_pages[:5])
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"请先完成第 {page_text} 页的插图和语音生成")
+
+
+async def _create_default_playback_segments(db: AsyncSession, page: BookPage, page_draft: CreationPageDraft) -> None:
+    narration_text = page_draft.narration_text or page_draft.text_zh or page_draft.text_en
+    subtitle_config = page_draft.subtitle_config or {}
+    subtitle_position = _subtitle_position(str(subtitle_config.get("position") or "bottom"))
+    subtitle_position_config = subtitle_config.get("position_config") if isinstance(subtitle_config.get("position_config"), dict) else None
+    if narration_text or page_draft.audio_url:
+        has_lip_sync = bool(page_draft.lip_sync_url)
+        segment = BookPlaybackSegment(
+            page_id=page.id,
+            segment_type=BookPlaybackSegmentType.NARRATION,
+            speaker_ref=None,
+            image_url=page_draft.image_url,
+            audio_url=page_draft.audio_url,
+            lip_sync_url=page_draft.lip_sync_url,
+            media_mode=BookPlaybackMediaMode.LIP_SYNC if has_lip_sync else BookPlaybackMediaMode.AUDIO,
+            fallback_mode=BookSegmentFallbackMode.PAGE_IMAGE_AUDIO,
+            lip_sync_status=BookLipSyncStatus.READY if has_lip_sync else BookLipSyncStatus.NONE,
+            sort_order=0,
+        )
+        db.add(segment)
+        await db.flush()
+        db.add(
+            BookSubtitleCue(
+                segment_id=segment.id,
+                cue_type=BookSubtitleCueType.NARRATION,
+                speaker_ref=None,
+                start_ms=0,
+                text_zh=narration_text,
+                text_en=page_draft.text_en,
+                position=subtitle_position,
+                position_config=subtitle_position_config,
+                sort_order=0,
+            )
+        )
+    for index, dialogue in enumerate(page_draft.dialogues or [], start=1):
+        speaker_ref = dialogue.get("speaker_ref") or dialogue.get("character_ref")
+        start_ms = dialogue.get("start_ms")
+        end_ms = dialogue.get("end_ms")
+        segment = BookPlaybackSegment(
+            page_id=page.id,
+            segment_type=BookPlaybackSegmentType.DIALOGUE,
+            speaker_ref=speaker_ref,
+            image_url=page_draft.image_url,
+            audio_url=dialogue.get("audio_url"),
+            lip_sync_url=dialogue.get("lip_sync_url") or page_draft.lip_sync_url,
+            media_mode=BookPlaybackMediaMode.LIP_SYNC
+            if dialogue.get("lip_sync_url") or page_draft.lip_sync_url
+            else BookPlaybackMediaMode.AUDIO,
+            start_ms=start_ms,
+            end_ms=end_ms,
+            fallback_mode=BookSegmentFallbackMode.PAGE_IMAGE_DIALOGUE_AUDIO,
+            lip_sync_status=BookLipSyncStatus.READY
+            if dialogue.get("lip_sync_url") or page_draft.lip_sync_url
+            else BookLipSyncStatus.NONE,
+            sort_order=index,
+        )
+        db.add(segment)
+        await db.flush()
+        db.add(
+            BookSubtitleCue(
+                segment_id=segment.id,
+                cue_type=BookSubtitleCueType.DIALOGUE,
+                speaker_ref=speaker_ref,
+                start_ms=0,
+                end_ms=end_ms - start_ms if start_ms is not None and end_ms is not None else None,
+                text_zh=dialogue.get("text"),
+                text_en=dialogue.get("text_en"),
+                position=subtitle_position,
+                position_config=subtitle_position_config,
+                sort_order=0,
+            )
+        )
 
 
 async def _generate_media_task(
@@ -335,9 +445,10 @@ async def _generate_media_task(
             input_payload={"page_ids": payload.page_ids or []},
         ),
     )
-    for page in session.storyboard_pages:
+    status_field = _status_field_for_task(task_type)
+    for page in session.page_drafts:
         if payload.page_ids is None or page.id in payload.page_ids:
-            page.generation_status = StoryboardGenerationStatus.PENDING
+            setattr(page, status_field, PageDraftTaskStatus.PENDING)
     await db.commit()
     return CreationTaskResponse(session=await get_session(db, user_id, session_id), task=task)
 
@@ -358,19 +469,27 @@ async def run_storyboard_task(db: AsyncSession, task: GenerationTask) -> None:
     session = await _get_task_session_model(db, task)
     title = "专属绘本"
     story_content = title
+    story_characters: list[dict] = []
     if session.story_id is not None:
         story = await story_service.assert_story_usable(db, session.user_id, session.story_id)
         title = story.title
         story_content = story.body
+        story_characters = [character.model_dump(mode="json") for character in story.characters]
     structured = await ai_provider.generate_structured(
         db,
         task_id=task.id,
-        request={"title": title, "story_content": story_content, "target_page_count": session.target_page_count},
+        request={
+            "title": title,
+            "story_content": story_content,
+            "characters": story_characters,
+            "character_refs": session.character_refs or [],
+            "target_page_count": session.target_page_count,
+        },
     )
-    await _replace_storyboard_pages(db, session, structured["pages"])
+    await _replace_page_drafts(db, session, structured["pages"])
     session.status = CreationSessionStatus.PREVIEW
     session.current_step = CreationStep.STORYBOARD
-    await generation_task.mark_task_succeeded(db, task.id, result_refs={"storyboard_page_count": len(structured["pages"])})
+    await generation_task.mark_task_succeeded(db, task.id, result_refs={"page_draft_count": len(structured["pages"])})
 
 
 async def run_creation_image_task(db: AsyncSession, task: GenerationTask) -> None:
@@ -380,13 +499,13 @@ async def run_creation_image_task(db: AsyncSession, task: GenerationTask) -> Non
         image_result = await ai_provider.generate_image(db, task_id=task.id, pages=_page_payloads(session, page_ids))
         await _persist_media_result_urls(db, session.user_id, image_result, url_key="image_url", asset_kind=AssetKind.IMAGE, extension=".png")
         _apply_image_results(session, image_result)
-        for page in session.storyboard_pages:
+        for page in session.page_drafts:
             if page_ids is None or page.id in page_ids:
-                page.generation_status = StoryboardGenerationStatus.READY
+                page.image_status = PageDraftTaskStatus.READY
         session.current_step = CreationStep.VOICE
-        await generation_task.mark_task_succeeded(db, task.id, result_refs={"page_ids": page_ids or [page.id for page in session.storyboard_pages]})
+        await generation_task.mark_task_succeeded(db, task.id, result_refs={"page_ids": page_ids or [page.id for page in session.page_drafts]})
     except Exception:
-        _mark_target_pages_failed(session, page_ids)
+        _mark_target_pages_failed(session, page_ids, GenerationTaskType.IMAGE)
         raise
 
 
@@ -398,17 +517,16 @@ async def run_creation_audio_task(db: AsyncSession, task: GenerationTask) -> Non
             db,
             task_id=task.id,
             pages=_page_payloads(session, page_ids),
-            voice_ref=session.voice_ref,
         )
         await _persist_media_result_urls(db, session.user_id, audio_result, url_key="audio_url", asset_kind=AssetKind.AUDIO, extension=".wav")
         _apply_audio_results(session, audio_result)
-        for page in session.storyboard_pages:
+        for page in session.page_drafts:
             if page_ids is None or page.id in page_ids:
-                page.generation_status = StoryboardGenerationStatus.READY
-        session.current_step = CreationStep.PREVIEW
-        await generation_task.mark_task_succeeded(db, task.id, result_refs={"page_ids": page_ids or [page.id for page in session.storyboard_pages]})
+                page.audio_status = PageDraftTaskStatus.READY
+        session.current_step = CreationStep.LIP_SYNC
+        await generation_task.mark_task_succeeded(db, task.id, result_refs={"page_ids": page_ids or [page.id for page in session.page_drafts]})
     except Exception:
-        _mark_target_pages_failed(session, page_ids)
+        _mark_target_pages_failed(session, page_ids, GenerationTaskType.AUDIO)
         raise
 
 
@@ -418,18 +536,18 @@ async def run_creation_lip_sync_task(db: AsyncSession, task: GenerationTask) -> 
     try:
         lip_sync_result = await ai_provider.generate_lip_sync(db, task_id=task.id, pages=_page_payloads(session, page_ids))
         _apply_lip_sync_results(session, lip_sync_result)
-        for page in session.storyboard_pages:
+        for page in session.page_drafts:
             if page_ids is None or page.id in page_ids:
-                page.generation_status = StoryboardGenerationStatus.READY
+                page.lip_sync_status = PageDraftTaskStatus.READY
         session.current_step = CreationStep.PREVIEW
-        await generation_task.mark_task_succeeded(db, task.id, result_refs={"page_ids": page_ids or [page.id for page in session.storyboard_pages]})
+        await generation_task.mark_task_succeeded(db, task.id, result_refs={"page_ids": page_ids or [page.id for page in session.page_drafts]})
     except Exception:
-        _mark_target_pages_failed(session, page_ids)
+        _mark_target_pages_failed(session, page_ids, GenerationTaskType.LIP_SYNC)
         raise
 
 
 def _page_payloads(session: CreationSession, page_ids: list[int] | None) -> list[dict]:
-    pages = [page for page in session.storyboard_pages if page_ids is None or page.id in page_ids]
+    pages = [page for page in session.page_drafts if page_ids is None or page.id in page_ids]
     if not pages:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="没有可生成的分镜页")
     return [
@@ -443,6 +561,9 @@ def _page_payloads(session: CreationSession, page_ids: list[int] | None) -> list
             "visual_prompt": page.visual_prompt,
             "character_appearances": page.character_appearances or [],
             "dialogues": page.dialogues or [],
+            "voice_config": page.voice_config or session.voice_ref or {},
+            "subtitle_config": page.subtitle_config or {},
+            "lip_sync_config": page.lip_sync_config or {},
             "image_url": page.image_url,
             "audio_url": page.audio_url,
             "lip_sync_url": page.lip_sync_url,
@@ -457,7 +578,7 @@ def _apply_image_results(session: CreationSession, image_result: dict) -> None:
         for item in image_result.get("page_results", [])
         if item.get("page_id") is not None and item.get("image_url")
     }
-    for page in session.storyboard_pages:
+    for page in session.page_drafts:
         image_item = images_by_page_id.get(page.id)
         if image_item:
             page.image_url = image_item.get("image_url")
@@ -495,12 +616,13 @@ def _apply_audio_results(session: CreationSession, audio_result: dict) -> None:
         for item in audio_result.get("page_results", [])
         if item.get("page_id") is not None and item.get("audio_url")
     }
-    for page in session.storyboard_pages:
+    for page in session.page_drafts:
         audio_item = audio_by_page_id.get(page.id)
         if audio_item:
             page.audio_url = audio_item.get("audio_url")
             page.audio_asset_id = audio_item.get("audio_asset_id") or page.audio_asset_id
             page.lip_sync_url = None
+            page.lip_sync_status = PageDraftTaskStatus.DRAFT
 
 
 def _apply_lip_sync_results(session: CreationSession, lip_sync_result: dict) -> None:
@@ -509,19 +631,19 @@ def _apply_lip_sync_results(session: CreationSession, lip_sync_result: dict) -> 
         for item in lip_sync_result.get("page_results", [])
         if item.get("page_id") is not None and item.get("lip_sync_url")
     }
-    for page in session.storyboard_pages:
+    for page in session.page_drafts:
         lip_sync_url = lip_sync_by_page_id.get(page.id)
         if lip_sync_url:
             page.lip_sync_url = lip_sync_url
 
 
-async def _replace_storyboard_pages(db: AsyncSession, session: CreationSession, pages: list[dict]) -> None:
-    for page in list(session.storyboard_pages):
+async def _replace_page_drafts(db: AsyncSession, session: CreationSession, pages: list[dict]) -> None:
+    for page in list(session.page_drafts):
         await db.delete(page)
     await db.flush()
     for item in pages:
         db.add(
-            CreationStoryboardPage(
+            CreationPageDraft(
                 session_id=session.id,
                 page_no=item["page_no"],
                 title=item.get("title"),
@@ -531,7 +653,10 @@ async def _replace_storyboard_pages(db: AsyncSession, session: CreationSession, 
                 visual_prompt=item.get("visual_prompt") or "儿童绘本插图",
                 character_appearances=item.get("character_appearances") or [],
                 dialogues=item.get("dialogues") or [],
-                generation_status=StoryboardGenerationStatus.READY,
+                storyboard_status=PageDraftTaskStatus.READY,
+                image_status=PageDraftTaskStatus.DRAFT,
+                audio_status=PageDraftTaskStatus.DRAFT,
+                lip_sync_status=PageDraftTaskStatus.DRAFT,
             )
         )
 
@@ -560,7 +685,7 @@ async def mark_task_owner_failed(db: AsyncSession, task: GenerationTask, exc: Ba
     except HTTPException:
         return
     if task.task_type in {GenerationTaskType.IMAGE, GenerationTaskType.AUDIO, GenerationTaskType.LIP_SYNC}:
-        _mark_target_pages_failed(session, _task_page_ids(task))
+        _mark_target_pages_failed(session, _task_page_ids(task), task.task_type)
     else:
         session.status = CreationSessionStatus.FAILED
     _ = exc
@@ -581,16 +706,34 @@ def _task_page_ids(task: GenerationTask) -> list[int] | None:
     return [int(page_id) for page_id in page_ids]
 
 
-def _mark_target_pages_failed(session: CreationSession, page_ids: list[int] | None) -> None:
-    for page in session.storyboard_pages:
+def _status_field_for_task(task_type: GenerationTaskType) -> str:
+    if task_type == GenerationTaskType.IMAGE:
+        return "image_status"
+    if task_type == GenerationTaskType.AUDIO:
+        return "audio_status"
+    if task_type == GenerationTaskType.LIP_SYNC:
+        return "lip_sync_status"
+    return "storyboard_status"
+
+
+def _subtitle_position(value: str) -> BookSubtitlePosition:
+    try:
+        return BookSubtitlePosition(value)
+    except ValueError:
+        return BookSubtitlePosition.BOTTOM
+
+
+def _mark_target_pages_failed(session: CreationSession, page_ids: list[int] | None, task_type: GenerationTaskType) -> None:
+    status_field = _status_field_for_task(task_type)
+    for page in session.page_drafts:
         if page_ids is None or page.id in page_ids:
-            page.generation_status = StoryboardGenerationStatus.FAILED
+            setattr(page, status_field, PageDraftTaskStatus.FAILED)
 
 
 async def _get_session_model(db: AsyncSession, user_id: int, session_id: int) -> CreationSession:
     result = await db.execute(
         select(CreationSession)
-        .options(selectinload(CreationSession.storyboard_pages))
+        .options(selectinload(CreationSession.page_drafts))
         .execution_options(populate_existing=True)
         .where(CreationSession.id == session_id, CreationSession.user_id == user_id)
     )

@@ -5,6 +5,11 @@ export type StorySourceType = "system" | "user" | "uploaded" | "generated_idea";
 export type StoryLanguage = "zh" | "en" | "bilingual";
 export type StoryAccessLevel = "free" | "preview" | "vip";
 
+export interface StoryCharacter {
+  name: string;
+  is_protagonist: boolean;
+}
+
 export interface StorySummary {
   id: number;
   owner_user_id?: number | null;
@@ -26,6 +31,7 @@ export interface StorySummary {
 
 export interface StoryDetail extends StorySummary {
   body: string;
+  characters: StoryCharacter[];
   moderation_status: "pending" | "approved" | "rejected" | "hidden";
   generated_books: BookSummary[];
 }
@@ -47,10 +53,12 @@ export interface StoryPayload {
   education_goal_codes?: string[];
   language?: StoryLanguage;
   narrative_style_code?: string | null;
+  characters?: StoryCharacter[];
 }
 
 export interface StoryGeneratePayload {
   idea_prompt: string;
+  characters: StoryCharacter[];
   age_range_codes?: string[];
   theme_codes?: string[];
   education_goal_codes?: string[];

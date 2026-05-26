@@ -1,21 +1,21 @@
 from app.model.creation.creation import (
     CreationLanguage,
+    CreationPageDraft,
     CreationSession,
     CreationSessionStatus,
     CreationStep,
-    CreationStoryboardPage,
     CreationStorySourceType,
     CreationType,
-    StoryboardGenerationStatus,
+    PageDraftTaskStatus,
 )
 
 __all__ = [
     "CreationLanguage",
+    "CreationPageDraft",
     "CreationSession",
     "CreationSessionStatus",
     "CreationStep",
-    "CreationStoryboardPage",
     "CreationStorySourceType",
     "CreationType",
-    "StoryboardGenerationStatus",
+    "PageDraftTaskStatus",
 ]

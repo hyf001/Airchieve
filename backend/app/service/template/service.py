@@ -5,13 +5,15 @@ from sqlalchemy.orm import selectinload
 
 from app.model.book import (
     Book,
-    BookDialogue,
     BookLearningCard,
     BookModerationStatus,
     BookPage,
+    BookPlaybackSegment,
     BookPublishStatus,
     BookReadingPrompt,
     BookSourceType,
+    BookSoundEffectCue,
+    BookSubtitleCue,
 )
 from app.model.generation_task import GenerationTaskType
 from app.model.generation_task import GenerationTask
@@ -243,8 +245,8 @@ async def create_personal_book_from_template(
         title=f"{template.title} - 我的版本",
         subtitle=source_book.subtitle,
         summary=source_book.summary,
-        cover_asset_id=source_book.cover_asset_id,
         cover_url=source_book.cover_url,
+        background_music_url=source_book.background_music_url,
         age_range_codes=list(source_book.age_range_codes or []),
         theme_codes=list(source_book.theme_codes or []),
         education_goal_codes=list(source_book.education_goal_codes or []),
@@ -253,9 +255,7 @@ async def create_personal_book_from_template(
         reading_level=source_book.reading_level,
         narrative_style_code=source_book.narrative_style_code,
         art_style_code=source_book.art_style_code,
-        custom_art_style_prompt=source_book.custom_art_style_prompt,
         default_voice_id=_resolved_voice_id(template, source_book, voice_ref),
-        default_voice_name=_resolved_voice_name(template, source_book, voice_ref),
         page_count=source_book.page_count,
         duration_seconds=source_book.duration_seconds,
         access_level=source_book.access_level,
@@ -274,36 +274,74 @@ async def create_personal_book_from_template(
             text_en=source_page.text_en,
             narration_text=source_page.narration_text,
             visual_prompt=source_page.visual_prompt,
-            image_asset_id=source_page.image_asset_id,
             image_url=source_page.image_url,
-            video_asset_id=source_page.video_asset_id,
-            video_url=source_page.video_url,
-            audio_asset_id=source_page.audio_asset_id,
             audio_url=source_page.audio_url,
-            background_music_asset_id=source_page.background_music_asset_id,
-            background_music_url=source_page.background_music_url,
-            sound_effect_asset_ids=list(source_page.sound_effect_asset_ids or []),
-            sound_effect_urls=list(source_page.sound_effect_urls or []),
             duration_seconds=source_page.duration_seconds,
-            lip_sync_status=source_page.lip_sync_status,
         )
         db.add(page)
         await db.flush()
-        for source_dialogue in source_page.dialogues:
+        for source_effect in source_page.sound_effects:
+            if source_effect.segment_id is not None:
+                continue
             db.add(
-                BookDialogue(
+                BookSoundEffectCue(
                     page_id=page.id,
-                    character_ref=source_dialogue.character_ref,
-                    text=source_dialogue.text,
-                    audio_asset_id=source_dialogue.audio_asset_id,
-                    audio_url=source_dialogue.audio_url,
-                    start_ms=source_dialogue.start_ms,
-                    end_ms=source_dialogue.end_ms,
-                    lip_sync_asset_id=source_dialogue.lip_sync_asset_id,
-                    lip_sync_url=source_dialogue.lip_sync_url,
-                    sort_order=source_dialogue.sort_order,
+                    segment_id=None,
+                    trigger_type=source_effect.trigger_type,
+                    sound_effect_url=source_effect.sound_effect_url,
+                    start_ms=source_effect.start_ms,
+                    end_ms=source_effect.end_ms,
+                    volume=source_effect.volume,
+                    loop=source_effect.loop,
+                    sort_order=source_effect.sort_order,
                 )
             )
+        for source_segment in source_page.playback_segments:
+            segment = BookPlaybackSegment(
+                page_id=page.id,
+                segment_type=source_segment.segment_type,
+                speaker_ref=source_segment.speaker_ref,
+                image_url=source_segment.image_url,
+                audio_url=source_segment.audio_url,
+                lip_sync_url=source_segment.lip_sync_url,
+                media_mode=source_segment.media_mode,
+                start_ms=source_segment.start_ms,
+                end_ms=source_segment.end_ms,
+                fallback_mode=source_segment.fallback_mode,
+                lip_sync_status=source_segment.lip_sync_status,
+                sort_order=source_segment.sort_order,
+            )
+            db.add(segment)
+            await db.flush()
+            for source_effect in source_segment.sound_effects:
+                db.add(
+                    BookSoundEffectCue(
+                        page_id=page.id,
+                        segment_id=segment.id,
+                        trigger_type=source_effect.trigger_type,
+                        sound_effect_url=source_effect.sound_effect_url,
+                        start_ms=source_effect.start_ms,
+                        end_ms=source_effect.end_ms,
+                        volume=source_effect.volume,
+                        loop=source_effect.loop,
+                        sort_order=source_effect.sort_order,
+                    )
+                )
+            for source_cue in source_segment.subtitle_cues:
+                db.add(
+                    BookSubtitleCue(
+                        segment_id=segment.id,
+                        cue_type=source_cue.cue_type,
+                        speaker_ref=source_cue.speaker_ref,
+                        start_ms=source_cue.start_ms,
+                        end_ms=source_cue.end_ms,
+                        text_zh=source_cue.text_zh,
+                        text_en=source_cue.text_en,
+                        position=source_cue.position,
+                        position_config=source_cue.position_config,
+                        sort_order=source_cue.sort_order,
+                    )
+                )
     for prompt in source_book.reading_prompts:
         db.add(
             BookReadingPrompt(
@@ -390,7 +428,13 @@ async def _get_source_book_with_content(db: AsyncSession, book_id: int) -> Book:
     result = await db.execute(
         select(Book)
         .options(
-            selectinload(Book.pages).selectinload(BookPage.dialogues),
+            selectinload(Book.pages)
+            .selectinload(BookPage.playback_segments)
+            .selectinload(BookPlaybackSegment.subtitle_cues),
+            selectinload(Book.pages).selectinload(BookPage.sound_effects),
+            selectinload(Book.pages)
+            .selectinload(BookPage.playback_segments)
+            .selectinload(BookPlaybackSegment.sound_effects),
             selectinload(Book.reading_prompts),
             selectinload(Book.learning_cards),
         )
@@ -406,12 +450,6 @@ def _resolved_voice_id(template: BookTemplate, source_book: Book, voice_ref: dic
     if voice_ref and voice_ref.get("source") != "template_default":
         return voice_ref.get("voice_id")
     return template.default_voice_id or source_book.default_voice_id
-
-
-def _resolved_voice_name(template: BookTemplate, source_book: Book, voice_ref: dict | None) -> str | None:
-    if voice_ref and voice_ref.get("source") != "template_default":
-        return voice_ref.get("display_name")
-    return template.default_voice_name or source_book.default_voice_name
 
 
 def _enum_value(value: object) -> str:

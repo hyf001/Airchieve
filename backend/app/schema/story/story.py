@@ -34,8 +34,14 @@ class StorySummary(BaseModel):
     updated_at: datetime
 
 
+class StoryCharacter(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    is_protagonist: bool = False
+
+
 class StoryRead(StorySummary):
     body: str
+    characters: list[StoryCharacter] = Field(default_factory=list)
     moderation_status: StoryModerationStatus
     generated_books: list[BookSummary] = Field(default_factory=list)
 
@@ -57,10 +63,12 @@ class StoryCreate(BaseModel):
     education_goal_codes: list[str] = Field(default_factory=list)
     language: StoryLanguage = StoryLanguage.ZH
     narrative_style_code: str | None = None
+    characters: list[StoryCharacter] = Field(default_factory=list)
 
 
 class StoryGenerateRequest(BaseModel):
     idea_prompt: str = Field(min_length=2, max_length=1000)
+    characters: list[StoryCharacter] = Field(min_length=1)
     age_range_codes: list[str] = Field(default_factory=list)
     theme_codes: list[str] = Field(default_factory=list)
     education_goal_codes: list[str] = Field(default_factory=list)
@@ -82,6 +90,7 @@ class StoryUpdate(BaseModel):
     education_goal_codes: list[str] | None = None
     language: StoryLanguage | None = None
     narrative_style_code: str | None = None
+    characters: list[StoryCharacter] | None = None
     publish_status: StoryPublishStatus | None = None
 
 
@@ -94,6 +103,7 @@ class StoryInternalDTO(BaseModel):
     age_range_codes: list[str] = Field(default_factory=list)
     theme_codes: list[str] = Field(default_factory=list)
     education_goal_codes: list[str] = Field(default_factory=list)
+    characters: list[StoryCharacter] = Field(default_factory=list)
     access_level: StoryAccessLevel
 
 

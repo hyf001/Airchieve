@@ -437,6 +437,12 @@ const StoryDetailDrawer: React.FC<{
                   <Info label="状态" value={publishStatusLabel(story.publish_status)} />
                   <Info label="浏览" value={`${story.view_count}`} />
                 </dl>
+                <div className="mt-4">
+                  <MetaTags
+                    label="故事角色"
+                    values={story.characters.map((character) => `${character.name}${character.is_protagonist ? "（主角）" : ""}`)}
+                  />
+                </div>
                 <div className="mt-4 grid gap-3">
                   <MetaTags label="适龄范围" values={labelCodes(story.age_range_codes, taxonomyLabels.ageRange)} />
                   <MetaTags label="主题方向" values={labelCodes(story.theme_codes, taxonomyLabels.theme)} />
@@ -486,6 +492,7 @@ const StoryEditDrawer: React.FC<{
   const [title, setTitle] = React.useState("");
   const [summary, setSummary] = React.useState("");
   const [body, setBody] = React.useState("");
+  const [characters, setCharacters] = React.useState<StoryDetail["characters"]>([]);
   const [submitting, setSubmitting] = React.useState(false);
 
   useEffect(() => {
@@ -493,6 +500,7 @@ const StoryEditDrawer: React.FC<{
     setTitle(story.title);
     setSummary(story.summary ?? "");
     setBody(story.body);
+    setCharacters(story.characters.length ? story.characters : [{ name: "", is_protagonist: true }]);
   }, [story]);
 
   if (!story) return null;
@@ -506,6 +514,9 @@ const StoryEditDrawer: React.FC<{
         summary: summary || null,
         body,
         source_type: story.source_type,
+        characters: characters
+          .map((character) => ({ name: character.name.trim(), is_protagonist: character.is_protagonist }))
+          .filter((character) => character.name),
         age_range_codes: story.age_range_codes,
         theme_codes: story.theme_codes,
         education_goal_codes: story.education_goal_codes,
@@ -550,6 +561,7 @@ const StoryEditDrawer: React.FC<{
             故事正文
             <textarea className="min-h-[300px] rounded-[var(--radius-sm)] border-2 border-[rgba(212,114,92,0.14)] px-3.5 py-3 text-sm leading-6 outline-none focus:border-[var(--peach)]" value={body} onChange={(event) => setBody(event.target.value)} maxLength={3000} required />
           </label>
+          <StoryEditCharacterFields characters={characters} onChange={setCharacters} />
         </div>
         <div className="border-t border-[rgba(212,114,92,0.08)] p-5">
           <Button className="w-full" disabled={submitting || !title || !body} type="submit">
@@ -567,6 +579,48 @@ const Info: React.FC<{ label: string; value: string }> = ({ label, value }) => (
     <dd className="font-semibold text-[var(--text-mid)]">{value}</dd>
   </div>
 );
+
+const StoryEditCharacterFields: React.FC<{
+  characters: StoryDetail["characters"];
+  onChange: (characters: StoryDetail["characters"]) => void;
+}> = ({ characters, onChange }) => {
+  const updateCharacter = (index: number, patch: Partial<StoryDetail["characters"][number]>) => {
+    onChange(characters.map((character, itemIndex) => (itemIndex === index ? { ...character, ...patch } : character)));
+  };
+
+  return (
+    <section className="grid gap-2 rounded-[var(--radius-md)] border border-[rgba(212,114,92,0.08)] bg-[rgba(126,200,227,0.06)] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-bold text-[var(--text-dark)]">故事角色</h3>
+        <Button type="button" size="sm" variant="outline" onClick={() => onChange([...characters, { name: "", is_protagonist: false }])}>
+          添加角色
+        </Button>
+      </div>
+      {characters.map((character, index) => (
+        <div key={index} className="grid grid-cols-[1fr_auto_auto] items-center gap-2 max-sm:grid-cols-1">
+          <input
+            className="h-[42px] rounded-[var(--radius-sm)] border-2 border-[rgba(212,114,92,0.14)] px-3.5 text-sm outline-none focus:border-[var(--peach)]"
+            value={character.name}
+            onChange={(event) => updateCharacter(index, { name: event.target.value })}
+            placeholder="角色姓名"
+            maxLength={120}
+          />
+          <label className="inline-flex h-10 items-center gap-2 rounded-[var(--radius-sm)] bg-white px-3 text-sm font-semibold text-[var(--text-mid)]">
+            <input
+              type="checkbox"
+              checked={character.is_protagonist}
+              onChange={(event) => updateCharacter(index, { is_protagonist: event.target.checked })}
+            />
+            主角
+          </label>
+          <Button type="button" size="sm" variant="ghost" disabled={characters.length === 1} onClick={() => onChange(characters.filter((_, itemIndex) => itemIndex !== index))}>
+            删除
+          </Button>
+        </div>
+      ))}
+    </section>
+  );
+};
 
 const MetaTags: React.FC<{ label: string; values: string[] }> = ({ label, values }) => (
   <div>

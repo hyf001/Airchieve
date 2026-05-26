@@ -8,8 +8,14 @@ from app.model.book import (
     BookContentStatus,
     BookLanguage,
     BookLipSyncStatus,
+    BookPlaybackMediaMode,
+    BookPlaybackSegmentType,
     BookPromptType,
     BookPublishStatus,
+    BookSegmentFallbackMode,
+    BookSoundEffectTriggerType,
+    BookSubtitleCueType,
+    BookSubtitlePosition,
 )
 from app.schema.entitlement import AccessDecision
 
@@ -45,6 +51,7 @@ class BookDetailRead(BookSummary):
     source_story_id: int | None = None
     narrative_style_code: str | None = None
     art_style_code: str | None = None
+    background_music_url: str | None = None
     publish_status: BookPublishStatus
     is_featured: bool
     created_at: datetime
@@ -52,15 +59,46 @@ class BookDetailRead(BookSummary):
     related_books: list[BookSummary] = Field(default_factory=list)
 
 
-class BookDialogueRead(BaseModel):
+class BookSubtitleCueRead(BaseModel):
     id: int
-    character_ref: str
-    text: str
+    cue_type: BookSubtitleCueType
+    speaker_ref: str | None = None
+    start_ms: int
+    end_ms: int | None = None
+    text_zh: str | None = None
+    text_en: str | None = None
+    position: BookSubtitlePosition
+    position_config: dict | None = None
+    sort_order: int
+
+
+class BookSoundEffectCueRead(BaseModel):
+    id: int
+    segment_id: int | None = None
+    trigger_type: BookSoundEffectTriggerType
+    sound_effect_url: str
+    start_ms: int
+    end_ms: int | None = None
+    volume: int
+    loop: bool
+    sort_order: int
+
+
+class BookPlaybackSegmentRead(BaseModel):
+    id: int
+    segment_type: BookPlaybackSegmentType
+    speaker_ref: str | None = None
+    image_url: str | None = None
     audio_url: str | None = None
+    lip_sync_url: str | None = None
+    media_mode: BookPlaybackMediaMode
     start_ms: int | None = None
     end_ms: int | None = None
-    lip_sync_url: str | None = None
+    fallback_mode: BookSegmentFallbackMode
+    lip_sync_status: BookLipSyncStatus
     sort_order: int
+    subtitle_cues: list[BookSubtitleCueRead] = Field(default_factory=list)
+    sound_effects: list[BookSoundEffectCueRead] = Field(default_factory=list)
 
 
 class BookPageRead(BaseModel):
@@ -72,13 +110,10 @@ class BookPageRead(BaseModel):
     narration_text: str | None = None
     visual_prompt: str | None = None
     image_url: str | None = None
-    video_url: str | None = None
     audio_url: str | None = None
-    background_music_url: str | None = None
-    sound_effect_urls: list[str] = Field(default_factory=list)
     duration_seconds: int | None = None
-    lip_sync_status: BookLipSyncStatus
-    dialogues: list[BookDialogueRead] = Field(default_factory=list)
+    playback_segments: list[BookPlaybackSegmentRead] = Field(default_factory=list)
+    sound_effects: list[BookSoundEffectCueRead] = Field(default_factory=list)
 
 
 class BookReadingPromptRead(BaseModel):

@@ -17,12 +17,20 @@ from app.service.ai_provider import service as ai_provider_service
 
 
 class TestGenerateText:
-    async def test_returns_string(self, db: AsyncSession):
+    @patch("app.service.ai_provider.service._generate_text_with_provider", new_callable=AsyncMock)
+    async def test_returns_string(self, mock_generate, db: AsyncSession):
+        mock_generate.return_value = "小猫学会了勇敢。"
+
         result = await generate_text(db, task_id=None, prompt="一只勇敢的小猫")
+
         assert isinstance(result, str)
         assert len(result) > 0
+        assert result == "小猫学会了勇敢。"
 
-    async def test_records_provider_call(self, db: AsyncSession):
+    @patch("app.service.ai_provider.service._generate_text_with_provider", new_callable=AsyncMock)
+    async def test_records_provider_call(self, mock_generate, db: AsyncSession):
+        mock_generate.return_value = "hello story"
+
         await generate_text(db, task_id=42, prompt="hello")
         from sqlalchemy import select
 
@@ -63,7 +71,25 @@ class TestGenerateStory:
 
 
 class TestGenerateStructured:
-    async def test_returns_pages(self, db: AsyncSession):
+    @staticmethod
+    def _storyboard_response(page_count: int) -> str:
+        pages = [
+            {
+                "page_no": index,
+                "title": f"第 {index} 页",
+                "text_zh": f"第 {index} 页文本",
+                "visual_prompt": f"第 {index} 页画面",
+            }
+            for index in range(1, page_count + 1)
+        ]
+        import json
+
+        return json.dumps({"pages": pages})
+
+    @patch("app.service.ai_provider.service._generate_text_with_provider", new_callable=AsyncMock)
+    async def test_returns_pages(self, mock_generate, db: AsyncSession):
+        mock_generate.return_value = self._storyboard_response(6)
+
         result = await generate_structured(
             db,
             task_id=None,
@@ -75,9 +101,14 @@ class TestGenerateStructured:
             assert "page_no" in page
             assert "text_zh" in page
             assert "visual_prompt" in page
+        assert mock_generate.await_args.kwargs["response_json"] is True
 
-    async def test_default_page_count(self, db: AsyncSession):
+    @patch("app.service.ai_provider.service._generate_text_with_provider", new_callable=AsyncMock)
+    async def test_default_page_count(self, mock_generate, db: AsyncSession):
+        mock_generate.return_value = self._storyboard_response(8)
+
         result = await generate_structured(db, task_id=None, request={})
+
         assert len(result["pages"]) == 8
 
 

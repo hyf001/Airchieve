@@ -1,6 +1,7 @@
 from app.schema.story.story import (
     StartCreationFromStoryRequest,
     StoryCreate,
+    StoryCharacter,
     StoryGenerateRequest,
     StoryGenerationTaskResponse,
     StoryCreationSessionRead,
@@ -14,6 +15,7 @@ from app.schema.story.story import (
 __all__ = [
     "StartCreationFromStoryRequest",
     "StoryCreate",
+    "StoryCharacter",
     "StoryGenerateRequest",
     "StoryGenerationTaskResponse",
     "StoryCreationSessionRead",

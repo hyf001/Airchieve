@@ -16,7 +16,7 @@ from app.service.creation.service import (
     run_storyboard_task,
     save_book,
     update_session_config,
-    update_storyboard_page,
+    update_page_draft,
 )
 
 __all__ = [
@@ -37,5 +37,5 @@ __all__ = [
     "run_storyboard_task",
     "save_book",
     "update_session_config",
-    "update_storyboard_page",
+    "update_page_draft",
 ]

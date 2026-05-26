@@ -33,16 +33,53 @@ export interface BookDetail extends BookSummary {
 
 export type BookLipSyncStatus = "none" | "pending" | "ready" | "failed";
 export type BookPromptType = "question" | "interaction";
+export type BookPlaybackSegmentType = "narration" | "dialogue";
+export type BookPlaybackMediaMode = "audio" | "lip_sync";
+export type BookSubtitleCueType = "narration" | "dialogue" | "interaction";
+export type BookSubtitlePosition = "bottom" | "top" | "center" | "custom";
+export type BookSegmentFallbackMode = "none" | "page_image_audio" | "page_image_dialogue_audio";
+export type BookSoundEffectTriggerType = "page" | "segment";
 
-export interface BookDialogue {
+export interface BookSubtitleCue {
   id: number;
-  character_ref: string;
-  text: string;
+  cue_type: BookSubtitleCueType;
+  speaker_ref?: string | null;
+  start_ms: number;
+  end_ms?: number | null;
+  text_zh?: string | null;
+  text_en?: string | null;
+  position: BookSubtitlePosition;
+  position_config?: Record<string, unknown> | null;
+  sort_order: number;
+}
+
+export interface BookSoundEffectCue {
+  id: number;
+  segment_id?: number | null;
+  trigger_type: BookSoundEffectTriggerType;
+  sound_effect_url: string;
+  start_ms: number;
+  end_ms?: number | null;
+  volume: number;
+  loop: boolean;
+  sort_order: number;
+}
+
+export interface BookPlaybackSegment {
+  id: number;
+  segment_type: BookPlaybackSegmentType;
+  speaker_ref?: string | null;
+  image_url?: string | null;
   audio_url?: string | null;
+  lip_sync_url?: string | null;
+  media_mode: BookPlaybackMediaMode;
   start_ms?: number | null;
   end_ms?: number | null;
-  lip_sync_url?: string | null;
+  fallback_mode: BookSegmentFallbackMode;
+  lip_sync_status: BookLipSyncStatus;
   sort_order: number;
+  subtitle_cues: BookSubtitleCue[];
+  sound_effects: BookSoundEffectCue[];
 }
 
 export interface BookPage {
@@ -54,13 +91,10 @@ export interface BookPage {
   narration_text?: string | null;
   visual_prompt?: string | null;
   image_url?: string | null;
-  video_url?: string | null;
   audio_url?: string | null;
-  background_music_url?: string | null;
-  sound_effect_urls: string[];
   duration_seconds?: number | null;
-  lip_sync_status: BookLipSyncStatus;
-  dialogues: BookDialogue[];
+  playback_segments: BookPlaybackSegment[];
+  sound_effects: BookSoundEffectCue[];
 }
 
 export interface BookReadingPrompt {

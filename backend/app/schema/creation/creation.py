@@ -5,11 +5,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.model.creation import (
     CreationLanguage,
+    PageDraftTaskStatus,
     CreationSessionStatus,
     CreationStep,
     CreationStorySourceType,
     CreationType,
-    StoryboardGenerationStatus,
 )
 from app.model.generation_task import GenerationTaskType
 from app.schema.book import BookDetailRead
@@ -56,6 +56,7 @@ class CharacterRef(BaseModel):
 
 class ArtStyleRef(BaseModel):
     source: ArtStyleSource
+    art_style_id: int | None = None
     art_style_code: str | None = Field(default=None, max_length=80)
     custom_prompt: str | None = Field(default=None, max_length=500)
 
@@ -64,7 +65,9 @@ class VoiceRef(BaseModel):
     source: VoiceRefSource
     voice_id: int | None = None
     display_name: str | None = Field(default=None, max_length=120)
+    role_code: str | None = Field(default=None, max_length=80)
     provider_voice_id: str | None = Field(default=None, max_length=64)
+    emotion_type: str | None = Field(default=None, max_length=64)
 
 
 class CharacterAppearance(BaseModel):
@@ -119,7 +122,26 @@ class IdeaStoryGenerateRequest(BaseModel):
     idea_prompt: str = Field(min_length=2, max_length=1000)
 
 
-class StoryboardPagePatch(BaseModel):
+class PageVoiceConfig(BaseModel):
+    source: VoiceRefSource = VoiceRefSource.SYSTEM
+    voice_id: int | None = None
+    display_name: str | None = Field(default=None, max_length=120)
+    role_code: str | None = Field(default=None, max_length=80)
+    provider_voice_id: str | None = Field(default=None, max_length=64)
+    emotion_type: str | None = Field(default=None, max_length=64)
+
+
+class PageSubtitleConfig(BaseModel):
+    position: str = Field(default="bottom", max_length=32)
+    position_config: dict | None = None
+
+
+class PageLipSyncConfig(BaseModel):
+    enabled: bool = True
+    target_role_code: str | None = Field(default=None, max_length=80)
+
+
+class PageDraftPatch(BaseModel):
     page_no: int = Field(ge=1, le=24)
     title: str | None = Field(default=None, max_length=160)
     text_zh: str | None = Field(default=None, max_length=1200)
@@ -128,6 +150,9 @@ class StoryboardPagePatch(BaseModel):
     visual_prompt: str = Field(min_length=1, max_length=2000)
     character_appearances: list[CharacterAppearance] = Field(default_factory=list)
     dialogues: list[DialogueMark] = Field(default_factory=list)
+    voice_config: dict = Field(default_factory=dict)
+    subtitle_config: PageSubtitleConfig = Field(default_factory=PageSubtitleConfig)
+    lip_sync_config: PageLipSyncConfig = Field(default_factory=PageLipSyncConfig)
 
 
 class GeneratePagesRequest(BaseModel):
@@ -152,7 +177,7 @@ class RegenerateRequest(BaseModel):
         return self
 
 
-class StoryboardPageRead(BaseModel):
+class PageDraftRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -165,12 +190,18 @@ class StoryboardPageRead(BaseModel):
     visual_prompt: str
     character_appearances: list[dict] = Field(default_factory=list)
     dialogues: list[dict] = Field(default_factory=list)
+    voice_config: dict = Field(default_factory=dict)
+    subtitle_config: dict = Field(default_factory=dict)
+    lip_sync_config: dict = Field(default_factory=dict)
     image_asset_id: int | None = None
     image_url: str | None = None
     audio_asset_id: int | None = None
     audio_url: str | None = None
     lip_sync_url: str | None = None
-    generation_status: StoryboardGenerationStatus
+    storyboard_status: PageDraftTaskStatus
+    image_status: PageDraftTaskStatus
+    audio_status: PageDraftTaskStatus
+    lip_sync_status: PageDraftTaskStatus
     created_at: datetime
     updated_at: datetime
 
@@ -199,7 +230,7 @@ class CreationSessionRead(BaseModel):
     art_style_ref: dict | None = None
     voice_ref: dict | None = None
     saved_book_id: int | None = None
-    storyboard_pages: list[StoryboardPageRead] = Field(default_factory=list)
+    page_drafts: list[PageDraftRead] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 

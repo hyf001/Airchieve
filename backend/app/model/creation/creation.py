@@ -28,6 +28,7 @@ class CreationStep(StrEnum):
     ART_STYLE = "art_style"
     STORYBOARD = "storyboard"
     VOICE = "voice"
+    LIP_SYNC = "lip_sync"
     PREVIEW = "preview"
 
 
@@ -44,11 +45,12 @@ class CreationLanguage(StrEnum):
     BILINGUAL = "bilingual"
 
 
-class StoryboardGenerationStatus(StrEnum):
+class PageDraftTaskStatus(StrEnum):
     DRAFT = "draft"
     PENDING = "pending"
     READY = "ready"
     FAILED = "failed"
+    SKIPPED = "skipped"
 
 
 class CreationSession(TimestampMixin, Base):
@@ -82,16 +84,16 @@ class CreationSession(TimestampMixin, Base):
     quota_reservation_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     saved_book_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    storyboard_pages: Mapped[list["CreationStoryboardPage"]] = relationship(
+    page_drafts: Mapped[list["CreationPageDraft"]] = relationship(
         back_populates="session",
         cascade="all, delete-orphan",
-        order_by="CreationStoryboardPage.page_no",
+        order_by="CreationPageDraft.page_no",
     )
 
 
-class CreationStoryboardPage(TimestampMixin, Base):
-    __tablename__ = "creation_storyboard_pages"
-    __table_args__ = (UniqueConstraint("session_id", "page_no", name="uq_creation_storyboard_session_page_no"),)
+class CreationPageDraft(TimestampMixin, Base):
+    __tablename__ = "creation_page_drafts"
+    __table_args__ = (UniqueConstraint("session_id", "page_no", name="uq_creation_page_drafts_session_page_no"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     session_id: Mapped[int] = mapped_column(ForeignKey("creation_sessions.id"), nullable=False, index=True)
@@ -103,15 +105,33 @@ class CreationStoryboardPage(TimestampMixin, Base):
     visual_prompt: Mapped[str] = mapped_column(Text, nullable=False)
     character_appearances: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
     dialogues: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
+    voice_config: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    subtitle_config: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    lip_sync_config: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     image_asset_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     audio_asset_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     audio_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     lip_sync_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    generation_status: Mapped[StoryboardGenerationStatus] = mapped_column(
-        Enum(StoryboardGenerationStatus),
+    storyboard_status: Mapped[PageDraftTaskStatus] = mapped_column(
+        Enum(PageDraftTaskStatus),
         nullable=False,
-        default=StoryboardGenerationStatus.DRAFT,
+        default=PageDraftTaskStatus.DRAFT,
+    )
+    image_status: Mapped[PageDraftTaskStatus] = mapped_column(
+        Enum(PageDraftTaskStatus),
+        nullable=False,
+        default=PageDraftTaskStatus.DRAFT,
+    )
+    audio_status: Mapped[PageDraftTaskStatus] = mapped_column(
+        Enum(PageDraftTaskStatus),
+        nullable=False,
+        default=PageDraftTaskStatus.DRAFT,
+    )
+    lip_sync_status: Mapped[PageDraftTaskStatus] = mapped_column(
+        Enum(PageDraftTaskStatus),
+        nullable=False,
+        default=PageDraftTaskStatus.DRAFT,
     )
 
-    session: Mapped[CreationSession] = relationship(back_populates="storyboard_pages")
+    session: Mapped[CreationSession] = relationship(back_populates="page_drafts")

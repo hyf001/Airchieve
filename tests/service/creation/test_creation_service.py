@@ -2,13 +2,22 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.model.book import Book, BookPublishStatus
+from app.model.book import (
+    BookLipSyncStatus,
+    BookPage,
+    BookPlaybackMediaMode,
+    BookPlaybackSegment,
+    BookPlaybackSegmentType,
+    BookSegmentFallbackMode,
+    BookSubtitlePosition,
+)
 from app.model.asset import AssetAccessLevel, AssetSourceType, LibraryItemStatus, Voice
-from app.model.creation import CreationSession, CreationSessionStatus, CreationStep, CreationStoryboardPage, CreationType
+from app.model.creation import CreationPageDraft, CreationSession, CreationSessionStatus, CreationStep, CreationType, PageDraftTaskStatus
 from app.model.generation_task import GenerationTask, GenerationTaskStatus
-from app.schema.creation import CreationSessionCreate
 
 
 async def _create_test_session(db: AsyncSession, user_id: int = 1, **overrides) -> CreationSession:
@@ -132,7 +141,7 @@ class TestGenerateLipSync:
     @patch("app.service.ai_provider.generate_lip_sync", new_callable=AsyncMock)
     async def test_generate_lip_sync_applies_page_result(self, mock_gen, db: AsyncSession):
         session = await _create_test_session(db)
-        page = CreationStoryboardPage(
+        page = CreationPageDraft(
             session_id=session.id,
             page_no=1,
             title="Page 1",
@@ -162,7 +171,7 @@ class TestGenerateLipSync:
         await run_creation_lip_sync_task(db, task)
         await db.commit()
         refreshed_task = await db.get(GenerationTask, task.id)
-        refreshed_page = await db.get(CreationStoryboardPage, page.id)
+        refreshed_page = await db.get(CreationPageDraft, page.id)
         assert refreshed_task.status == GenerationTaskStatus.SUCCEEDED
         assert refreshed_page.lip_sync_url == "https://example.com/lip.mp4"
 
@@ -188,9 +197,9 @@ class TestRegenerateUnsupported:
 
 
 class TestSaveBookStateGuard:
-    """Verify save_book rejects sessions not in PREVIEW state."""
+    """Verify save_book rejects sessions that do not have page drafts."""
 
-    async def test_save_draft_session_raises(self, db: AsyncSession):
+    async def test_save_session_without_page_drafts_raises(self, db: AsyncSession):
         session = await _create_test_session(db, status=CreationSessionStatus.DRAFT)
         await db.commit()
 
@@ -199,4 +208,94 @@ class TestSaveBookStateGuard:
         with pytest.raises(HTTPException) as exc_info:
             await save_book(db, user_id=1, session_id=session.id)
         assert exc_info.value.status_code == 400
-        assert "预览" in exc_info.value.detail
+        assert "分镜" in exc_info.value.detail
+
+    async def test_save_draft_session_creates_playback_segments_and_subtitles(self, db: AsyncSession):
+        session = await _create_test_session(db, status=CreationSessionStatus.DRAFT)
+        page = CreationPageDraft(
+            session_id=session.id,
+            page_no=1,
+            title="第 1 页",
+            text_zh="旁白文本",
+            text_en="Narration text",
+            narration_text="旁白文本",
+            visual_prompt="孩子在星空下阅读",
+            image_url="https://example.com/page.png",
+            audio_url="https://example.com/narration.wav",
+            lip_sync_url="https://example.com/narration.mp4",
+            image_status=PageDraftTaskStatus.READY,
+            audio_status=PageDraftTaskStatus.READY,
+            subtitle_config={"position": "top", "position_config": {"x": 12, "y": 24}},
+            dialogues=[
+                {
+                    "speaker_ref": "hero",
+                    "text": "我们出发吧",
+                    "text_en": "Let's go",
+                    "audio_url": "https://example.com/dialogue.wav",
+                    "lip_sync_url": "https://example.com/dialogue.mp4",
+                    "start_ms": 1000,
+                    "end_ms": 2600,
+                }
+            ],
+        )
+        db.add(page)
+        await db.commit()
+
+        from app.service.creation import save_book
+
+        result = await save_book(db, user_id=1, session_id=session.id)
+
+        assert result.session.status == CreationSessionStatus.SAVED
+        saved_page = (
+            await db.execute(
+                select(BookPage)
+                .options(
+                    selectinload(BookPage.playback_segments).selectinload(BookPlaybackSegment.subtitle_cues),
+                )
+                .where(BookPage.book_id == result.book.id)
+            )
+        ).scalar_one()
+        assert saved_page.image_url == "https://example.com/page.png"
+        assert saved_page.audio_url == "https://example.com/narration.wav"
+        assert len(saved_page.playback_segments) == 2
+
+        narration_segment = saved_page.playback_segments[0]
+        assert narration_segment.segment_type == BookPlaybackSegmentType.NARRATION
+        assert narration_segment.media_mode == BookPlaybackMediaMode.LIP_SYNC
+        assert narration_segment.fallback_mode == BookSegmentFallbackMode.PAGE_IMAGE_AUDIO
+        assert narration_segment.lip_sync_status == BookLipSyncStatus.READY
+        assert narration_segment.subtitle_cues[0].text_zh == "旁白文本"
+        assert narration_segment.subtitle_cues[0].position == BookSubtitlePosition.TOP
+        assert narration_segment.subtitle_cues[0].position_config == {"x": 12, "y": 24}
+
+        dialogue_segment = saved_page.playback_segments[1]
+        assert dialogue_segment.segment_type == BookPlaybackSegmentType.DIALOGUE
+        assert dialogue_segment.speaker_ref == "hero"
+        assert dialogue_segment.start_ms == 1000
+        assert dialogue_segment.end_ms == 2600
+        assert dialogue_segment.subtitle_cues[0].text_zh == "我们出发吧"
+        assert dialogue_segment.subtitle_cues[0].end_ms == 1600
+
+    async def test_save_session_with_pending_media_raises(self, db: AsyncSession):
+        session = await _create_test_session(db, status=CreationSessionStatus.PREVIEW)
+        page = CreationPageDraft(
+            session_id=session.id,
+            page_no=1,
+            title="第 1 页",
+            text_zh="旁白文本",
+            narration_text="旁白文本",
+            visual_prompt="孩子在星空下阅读",
+            image_url="https://example.com/page.png",
+            audio_url="https://example.com/narration.wav",
+            image_status=PageDraftTaskStatus.PENDING,
+            audio_status=PageDraftTaskStatus.READY,
+        )
+        db.add(page)
+        await db.commit()
+
+        from app.service.creation import save_book
+
+        with pytest.raises(HTTPException) as exc_info:
+            await save_book(db, user_id=1, session_id=session.id)
+        assert exc_info.value.status_code == 400
+        assert "插图和语音生成" in exc_info.value.detail

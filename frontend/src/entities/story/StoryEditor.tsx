@@ -4,7 +4,7 @@ import { Save, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TaxonomyMultiSelect, TaxonomySelect } from "@/entities/taxonomy";
-import type { StoryLanguage } from "./types";
+import type { StoryCharacter, StoryLanguage } from "./types";
 import { type StoryGeneratePayload, type StoryPayload } from "./types";
 
 interface StoryEditorProps {
@@ -18,6 +18,7 @@ export const StoryEditor: React.FC<StoryEditorProps> = ({ mode, onGenerate, onSu
   const [summary, setSummary] = useState("");
   const [body, setBody] = useState("");
   const [ideaPrompt, setIdeaPrompt] = useState("");
+  const [storyCharacters, setStoryCharacters] = useState<StoryCharacter[]>([{ name: "", is_protagonist: true }]);
   const [language, setLanguage] = useState<StoryLanguage>("zh");
   const [ageRangeCodes, setAgeRangeCodes] = useState<string[]>([]);
   const [themeCodes, setThemeCodes] = useState<string[]>([]);
@@ -25,6 +26,9 @@ export const StoryEditor: React.FC<StoryEditorProps> = ({ mode, onGenerate, onSu
   const [narrativeStyleCode, setNarrativeStyleCode] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const isAiMode = mode === "ai";
+  const normalizedCharacters = storyCharacters
+    .map((character) => ({ name: character.name.trim(), is_protagonist: character.is_protagonist }))
+    .filter((character) => character.name);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -33,6 +37,7 @@ export const StoryEditor: React.FC<StoryEditorProps> = ({ mode, onGenerate, onSu
       if (isAiMode) {
         await onGenerate({
           idea_prompt: ideaPrompt,
+          characters: normalizedCharacters,
           age_range_codes: ageRangeCodes,
           theme_codes: themeCodes,
           education_goal_codes: educationGoalCodes,
@@ -45,6 +50,7 @@ export const StoryEditor: React.FC<StoryEditorProps> = ({ mode, onGenerate, onSu
           summary: summary || null,
           body,
           source_type: "uploaded",
+          characters: normalizedCharacters,
           age_range_codes: ageRangeCodes,
           theme_codes: themeCodes,
           education_goal_codes: educationGoalCodes,
@@ -56,6 +62,7 @@ export const StoryEditor: React.FC<StoryEditorProps> = ({ mode, onGenerate, onSu
       setSummary("");
       setBody("");
       setIdeaPrompt("");
+      setStoryCharacters([{ name: "", is_protagonist: true }]);
       setLanguage("zh");
       setAgeRangeCodes([]);
       setThemeCodes([]);
@@ -93,6 +100,7 @@ export const StoryEditor: React.FC<StoryEditorProps> = ({ mode, onGenerate, onSu
               maxLength={1000}
             />
           </label>
+          <StoryCharacterFields characters={storyCharacters} required onChange={setStoryCharacters} />
           <StoryMetadataFields
             ageRangeCodes={ageRangeCodes}
             educationGoalCodes={educationGoalCodes}
@@ -116,6 +124,7 @@ export const StoryEditor: React.FC<StoryEditorProps> = ({ mode, onGenerate, onSu
             required
             maxLength={3000}
           />
+          <StoryCharacterFields characters={storyCharacters} onChange={setStoryCharacters} />
           <StoryMetadataFields
             ageRangeCodes={ageRangeCodes}
             educationGoalCodes={educationGoalCodes}
@@ -130,11 +139,63 @@ export const StoryEditor: React.FC<StoryEditorProps> = ({ mode, onGenerate, onSu
           />
         </>
       )}
-      <Button type="submit" disabled={submitting || (isAiMode ? !ideaPrompt : !title || !body)}>
+      <Button type="submit" disabled={submitting || (isAiMode ? !ideaPrompt || normalizedCharacters.length === 0 : !title || !body)}>
         {isAiMode ? <Sparkles className="h-4 w-4" /> : <Save className="h-4 w-4" />}
         {submitting ? "提交中..." : isAiMode ? "开始生成" : "保存故事"}
       </Button>
     </form>
+  );
+};
+
+const StoryCharacterFields: React.FC<{
+  characters: StoryCharacter[];
+  required?: boolean;
+  onChange: (characters: StoryCharacter[]) => void;
+}> = ({ characters, required = false, onChange }) => {
+  const updateCharacter = (index: number, patch: Partial<StoryCharacter>) => {
+    onChange(characters.map((character, itemIndex) => (itemIndex === index ? { ...character, ...patch } : character)));
+  };
+
+  const removeCharacter = (index: number) => {
+    onChange(characters.filter((_, itemIndex) => itemIndex !== index));
+  };
+
+  return (
+    <section className="grid gap-3 rounded-[var(--radius-md)] border border-[rgba(212,114,92,0.08)] bg-[rgba(126,200,227,0.06)] p-4">
+      <div>
+        <h3 className="text-sm font-bold text-[var(--text-dark)]">故事角色{required ? "" : "（选填）"}</h3>
+        <p className="mt-1 text-xs leading-5 text-[var(--text-light)]">
+          AI 生成故事时会按这里的角色写作；后续创作绘本时会逐个为这些角色选择形象。
+        </p>
+      </div>
+      <div className="grid gap-2">
+        {characters.map((character, index) => (
+          <div key={index} className="grid grid-cols-[1fr_auto_auto] items-center gap-2 max-sm:grid-cols-1">
+            <Input
+              value={character.name}
+              onChange={(event) => updateCharacter(index, { name: event.target.value })}
+              placeholder={index === 0 ? "角色姓名，例如 小雨" : "角色姓名"}
+              maxLength={120}
+              required={required && index === 0}
+            />
+            <label className="inline-flex h-10 items-center gap-2 rounded-[var(--radius-sm)] bg-white px-3 text-sm font-semibold text-[var(--text-mid)]">
+              <input
+                type="checkbox"
+                checked={character.is_protagonist}
+                onChange={(event) => updateCharacter(index, { is_protagonist: event.target.checked })}
+              />
+              主角
+            </label>
+            <Button type="button" size="sm" variant="ghost" disabled={characters.length === 1} onClick={() => removeCharacter(index)}>
+              删除
+            </Button>
+          </div>
+        ))}
+      </div>
+      <Button type="button" size="sm" variant="outline" onClick={() => onChange([...characters, { name: "", is_protagonist: false }])}>
+        添加角色
+      </Button>
+    </section>
   );
 };
 

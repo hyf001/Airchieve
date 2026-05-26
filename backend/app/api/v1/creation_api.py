@@ -10,9 +10,9 @@ from app.schema.creation import (
     CreationTaskResponse,
     GeneratePagesRequest,
     IdeaStoryGenerateRequest,
+    PageDraftPatch,
     RegenerateRequest,
     SaveBookResponse,
-    StoryboardPagePatch,
 )
 from app.service import creation
 
@@ -83,15 +83,15 @@ async def generate_storyboard(
     return await creation.generate_storyboard(db, user_id, session_id)
 
 
-@router.patch("/sessions/{session_id}/storyboard/pages/{page_id}", response_model=CreationSessionRead)
-async def update_storyboard_page(
+@router.patch("/sessions/{session_id}/page-drafts/{page_id}", response_model=CreationSessionRead)
+async def update_page_draft(
     session_id: int,
     page_id: int,
-    payload: StoryboardPagePatch,
+    payload: PageDraftPatch,
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(current_user_id),
 ) -> CreationSessionRead:
-    return await creation.update_storyboard_page(db, user_id, session_id, page_id, payload)
+    return await creation.update_page_draft(db, user_id, session_id, page_id, payload)
 
 
 @router.post("/sessions/{session_id}/generate-images", response_model=CreationTaskResponse)

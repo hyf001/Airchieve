@@ -3,22 +3,27 @@ import { BookOpen, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { GenerationTaskStatus } from "@/entities/generation-task";
+import type { ArtStyle, CharacterSummary, VoiceSummary } from "@/entities/asset";
 import { type StoryDetail, type StorySummary } from "@/entities/story";
 import { templateApi, type TemplateSummary } from "@/entities/template";
 import { useTaxonomyGroup } from "@/entities/taxonomy";
+import { artStyleLibraryApi } from "@/features/art-style-library";
+import { characterLibraryApi } from "@/features/character-library";
 import { storyLibraryApi } from "@/features/story-library";
+import { voiceLibraryApi } from "@/features/voice-library";
 
 import { creationApi } from "./api";
 import { PathButton } from "./components";
 import { SelectedStoryBodyPanel } from "./SelectedStoryBodyPanel";
-import { CharacterStep } from "./steps/CharacterStep";
+import { CharacterStep, roleCodeFor } from "./steps/CharacterStep";
+import { LipSyncStep } from "./steps/LipSyncStep";
 import { PreviewStep } from "./steps/PreviewStep";
 import { StoryboardStep } from "./steps/StoryboardStep";
 import { StorySourceStep } from "./steps/StorySourceStep";
 import { StyleStep } from "./steps/StyleStep";
 import { TemplateSourceStep } from "./steps/TemplateSourceStep";
-import { VoiceStep } from "./steps/VoiceStep";
-import { sourceLabel, steps, type WizardPath, type WizardStep } from "./constants";
+import { VoiceStep, type VoiceRoleOption } from "./steps/VoiceStep";
+import { sourceLabel, storySteps, templateSteps, type WizardPath, type WizardStep } from "./constants";
 import type { ArtStyleRef, CharacterRef, CreationSession, CreationStorySourceType, GenerationTaskRead, VoiceRef } from "./types";
 
 export const CreationWizard: React.FC = () => {
@@ -33,6 +38,20 @@ export const CreationWizard: React.FC = () => {
   const [ageFilter, setAgeFilter] = useState("");
   const [themeFilter, setThemeFilter] = useState("");
   const [storyPage, setStoryPage] = useState(1);
+  const [artStyles, setArtStyles] = useState<ArtStyle[]>([]);
+  const [artStylesLoading, setArtStylesLoading] = useState(true);
+  const [selectedArtStyle, setSelectedArtStyle] = useState<ArtStyle | null>(null);
+  const [characters, setCharacters] = useState<CharacterSummary[]>([]);
+  const [charactersLoading, setCharactersLoading] = useState(true);
+  const [selectedCharactersByRole, setSelectedCharactersByRole] = useState<Record<string, CharacterSummary | null>>({});
+  const [selectedStoryRoleCode, setSelectedStoryRoleCode] = useState<string | null>(null);
+  const [characterQuery, setCharacterQuery] = useState("");
+  const [characterSourceFilter, setCharacterSourceFilter] = useState<"all" | "system" | "custom">("all");
+  const [characterPage, setCharacterPage] = useState(1);
+  const [voices, setVoices] = useState<VoiceSummary[]>([]);
+  const [voicesLoading, setVoicesLoading] = useState(true);
+  const [selectedVoice, setSelectedVoice] = useState<VoiceSummary | null>(null);
+  const [selectedVoiceRoleCode, setSelectedVoiceRoleCode] = useState("narration");
   const [session, setSession] = useState<CreationSession | null>(null);
   const [task, setTask] = useState<GenerationTaskRead | null>(null);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
@@ -56,6 +75,33 @@ export const CreationWizard: React.FC = () => {
       .then((response) => setStories(response.items))
       .catch(() => setStories([]))
       .finally(() => setStoriesLoading(false));
+  }, []);
+
+  useEffect(() => {
+    characterLibraryApi
+      .list()
+      .then((response) => setCharacters(response.items))
+      .catch(() => setCharacters([]))
+      .finally(() => setCharactersLoading(false));
+  }, []);
+
+  useEffect(() => {
+    artStyleLibraryApi
+      .list()
+      .then((response) => setArtStyles(response.items))
+      .catch(() => setArtStyles([]))
+      .finally(() => setArtStylesLoading(false));
+  }, []);
+
+  useEffect(() => {
+    voiceLibraryApi
+      .list()
+      .then((response) => {
+        setVoices(response.items);
+        setSelectedVoice((current) => current ?? response.items.find((voice) => voice.is_default) ?? response.items[0] ?? null);
+      })
+      .catch(() => setVoices([]))
+      .finally(() => setVoicesLoading(false));
   }, []);
 
   const storyLabels = useMemo(
@@ -86,11 +132,38 @@ export const CreationWizard: React.FC = () => {
     [storyPage, visibleStories],
   );
 
+  const visibleCharacters = useMemo(() => {
+    const query = characterQuery.trim().toLowerCase();
+    return characters.filter((character) => {
+      const styleMatched = selectedArtStyle
+        ? character.art_style_id === selectedArtStyle.id || (!!selectedArtStyle.code && character.art_style_code === selectedArtStyle.code)
+        : path === "template";
+      if (!styleMatched) return false;
+      const sourceMatched =
+        characterSourceFilter === "all" ||
+        (characterSourceFilter === "system" && character.owner_user_id === null) ||
+        (characterSourceFilter === "custom" && character.owner_user_id !== null);
+      if (!sourceMatched) return false;
+      if (character.status !== "active") return false;
+      if (character.moderation_status === "rejected" || character.moderation_status === "hidden") return false;
+      if (!query) return true;
+      return `${character.name} ${character.identity_tag ?? ""} ${character.description ?? ""} ${character.custom_art_style_prompt ?? ""}`.toLowerCase().includes(query);
+    });
+  }, [characterQuery, characterSourceFilter, characters, path, selectedArtStyle]);
+
+  const totalCharacterPages = Math.max(1, Math.ceil(visibleCharacters.length / pageSize));
+  const pagedCharacters = useMemo(
+    () => visibleCharacters.slice((characterPage - 1) * pageSize, characterPage * pageSize),
+    [characterPage, visibleCharacters],
+  );
+
   const resetCreationProgress = () => {
     setSession(null);
     setTask(null);
     setStep("source");
     setMessage(null);
+    setSelectedCharactersByRole({});
+    setSelectedVoiceRoleCode("narration");
   };
 
   useEffect(() => {
@@ -105,6 +178,14 @@ export const CreationWizard: React.FC = () => {
   useEffect(() => {
     setStoryPage((current) => Math.min(current, totalStoryPages));
   }, [totalStoryPages]);
+
+  useEffect(() => {
+    setCharacterPage(1);
+  }, [characterQuery, characterSourceFilter]);
+
+  useEffect(() => {
+    setCharacterPage((current) => Math.min(current, totalCharacterPages));
+  }, [totalCharacterPages]);
 
   useEffect(() => {
     if (!selectedStory) {
@@ -125,23 +206,80 @@ export const CreationWizard: React.FC = () => {
     };
   }, [selectedStory]);
 
-  const activeStepIndex = steps.findIndex((item) => item.value === step);
+  useEffect(() => {
+    if (!task || !session || (task.status !== "queued" && task.status !== "running")) {
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setInterval(async () => {
+      try {
+        const nextTask = await creationApi.getTask(task.id);
+        if (cancelled) return;
+        setTask(nextTask);
+        if (nextTask.status !== "queued" && nextTask.status !== "running") {
+          window.clearInterval(timer);
+          const nextSession = await creationApi.getSession(session.id);
+          if (!cancelled) setSession(nextSession);
+        }
+      } catch {
+        window.clearInterval(timer);
+      }
+    }, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [session, task]);
+
+  const activeSteps = path === "template" ? templateSteps : storySteps;
+  const activeStepIndex = activeSteps.findIndex((item) => item.value === step);
   const canUseTemplate = path === "template" && selectedTemplate !== null;
   const language = selectedStory?.language ?? "zh";
   const pageCount = 8;
+  const storyCharacters = selectedStoryDetail?.characters ?? [];
+  const voiceRoleOptions = useMemo<VoiceRoleOption[]>(
+    () => [
+      { roleCode: "narration", label: "旁白", desc: "用于整本朗读和无角色正文" },
+      ...storyCharacters.map((character, index) => ({
+        roleCode: roleCodeFor(character, index),
+        label: character.name,
+        desc: character.is_protagonist ? "主角对白声音" : "角色对白声音",
+      })),
+    ],
+    [storyCharacters],
+  );
 
-  const previewItems = useMemo(
+  useEffect(() => {
+    const firstRoleCode = storyCharacters.length ? roleCodeFor(storyCharacters[0], 0) : null;
+    setSelectedStoryRoleCode((current) => (current && storyCharacters.some((character, index) => roleCodeFor(character, index) === current) ? current : firstRoleCode));
+  }, [storyCharacters]);
+
+  useEffect(() => {
+    setSelectedVoiceRoleCode((current) => (voiceRoleOptions.some((role) => role.roleCode === current) ? current : "narration"));
+  }, [voiceRoleOptions]);
+
+  const previewItems = useMemo<Array<[string, string]>>(
     () => [
       ["路径", path === "story" ? "基于故事生成" : "基于模板创作"],
       ["来源", path === "story" ? sourceLabel(storySource) : selectedTemplate?.title ?? "待选择"],
       ["故事", path === "story" ? selectedStory?.title ?? "待选择" : selectedTemplate?.title ?? "待选择"],
       ["页数", `${pageCount} 页`],
       ["语言", language === "bilingual" ? "中英双语" : language === "en" ? "英文" : "中文"],
+      ["画风", path === "story" ? selectedArtStyle?.name ?? "待选择" : "模板锁定"],
       ["形象", session?.character_refs?.length ? `${session.character_refs.length} 个角色` : "待确认"],
       ["声音", session?.voice_ref ? String(session.voice_ref.display_name ?? "已选择") : "待选择"],
+      ["对口型", session?.page_drafts?.some((page) => page.lip_sync_url) ? "已生成" : "可跳过"],
     ],
-    [language, pageCount, path, selectedStory?.title, selectedTemplate?.title, session?.character_refs, session?.voice_ref, storySource],
+    [language, pageCount, path, selectedArtStyle?.name, selectedStory?.title, selectedTemplate?.title, session?.character_refs, session?.page_drafts, session?.voice_ref, storySource],
   );
+  const isTaskActive = task?.status === "queued" || task?.status === "running";
+  const isTaskSucceeded = task?.status === "succeeded";
+  const pageDrafts = session?.page_drafts ?? [];
+  const storybookMediaReady =
+    path === "template" ||
+    (pageDrafts.length > 0 && pageDrafts.every((page) => page.image_status === "ready" && page.audio_status === "ready" && page.image_url && page.audio_url));
+  const canContinueFromStoryboard = path === "template" || pageDrafts.length > 0;
+  const canContinueFromVoice = path === "template" || storybookMediaReady;
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -187,34 +325,70 @@ export const CreationWizard: React.FC = () => {
         return;
       }
       await ensureSession();
-      setStep(path === "template" ? "character" : "character");
+      setStep(path === "template" ? "character" : "style");
     });
 
   const handleConfirmCharacters = () =>
     run(async () => {
       const current = await ensureSession();
-      const characterRefs: CharacterRef[] =
-        path === "template"
-          ? [{ source: "child_profile_default", role_code: "hero", display_name: "小星星" }]
-          : [
-              { source: "story_original", role_code: "hero", display_name: "故事主角" },
-              { source: "system_character", role_code: "friend", display_name: "系统伙伴" },
-            ];
+      const characterRefs: CharacterRef[] = storyCharacters.map((storyCharacter, index) => {
+        const roleCode = roleCodeFor(storyCharacter, index);
+        const selectedCharacter = selectedCharactersByRole[roleCode] ?? null;
+        return selectedCharacter
+          ? {
+              source: selectedCharacter.owner_user_id === null ? "system_character" : "user_character",
+              character_id: selectedCharacter.id,
+              role_code: roleCode,
+              display_name: selectedCharacter.name,
+              story_character_name: storyCharacter.name,
+              is_protagonist: storyCharacter.is_protagonist,
+            }
+          : {
+              source: "generated",
+              character_id: null,
+              role_code: roleCode,
+              display_name: storyCharacter.name,
+              story_character_name: storyCharacter.name,
+              is_protagonist: storyCharacter.is_protagonist,
+            };
+      });
       const updated = await creationApi.updateConfig(current.id, { character_refs: characterRefs });
       setSession(updated);
-      setStep(path === "template" ? "voice" : "style");
+      if (path === "template") {
+        setStep("voice");
+        return;
+      }
+      const response = await creationApi.generateStoryboard(current.id);
+      setSession(response.session);
+      setTask(response.task);
+      setStep("storyboard");
     });
 
   const handleConfirmStyle = () =>
     run(async () => {
       const current = await ensureSession();
-      const artStyleRef: ArtStyleRef = { source: "system", art_style_code: "watercolor" };
+      if (!selectedArtStyle) {
+        setMessage("请先选择一个画风");
+        return;
+      }
+      const artStyleRef: ArtStyleRef = {
+        source: selectedArtStyle.owner_user_id === null ? "system" : "custom",
+        art_style_code: selectedArtStyle.code,
+        art_style_id: selectedArtStyle.id,
+        custom_prompt: selectedArtStyle.owner_user_id !== null ? selectedArtStyle.prompt : null,
+      };
       const updated = await creationApi.updateConfig(current.id, { art_style_ref: artStyleRef });
       setSession(updated);
-      const response = await creationApi.generateStoryboard(current.id);
-      setSession(response.session);
-      setTask(response.task);
-      setStep("storyboard");
+      setSelectedCharactersByRole((currentSelection) =>
+        Object.fromEntries(
+          Object.entries(currentSelection).filter(([, character]) =>
+            character
+              ? character.art_style_id === selectedArtStyle.id || (!!selectedArtStyle.code && character.art_style_code === selectedArtStyle.code)
+              : true,
+          ),
+        ),
+      );
+      setStep("character");
     });
 
   const handleGenerateImages = () =>
@@ -223,20 +397,40 @@ export const CreationWizard: React.FC = () => {
       const response = await creationApi.generateImages(session.id);
       setSession(response.session);
       setTask(response.task);
-      setStep("voice");
     });
 
   const handleConfirmVoice = () =>
     run(async () => {
       const current = await ensureSession();
-      const voiceRef: VoiceRef = path === "template" ? { source: "template_default", display_name: "模板默认声音" } : { source: "system", display_name: "温柔姐姐" };
+      const voiceRef: VoiceRef =
+        path === "template" && !selectedVoice
+          ? { source: "template_default", display_name: "模板默认声音", role_code: selectedVoiceRoleCode }
+          : selectedVoice
+            ? {
+                source: selectedVoice.owner_user_id === null ? "system" : "user",
+                voice_id: selectedVoice.id,
+                display_name: selectedVoice.name,
+                role_code: selectedVoiceRoleCode,
+              }
+            : { source: "system", display_name: "系统默认声音", role_code: selectedVoiceRoleCode };
       const updated = await creationApi.updateConfig(current.id, { voice_ref: voiceRef });
       setSession(updated);
       const response = await creationApi.generateAudio(current.id);
       setSession(response.session);
       setTask(response.task);
-      setStep("preview");
     });
+
+  const handleGenerateLipSync = () =>
+    run(async () => {
+      if (!session) return;
+      const response = await creationApi.generateLipSync(session.id);
+      setSession(response.session);
+      setTask(response.task);
+    });
+
+  const handleSkipLipSync = () => {
+    setStep("preview");
+  };
 
   const handleSave = () =>
     run(async () => {
@@ -260,8 +454,8 @@ export const CreationWizard: React.FC = () => {
           </div>
         </div>
 
-        <div className="mb-5 grid grid-cols-6 gap-2 max-md:grid-cols-3">
-          {steps.map((item, index) => (
+        <div className="mb-5 grid grid-cols-7 gap-2 max-lg:grid-cols-4 max-md:grid-cols-3">
+          {activeSteps.map((item, index) => (
             <div key={item.value} className={`rounded-[var(--radius-sm)] px-3 py-2 text-xs font-bold ${index <= activeStepIndex ? "bg-[var(--terracotta)] text-white" : "bg-white text-[var(--text-light)]"}`}>
               {index + 1}. {item.label}
             </div>
@@ -306,22 +500,103 @@ export const CreationWizard: React.FC = () => {
             )
           ) : null}
 
-          {step === "character" ? <CharacterStep path={path} /> : null}
-          {step === "style" ? <StyleStep /> : null}
-          {step === "storyboard" ? <StoryboardStep session={session} /> : null}
-          {step === "voice" ? <VoiceStep path={path} /> : null}
+          {step === "character" ? (
+            <CharacterStep
+              assetCharacters={pagedCharacters}
+              charactersLoading={charactersLoading}
+              page={characterPage}
+              path={path}
+              query={characterQuery}
+              selectedCharactersByRole={selectedCharactersByRole}
+              selectedRoleCode={selectedStoryRoleCode}
+              sourceFilter={characterSourceFilter}
+              storyCharacters={storyCharacters}
+              total={visibleCharacters.length}
+              totalPages={totalCharacterPages}
+              onPageChange={setCharacterPage}
+              onQueryChange={setCharacterQuery}
+              onSelectAssetCharacter={(character) => {
+                if (!selectedStoryRoleCode) return;
+                setSelectedCharactersByRole((current) => ({ ...current, [selectedStoryRoleCode]: character }));
+                setSession(null);
+                setTask(null);
+                setMessage(null);
+              }}
+              onSelectStoryRole={setSelectedStoryRoleCode}
+              onSourceFilterChange={setCharacterSourceFilter}
+            />
+          ) : null}
+          {step === "style" ? (
+            <StyleStep
+              artStyles={artStyles}
+              artStylesLoading={artStylesLoading}
+              selectedArtStyleId={selectedArtStyle?.id ?? null}
+              onSelectArtStyle={(artStyle) => {
+                setSelectedArtStyle(artStyle);
+                setSelectedCharactersByRole({});
+                setSession(null);
+                setTask(null);
+                setMessage(null);
+              }}
+            />
+          ) : null}
+          {step === "storyboard" ? <StoryboardStep session={session} onSessionChange={setSession} /> : null}
+          {step === "voice" ? (
+            <VoiceStep
+              path={path}
+              roleOptions={voiceRoleOptions}
+              selectedRoleCode={selectedVoiceRoleCode}
+              selectedVoiceId={selectedVoice?.id ?? null}
+              voices={voices}
+              voicesLoading={voicesLoading}
+              onSelectRole={setSelectedVoiceRoleCode}
+              onSelectVoice={(voice) => {
+                setSelectedVoice(voice);
+                setTask(null);
+                setMessage(null);
+              }}
+            />
+          ) : null}
+          {step === "lipSync" ? <LipSyncStep session={session} /> : null}
           {step === "preview" ? <PreviewStep previewItems={previewItems} /> : null}
 
           <div className="mt-6 flex flex-wrap justify-between gap-3">
-            <Button type="button" variant="ghost" disabled={step === "source" || busy} onClick={() => setStep(steps[Math.max(0, activeStepIndex - 1)].value)}>
+            <Button type="button" variant="ghost" disabled={step === "source" || busy} onClick={() => setStep(activeSteps[Math.max(0, activeStepIndex - 1)].value)}>
               上一步
             </Button>
-            {step === "source" ? <Button disabled={busy} onClick={handleContinueFromSource}>下一步：选择形象</Button> : null}
-            {step === "character" ? <Button disabled={busy} onClick={handleConfirmCharacters}>{path === "template" ? "下一步：选择声音" : "下一步：确定画风"}</Button> : null}
-            {step === "style" ? <Button disabled={busy} onClick={handleConfirmStyle}>生成分镜</Button> : null}
-            {step === "storyboard" ? <Button disabled={busy} onClick={handleGenerateImages}>生成全部插图</Button> : null}
-            {step === "voice" ? <Button disabled={busy} onClick={handleConfirmVoice}>生成语音</Button> : null}
-            {step === "preview" ? <Button disabled={busy || !session} onClick={handleSave}>保存到我的绘本库</Button> : null}
+            {step === "source" ? <Button disabled={busy} onClick={handleContinueFromSource}>{path === "template" ? "下一步：选择形象" : "下一步：确定画风"}</Button> : null}
+            {step === "style" ? <Button disabled={busy} onClick={handleConfirmStyle}>下一步：选择形象</Button> : null}
+            {step === "character" ? <Button disabled={busy} onClick={handleConfirmCharacters}>{path === "template" ? "下一步：选择声音" : "生成分镜"}</Button> : null}
+            {step === "storyboard" ? (
+              <div className="flex flex-wrap gap-2">
+                <Button disabled={busy || isTaskActive} onClick={handleGenerateImages}>生成全部插图</Button>
+                <Button type="button" variant="secondary" disabled={busy || !isTaskSucceeded || !canContinueFromStoryboard} onClick={() => setStep("voice")}>
+                  下一步：选择声音
+                </Button>
+              </div>
+            ) : null}
+            {step === "voice" ? (
+              <div className="flex flex-wrap gap-2">
+                <Button disabled={busy || isTaskActive} onClick={handleConfirmVoice}>生成语音</Button>
+                <Button type="button" variant="secondary" disabled={busy || !canContinueFromVoice} onClick={() => setStep(path === "story" ? "lipSync" : "preview")}>
+                  {path === "story" ? "下一步：对口型" : "下一步：预览"}
+                </Button>
+              </div>
+            ) : null}
+            {step === "lipSync" ? (
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="ghost" disabled={busy} onClick={handleSkipLipSync}>
+                  跳过对口型
+                </Button>
+                <Button disabled={busy || isTaskActive || !storybookMediaReady} onClick={handleGenerateLipSync}>
+                  生成对口型
+                </Button>
+                <Button type="button" variant="secondary" disabled={busy || isTaskActive} onClick={() => setStep("preview")}>
+                  下一步：预览
+                </Button>
+              </div>
+            ) : null}
+            {step === "preview" ? <Button disabled={busy || !session || !storybookMediaReady} onClick={handleSave}>保存到我的绘本库</Button> : null}
           </div>
         </section>
       </section>
@@ -329,6 +604,24 @@ export const CreationWizard: React.FC = () => {
       <aside className="sticky top-8 space-y-5 self-start">
         {step === "source" && path === "story" ? (
           <SelectedStoryBodyPanel story={selectedStory} storyDetail={selectedStoryDetail} />
+        ) : step === "character" ? (
+          <section className="app-card p-5">
+            <h2 className="font-display text-2xl">角色形象</h2>
+            <dl className="mt-4 space-y-3">
+              {storyCharacters.length ? storyCharacters.map((character, index) => {
+                const roleCode = roleCodeFor(character, index);
+                const selectedCharacter = selectedCharactersByRole[roleCode] ?? null;
+                return (
+                  <div key={roleCode} className="border-b border-[rgba(212,114,92,0.08)] pb-3 text-sm">
+                    <dt className="font-bold text-[var(--text-dark)]">{character.name}{character.is_protagonist ? "（主角）" : ""}</dt>
+                    <dd className="mt-1 text-[var(--text-light)]">{selectedCharacter?.name ?? "不指定形象，AI生成"}</dd>
+                  </div>
+                );
+              }) : (
+                <p className="text-sm leading-6 text-[var(--text-light)]">故事没有角色定义，系统会按正文生成形象。</p>
+              )}
+            </dl>
+          </section>
         ) : (
           <>
             <section className="app-card p-5">

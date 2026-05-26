@@ -127,7 +127,7 @@ async def create_share_link(db: AsyncSession, user_id: int, book_id: int, payloa
         book_id=book.id,
         token_hash=_hash(token),
         title_snapshot=book.title,
-        cover_asset_id_snapshot=book.cover_asset_id,
+        cover_asset_id_snapshot=None,
         cover_url_snapshot=book.cover_url,
         access_scope=payload.access_scope,
         password_hash=_hash(payload.password) if payload.password else None,

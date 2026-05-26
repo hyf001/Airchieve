@@ -40,7 +40,7 @@ Generation task execution 是 AIrchieve 后端统一的异步生成任务执行�
 | `storyboard` | `creation` | [[creation-generation]] 的分镜页 |
 | `image` | `creation` | 分镜页图片 asset 和 page image 字段 |
 | `audio` | `creation` | 分镜页音频 asset 和 page audio 字段 |
-| `lip_sync` | `creation` | 分镜页对口型视频 URL 或视频 asset |
+| `lip_sync` | `creation` | 分镜页对口型视频 URL |
 | `template_composite` | `template_creation_record` | [[template]] 的模板替换预览或个人绘本结果 |
 | `pdf_export` | `export_job` | [[share-export-privacy]] 的导出文件 asset 和下载 URL |
 

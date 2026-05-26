@@ -52,9 +52,9 @@ class Story(TimestampMixin, Base):
     )
     title: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-    
     body: Mapped[str] = mapped_column(Text, nullable=False)
     cover_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    meta: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     age_range_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     theme_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     education_goal_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
@@ -79,3 +79,8 @@ class Story(TimestampMixin, Base):
         index=True,
     )
     view_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    @property
+    def characters(self) -> list[dict]:
+        value = (self.meta or {}).get("characters")
+        return value if isinstance(value, list) else []

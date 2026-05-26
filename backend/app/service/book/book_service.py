@@ -3,21 +3,38 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.model.book import Book, BookAccessLevel, BookContentStatus, BookModerationStatus, BookPage, BookPublishStatus
+from app.model.asset import Voice
+from app.model.book import (
+    Book,
+    BookAccessLevel,
+    BookContentStatus,
+    BookLipSyncStatus,
+    BookModerationStatus,
+    BookPage,
+    BookPlaybackMediaMode,
+    BookPlaybackSegment,
+    BookPlaybackSegmentType,
+    BookPublishStatus,
+    BookSegmentFallbackMode,
+    BookSoundEffectCue,
+    BookSubtitleCueType,
+)
 from app.schema.entitlement import AccessDecision
 from app.schema.membership import EntitlementAccessLevel
 from app.model.taxonomy import TaxonomyType
 from app.schema.book import (
     BookDetailRead,
-    BookDialogueRead,
     BookListRead,
     BookLearningCardRead,
     BookPageRead,
+    BookPlaybackSegmentRead,
     BookPlayerOptions,
     BookPlayerPayload,
     BookReadingPromptRead,
     BookSimilarCreationRequest,
     BookSort,
+    BookSoundEffectCueRead,
+    BookSubtitleCueRead,
     BookSummary,
     BookVoiceOption,
     SimilarCreationSessionRead,
@@ -120,6 +137,7 @@ async def _book_detail_read(db: AsyncSession, book: Book) -> BookDetailRead:
         source_story_id=book.source_story_id,
         narrative_style_code=book.narrative_style_code,
         art_style_code=book.art_style_code,
+        background_music_url=book.background_music_url,
         publish_status=book.publish_status,
         is_featured=book.is_featured,
         created_at=book.created_at,
@@ -132,7 +150,13 @@ async def _get_book_for_player(db: AsyncSession, book_id: int, user_id: int | No
     result = await db.execute(
         select(Book)
         .options(
-            selectinload(Book.pages).selectinload(BookPage.dialogues),
+            selectinload(Book.pages)
+            .selectinload(BookPage.playback_segments)
+            .selectinload(BookPlaybackSegment.subtitle_cues),
+            selectinload(Book.pages).selectinload(BookPage.sound_effects),
+            selectinload(Book.pages)
+            .selectinload(BookPage.playback_segments)
+            .selectinload(BookPlaybackSegment.sound_effects),
             selectinload(Book.reading_prompts),
             selectinload(Book.learning_cards),
         )
@@ -164,12 +188,10 @@ def _fallback_pages(book: Book) -> list[BookPageRead]:
                 narration_text=book.summary or book.title,
                 visual_prompt=book.summary,
                 image_url=book.cover_url if page_no == 1 else None,
-                video_url=None,
                 audio_url=None,
-                background_music_url=None,
                 duration_seconds=max(12, round(book.duration_seconds / page_count)),
-                lip_sync_status="none",
-                dialogues=[],
+                playback_segments=[],
+                sound_effects=[],
             )
         )
     return pages
@@ -185,32 +207,105 @@ def _page_read(page: BookPage) -> BookPageRead:
         narration_text=page.narration_text,
         visual_prompt=page.visual_prompt,
         image_url=page.image_url,
-        video_url=page.video_url,
         audio_url=page.audio_url,
-        background_music_url=page.background_music_url,
-        sound_effect_urls=page.sound_effect_urls or [],
         duration_seconds=page.duration_seconds,
-        lip_sync_status=page.lip_sync_status,
-        dialogues=[
-            BookDialogueRead(
-                id=dialogue.id,
-                character_ref=dialogue.character_ref,
-                text=dialogue.text,
-                audio_url=dialogue.audio_url,
-                start_ms=dialogue.start_ms,
-                end_ms=dialogue.end_ms,
-                lip_sync_url=dialogue.lip_sync_url,
-                sort_order=dialogue.sort_order,
-            )
-            for dialogue in page.dialogues
-        ],
+        playback_segments=_playback_segments_for_page(page),
+        sound_effects=[_sound_effect_read(effect) for effect in page.sound_effects],
     )
 
 
-def _voice_options_for_book(book: Book) -> tuple[BookVoiceOption | None, list[BookVoiceOption]]:
-    if book.default_voice_name is None:
+def _playback_segments_for_page(page: BookPage) -> list[BookPlaybackSegmentRead]:
+    if page.playback_segments:
+        return [_segment_read(segment) for segment in page.playback_segments]
+    if not (page.audio_url or page.narration_text or page.text_zh or page.text_en):
+        return []
+    return [
+        BookPlaybackSegmentRead(
+            id=-(page.id),
+            segment_type=BookPlaybackSegmentType.NARRATION,
+            speaker_ref=None,
+            image_url=page.image_url,
+            audio_url=page.audio_url,
+            lip_sync_url=None,
+            media_mode=BookPlaybackMediaMode.AUDIO,
+            start_ms=0,
+            end_ms=page.duration_seconds * 1000 if page.duration_seconds is not None else None,
+            fallback_mode=BookSegmentFallbackMode.PAGE_IMAGE_AUDIO,
+            lip_sync_status=BookLipSyncStatus.NONE,
+            sort_order=0,
+            subtitle_cues=[
+                BookSubtitleCueRead(
+                    id=-(page.id),
+                    cue_type=BookSubtitleCueType.NARRATION,
+                    speaker_ref=None,
+                    start_ms=0,
+                    end_ms=page.duration_seconds * 1000 if page.duration_seconds is not None else None,
+                    text_zh=page.narration_text or page.text_zh,
+                    text_en=page.text_en,
+                    position="bottom",
+                    position_config=None,
+                    sort_order=0,
+                )
+            ],
+            sound_effects=[],
+        )
+    ]
+
+
+def _segment_read(segment: BookPlaybackSegment) -> BookPlaybackSegmentRead:
+    return BookPlaybackSegmentRead(
+        id=segment.id,
+        segment_type=segment.segment_type,
+        speaker_ref=segment.speaker_ref,
+        image_url=segment.image_url,
+        audio_url=segment.audio_url,
+        lip_sync_url=segment.lip_sync_url,
+        media_mode=segment.media_mode,
+        start_ms=segment.start_ms,
+        end_ms=segment.end_ms,
+        fallback_mode=segment.fallback_mode,
+        lip_sync_status=segment.lip_sync_status,
+        sort_order=segment.sort_order,
+        subtitle_cues=[
+            BookSubtitleCueRead(
+                id=cue.id,
+                cue_type=cue.cue_type,
+                speaker_ref=cue.speaker_ref,
+                start_ms=cue.start_ms,
+                end_ms=cue.end_ms,
+                text_zh=cue.text_zh,
+                text_en=cue.text_en,
+                position=cue.position,
+                position_config=cue.position_config,
+                sort_order=cue.sort_order,
+            )
+            for cue in segment.subtitle_cues
+        ],
+        sound_effects=[_sound_effect_read(effect) for effect in segment.sound_effects],
+    )
+
+
+def _sound_effect_read(effect: BookSoundEffectCue) -> BookSoundEffectCueRead:
+    return BookSoundEffectCueRead(
+        id=effect.id,
+        segment_id=effect.segment_id,
+        trigger_type=effect.trigger_type,
+        sound_effect_url=effect.sound_effect_url,
+        start_ms=effect.start_ms,
+        end_ms=effect.end_ms,
+        volume=effect.volume,
+        loop=effect.loop,
+        sort_order=effect.sort_order,
+    )
+
+
+async def _voice_options_for_book(db: AsyncSession, book: Book) -> tuple[BookVoiceOption | None, list[BookVoiceOption]]:
+    if book.default_voice_id is None:
         return None, []
-    default_voice = BookVoiceOption(id=book.default_voice_id, name=book.default_voice_name, source="book")
+    voice = await db.get(Voice, book.default_voice_id)
+    if voice is None:
+        return None, []
+    default_voice = BookVoiceOption(id=voice.id, name=voice.name, source="book")
     return default_voice, [default_voice]
 
 
@@ -270,7 +365,7 @@ async def get_player_payload(
         for card in book.learning_cards
         if card.status == BookContentStatus.VISIBLE
     ]
-    default_voice, voice_options = _voice_options_for_book(book)
+    default_voice, voice_options = await _voice_options_for_book(db, book)
     return BookPlayerPayload(
         book=detail,
         pages=pages,

@@ -10,9 +10,9 @@ from app.model.account import (
 from app.model.analytics import AnalyticsDailyMetric, AnalyticsEvent
 from app.model.audit import AuditLog
 from app.model.asset import ArtStyle, Asset, Character, Voice
-from app.model.book import Book, BookDialogue, BookLearningCard, BookPage, BookReadingPrompt
+from app.model.book import Book, BookLearningCard, BookPage, BookPlaybackSegment, BookReadingPrompt, BookSoundEffectCue, BookSubtitleCue
 from app.model.ai_provider import AiProviderCall, AiProviderUsageRecord
-from app.model.creation import CreationSession, CreationStoryboardPage
+from app.model.creation import CreationPageDraft, CreationSession
 from app.model.domain_event import DomainEvent, DomainEventDelivery
 from app.model.entitlement import EntitlementQuotaReservation
 from app.model.export import ExportJob
@@ -42,14 +42,16 @@ __all__ = [
     "Asset",
     "Base",
     "Book",
-    "BookDialogue",
     "BookLearningCard",
     "BookPage",
+    "BookPlaybackSegment",
     "BookReadingPrompt",
+    "BookSoundEffectCue",
+    "BookSubtitleCue",
     "ChildProfile",
     "Character",
+    "CreationPageDraft",
     "CreationSession",
-    "CreationStoryboardPage",
     "DomainEvent",
     "DomainEventDelivery",
     "EntitlementQuotaReservation",

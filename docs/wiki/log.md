@@ -66,3 +66,12 @@
 - Updated `entities/asset-storage.md` with system voice `voice_style_code` ownership and TODOs for sample audio and validation.
 - Updated `entities/taxonomy.md` with Aliyun voice_style semantics and TODOs for metadata schema and periodic voice-list review.
 - Updated `concepts/source-inventory.md` and `index.md`.
+
+## [2026-05-25] update | Book player media track clarification
+
+- Updated `entities/book-player-reading.md` with playback segment rules for narrator/reading clips versus character dialogue clips.
+- Clarified that narrator clips use page image URL + narration audio URL + background music, while character dialogue clips use lip-sync URL + dialogue audio URL + background music.
+- Clarified that playable book media stores URL contracts for image, audio, and lip-sync results rather than asset ids.
+- Updated `concepts/generation-task-execution.md` so lip-sync task output is described as a URL.
+- Added subtitle-track requirements for narrator and dialogue text across Chinese, English, and bilingual display modes.
+- Added design rules for seamless video-like playback using a unified page timeline, preloading, transitions, audio mixing, and subtitle cue synchronization.

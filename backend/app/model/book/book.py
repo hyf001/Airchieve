@@ -46,6 +46,35 @@ class BookLipSyncStatus(StrEnum):
     FAILED = "failed"
 
 
+class BookPlaybackSegmentType(StrEnum):
+    NARRATION = "narration"
+    DIALOGUE = "dialogue"
+
+
+class BookPlaybackMediaMode(StrEnum):
+    AUDIO = "audio"
+    LIP_SYNC = "lip_sync"
+
+
+class BookSubtitleCueType(StrEnum):
+    NARRATION = "narration"
+    DIALOGUE = "dialogue"
+    INTERACTION = "interaction"
+
+
+class BookSubtitlePosition(StrEnum):
+    BOTTOM = "bottom"
+    TOP = "top"
+    CENTER = "center"
+    CUSTOM = "custom"
+
+
+class BookSegmentFallbackMode(StrEnum):
+    NONE = "none"
+    PAGE_IMAGE_AUDIO = "page_image_audio"
+    PAGE_IMAGE_DIALOGUE_AUDIO = "page_image_dialogue_audio"
+
+
 class BookPromptType(StrEnum):
     QUESTION = "question"
     INTERACTION = "interaction"
@@ -54,6 +83,11 @@ class BookPromptType(StrEnum):
 class BookContentStatus(StrEnum):
     VISIBLE = "visible"
     HIDDEN = "hidden"
+
+
+class BookSoundEffectTriggerType(StrEnum):
+    PAGE = "page"
+    SEGMENT = "segment"
 
 
 class Book(TimestampMixin, Base):
@@ -71,8 +105,8 @@ class Book(TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
     subtitle: Mapped[str | None] = mapped_column(String(240), nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-    cover_asset_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cover_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    background_music_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     age_range_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     theme_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     education_goal_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
@@ -81,9 +115,7 @@ class Book(TimestampMixin, Base):
     reading_level: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     narrative_style_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     art_style_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    custom_art_style_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     default_voice_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    default_voice_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     page_count: Mapped[int] = mapped_column(Integer, nullable=False, default=8)
     duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=360)
     access_level: Mapped[BookAccessLevel] = mapped_column(
@@ -138,47 +170,117 @@ class BookPage(TimestampMixin, Base):
     text_en: Mapped[str | None] = mapped_column(Text, nullable=True)
     narration_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     visual_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
-    image_asset_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    video_asset_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    video_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    audio_asset_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     audio_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    background_music_asset_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    background_music_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    sound_effect_asset_ids: Mapped[list[int]] = mapped_column(JSON, nullable=False, default=list)
-    sound_effect_urls: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    book: Mapped[Book] = relationship(back_populates="pages")
+    playback_segments: Mapped[list["BookPlaybackSegment"]] = relationship(
+        back_populates="page",
+        cascade="all, delete-orphan",
+        order_by="BookPlaybackSegment.sort_order",
+    )
+    sound_effects: Mapped[list["BookSoundEffectCue"]] = relationship(
+        back_populates="page",
+        cascade="all, delete-orphan",
+        order_by="BookSoundEffectCue.sort_order",
+    )
+
+
+class BookPlaybackSegment(Base):
+    __tablename__ = "book_playback_segments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    page_id: Mapped[int] = mapped_column(ForeignKey("book_pages.id"), nullable=False, index=True)
+    segment_type: Mapped[BookPlaybackSegmentType] = mapped_column(
+        Enum(BookPlaybackSegmentType),
+        nullable=False,
+        index=True,
+    )
+    speaker_ref: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    audio_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lip_sync_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    media_mode: Mapped[BookPlaybackMediaMode] = mapped_column(
+        Enum(BookPlaybackMediaMode),
+        nullable=False,
+        default=BookPlaybackMediaMode.AUDIO,
+    )
+    start_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    end_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fallback_mode: Mapped[BookSegmentFallbackMode] = mapped_column(
+        Enum(BookSegmentFallbackMode),
+        nullable=False,
+        default=BookSegmentFallbackMode.NONE,
+    )
     lip_sync_status: Mapped[BookLipSyncStatus] = mapped_column(
         Enum(BookLipSyncStatus),
         nullable=False,
         default=BookLipSyncStatus.NONE,
     )
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
-    book: Mapped[Book] = relationship(back_populates="pages")
-    dialogues: Mapped[list["BookDialogue"]] = relationship(
-        back_populates="page",
+    page: Mapped[BookPage] = relationship(back_populates="playback_segments")
+    subtitle_cues: Mapped[list["BookSubtitleCue"]] = relationship(
+        back_populates="segment",
         cascade="all, delete-orphan",
-        order_by="BookDialogue.sort_order",
+        order_by="BookSubtitleCue.sort_order",
+    )
+
+    sound_effects: Mapped[list["BookSoundEffectCue"]] = relationship(
+        back_populates="segment",
+        cascade="all, delete-orphan",
+        order_by="BookSoundEffectCue.sort_order",
     )
 
 
-class BookDialogue(Base):
-    __tablename__ = "book_dialogues"
+class BookSubtitleCue(Base):
+    __tablename__ = "book_subtitle_cues"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    segment_id: Mapped[int] = mapped_column(ForeignKey("book_playback_segments.id"), nullable=False, index=True)
+    cue_type: Mapped[BookSubtitleCueType] = mapped_column(
+        Enum(BookSubtitleCueType),
+        nullable=False,
+        index=True,
+    )
+    speaker_ref: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    start_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    end_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    text_zh: Mapped[str | None] = mapped_column(Text, nullable=True)
+    text_en: Mapped[str | None] = mapped_column(Text, nullable=True)
+    position: Mapped[BookSubtitlePosition] = mapped_column(
+        Enum(BookSubtitlePosition),
+        nullable=False,
+        default=BookSubtitlePosition.BOTTOM,
+    )
+    position_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    segment: Mapped[BookPlaybackSegment] = relationship(back_populates="subtitle_cues")
+
+
+class BookSoundEffectCue(Base):
+    __tablename__ = "book_sound_effect_cues"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     page_id: Mapped[int] = mapped_column(ForeignKey("book_pages.id"), nullable=False, index=True)
-    character_ref: Mapped[str] = mapped_column(String(120), nullable=False)
-    text: Mapped[str] = mapped_column(Text, nullable=False)
-    audio_asset_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    audio_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    start_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    segment_id: Mapped[int | None] = mapped_column(ForeignKey("book_playback_segments.id"), nullable=True, index=True)
+    trigger_type: Mapped[BookSoundEffectTriggerType] = mapped_column(
+        Enum(BookSoundEffectTriggerType),
+        nullable=False,
+        default=BookSoundEffectTriggerType.PAGE,
+        index=True,
+    )
+    sound_effect_url: Mapped[str] = mapped_column(Text, nullable=False)
+    start_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     end_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    lip_sync_asset_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    lip_sync_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    volume: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    loop: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
-    page: Mapped[BookPage] = relationship(back_populates="dialogues")
+    page: Mapped[BookPage] = relationship(back_populates="sound_effects")
+    segment: Mapped[BookPlaybackSegment | None] = relationship(back_populates="sound_effects")
 
 
 class BookReadingPrompt(TimestampMixin, Base):

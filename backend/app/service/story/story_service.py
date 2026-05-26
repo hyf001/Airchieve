@@ -16,6 +16,7 @@ from app.schema.generation_task import GenerationTaskCreate
 from app.schema.story import (
     StartCreationFromStoryRequest,
     StoryCreate,
+    StoryCharacter,
     StoryGenerateRequest,
     StoryGenerationTaskResponse,
     StoryCreationSessionRead,
@@ -32,6 +33,12 @@ from app.service import ai_provider
 
 def _story_summary(story: Story) -> StorySummary:
     return StorySummary.model_validate(story)
+
+
+def _story_meta_with_characters(characters: list[StoryCharacter] | None) -> dict:
+    if characters is None:
+        return {}
+    return {"characters": [character.model_dump(mode="json") for character in characters]}
 
 
 async def _validate_story_taxonomy(
@@ -95,6 +102,7 @@ async def get_story(db: AsyncSession, story_id: int, user_id: int | None = None)
     return StoryRead(
         **_story_summary(story).model_dump(),
         body=story.body,
+        characters=story.characters,
         moderation_status=story.moderation_status,
         generated_books=await list_generated_books(db, story.id, user_id=user_id),
     )
@@ -114,6 +122,7 @@ async def create_user_story(db: AsyncSession, user_id: int, payload: StoryCreate
         title=payload.title,
         summary=payload.summary,
         body=payload.body,
+        meta=_story_meta_with_characters(payload.characters),
         age_range_codes=payload.age_range_codes,
         theme_codes=payload.theme_codes,
         education_goal_codes=payload.education_goal_codes,
@@ -142,6 +151,7 @@ async def generate_user_story(db: AsyncSession, user_id: int, payload: StoryGene
         title="AI 故事生成中",
         summary=payload.idea_prompt[:160],
         body=payload.idea_prompt,
+        meta=_story_meta_with_characters(payload.characters),
         age_range_codes=payload.age_range_codes,
         theme_codes=payload.theme_codes,
         education_goal_codes=payload.education_goal_codes,
@@ -161,6 +171,7 @@ async def generate_user_story(db: AsyncSession, user_id: int, payload: StoryGene
             user_id=user_id,
             input_payload={
                 "idea_prompt": payload.idea_prompt,
+                "characters": [character.model_dump(mode="json") for character in payload.characters],
                 "language": payload.language,
                 "age_range_codes": payload.age_range_codes,
                 "theme_codes": payload.theme_codes,
@@ -185,6 +196,7 @@ async def run_story_generation_task(db: AsyncSession, task: GenerationTask) -> N
         db,
         task_id=task.id,
         idea_prompt=idea_prompt,
+        characters=list(input_payload.get("characters") or story.characters or []),
         language=str(input_payload.get("language") or story.language),
         age_range_codes=list(input_payload.get("age_range_codes") or story.age_range_codes or []),
         theme_codes=list(input_payload.get("theme_codes") or story.theme_codes or []),
@@ -193,6 +205,7 @@ async def run_story_generation_task(db: AsyncSession, task: GenerationTask) -> N
     story.title = generated_story["title"]
     story.summary = generated_story["summary"]
     story.body = generated_story["body"]
+    story.meta = {**(story.meta or {}), "characters": list(input_payload.get("characters") or story.characters or [])}
     story.source_type = StorySourceType.GENERATED_IDEA
     story.moderation_status = StoryModerationStatus.APPROVED
     story.publish_status = StoryPublishStatus.PUBLISHED
@@ -220,7 +233,10 @@ async def update_user_story(db: AsyncSession, user_id: int, story_id: int, paylo
         narrative_style_code=data.get("narrative_style_code"),
     )
     for field, value in data.items():
-        setattr(story, field, value)
+        if field == "characters":
+            story.meta = {**(story.meta or {}), "characters": [character.model_dump(mode="json") for character in value]}
+        else:
+            setattr(story, field, value)
     await db.commit()
     await db.refresh(story)
     return await get_story(db, story.id, user_id=user_id)
@@ -249,6 +265,7 @@ async def assert_story_usable(db: AsyncSession, user_id: int, story_id: int) -> 
         age_range_codes=story.age_range_codes or [],
         theme_codes=story.theme_codes or [],
         education_goal_codes=story.education_goal_codes or [],
+        characters=story.characters,
         access_level=story.access_level,
     )
 

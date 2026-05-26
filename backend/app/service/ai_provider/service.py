@@ -111,6 +111,7 @@ async def generate_story(
     *,
     task_id: int | None,
     idea_prompt: str,
+    characters: list[dict] | None = None,
     language: str,
     age_range_codes: list[str] | None = None,
     theme_codes: list[str] | None = None,
@@ -123,6 +124,7 @@ async def generate_story(
     fallback_summary = idea_prompt.strip()[:120]
     prompt = build_story_prompt(
         idea_prompt=idea_prompt,
+        characters=characters,
         language=language,
         age_range_codes=age_range_codes,
         theme_codes=theme_codes,
@@ -131,6 +133,7 @@ async def generate_story(
     request_snapshot = {
         "idea_preview": idea_prompt[:120],
         "language": language,
+        "characters": characters or [],
         "age_range_codes": age_range_codes or [],
         "theme_codes": theme_codes or [],
         "narrative_style_code": narrative_style_code,
@@ -170,13 +173,15 @@ async def generate_structured(db: AsyncSession, *, task_id: int | None, request:
     page_count = int(request.get("target_page_count") or 8)
     title = str(request.get("title") or "专属绘本")
     story_content = str(request.get("story_content") or request.get("story_body") or title)
+    characters = list(request.get("characters") or [])
     request_snapshot = {
         "target_page_count": page_count,
         "title": title,
         "story_preview": story_content[:120],
+        "characters": characters,
     }
     try:
-        prompt = build_storyboard_prompt(title=title, story_content=story_content, page_count=page_count)
+        prompt = build_storyboard_prompt(title=title, story_content=story_content, page_count=page_count, characters=characters)
         raw_text = await _generate_text_with_provider(provider, model, prompt, response_json=True)
         response = storyboard_from_response(raw_text, title=title, page_count=page_count)
         await record_provider_call(
@@ -298,12 +303,21 @@ async def generate_audio(db: AsyncSession, *, task_id: int | None, pages: list[d
         "voice_id": (voice_ref or {}).get("voice_id"),
         "provider_voice_id": (voice_ref or {}).get("provider_voice_id"),
         "emotion_type": (voice_ref or {}).get("emotion_type"),
+        "page_voice_refs": [
+            {
+                "page_id": page["id"],
+                "voice_id": (page.get("voice_config") or voice_ref or {}).get("voice_id"),
+                "provider_voice_id": (page.get("voice_config") or voice_ref or {}).get("provider_voice_id"),
+            }
+            for page in pages
+        ],
     }
     try:
         results = []
         for page in pages:
             narration_text = _narration_text_for_page(page)
-            audio_url = await _generate_audio_with_provider(provider, model, narration_text, voice_ref=voice_ref)
+            page_voice_ref = page.get("voice_config") or voice_ref
+            audio_url = await _generate_audio_with_provider(provider, model, narration_text, voice_ref=page_voice_ref)
             results.append({"page_id": page["id"], "audio_url": audio_url})
         response = {"page_results": results}
         await record_provider_call(

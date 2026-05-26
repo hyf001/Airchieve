@@ -1,6 +1,7 @@
 def build_story_prompt(
     *,
     idea_prompt: str,
+    characters: list[dict] | None = None,
     language: str,
     age_range_codes: list[str] | None = None,
     theme_codes: list[str] | None = None,
@@ -13,6 +14,14 @@ def build_story_prompt(
         supplemental_lines.append(f"- 主题方向：{', '.join(theme_codes)}")
     if narrative_style_code:
         supplemental_lines.append(f"- 叙事风格：{narrative_style_code}")
+    if characters:
+        supplemental_lines.append("- 角色列表：")
+        for character in characters:
+            name = str(character.get("name") or "").strip()
+            if not name:
+                continue
+            role = "主角" if character.get("is_protagonist") else "角色"
+            supplemental_lines.append(f"  - {name}（{role}）")
     supplemental_text = "\n".join(supplemental_lines)
 
     return (
@@ -24,13 +33,22 @@ def build_story_prompt(
         '  "content": "完整故事正文，600到1200字，分段清晰"\n'
         "}\n\n"
         "要求：故事积极、温暖、适合儿童；情节完整，有开端、发展和结尾；语言适合朗读；"
+        "必须使用补充信息里的角色列表，主角需要承担核心行动；"
         "不要包含暴力、惊吓、歧视、成人化或不适宜儿童的内容；不要输出 Markdown；不要解释生成过程。\n\n"
         f"补充信息：\n{supplemental_text}\n\n"
         f"用户灵感：\n{idea_prompt.strip()}"
     )
 
 
-def build_storyboard_prompt(*, title: str, story_content: str, page_count: int) -> str:
+def build_storyboard_prompt(*, title: str, story_content: str, page_count: int, characters: list[dict] | None = None) -> str:
+    character_lines = []
+    for character in characters or []:
+        name = str(character.get("name") or "").strip()
+        if not name:
+            continue
+        role = "主角" if character.get("is_protagonist") else "角色"
+        character_lines.append(f"- {name}（{role}）")
+    character_text = "\n".join(character_lines) if character_lines else "未指定"
     return (
         "你是一名专业儿童绘本视觉导演。请把故事严格拆分为绘本分镜页。\n\n"
         "输出必须是 JSON 对象，结构如下：\n"
@@ -51,5 +69,6 @@ def build_storyboard_prompt(*, title: str, story_content: str, page_count: int) 
         f"要求：pages 必须恰好 {page_count} 页；page_no 从 1 连续递增；"
         "内容适合儿童绘本，积极、温暖，分镜顺序遵循原故事，不添加不适宜内容；"
         "visual_prompt 要只描述可视化画面，不要包含图片中文字。\n\n"
+        f"故事角色：\n{character_text}\n\n"
         f"故事标题：{title}\n\n故事内容：\n{story_content}"
     )
