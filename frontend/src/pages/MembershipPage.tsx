@@ -82,7 +82,7 @@ export const MembershipPage: React.FC = () => {
 
             <section className="mt-8 grid grid-cols-3 gap-5 max-lg:grid-cols-1">
               {plans.map((plan) => (
-                <MembershipPlanCard key={plan.id} plan={plan} currentPlanCode={membership?.plan.code} onSubscribe={handleSubscribe} />
+                <MembershipPlanCard key={plan.id} plan={plan} currentPlanId={membership?.plan.id} onSubscribe={handleSubscribe} />
               ))}
             </section>
 

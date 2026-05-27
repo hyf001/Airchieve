@@ -20,7 +20,6 @@ export interface EntitlementConfig {
 
 export interface MembershipPlan {
   id: number;
-  code: string;
   name: string;
   description: string | null;
   price_cents: number;
@@ -37,7 +36,6 @@ export interface UserMembership {
   user_id: number;
   plan: {
     id: number | null;
-    code: string;
     name: string;
     billing_period: BillingPeriod;
   };
@@ -50,7 +48,7 @@ export interface UserMembership {
 }
 
 export interface UserEntitlements {
-  plan_code: string;
+  plan_id: number | null;
   membership_status: UserMembershipStatus;
   access_level: EntitlementAccessLevel;
   book_access_level: EntitlementAccessLevel;

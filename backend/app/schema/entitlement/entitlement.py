@@ -53,7 +53,7 @@ class VipPermissions(BaseModel):
 
 
 class UserEntitlementsRead(BaseModel):
-    plan_code: str
+    plan_id: int | None = None
     membership_status: UserMembershipStatus
     access_level: EntitlementAccessLevel
     book_access_level: EntitlementAccessLevel

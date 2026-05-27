@@ -55,13 +55,11 @@ def _plan_summary(plan: MembershipPlan | None) -> MembershipPlanSummary:
     if plan is None:
         return MembershipPlanSummary(
             id=None,
-            code="free",
             name="免费版",
             billing_period=BillingPeriod.NONE,
         )
     return MembershipPlanSummary(
         id=plan.id,
-        code=plan.code,
         name=plan.name,
         billing_period=plan.billing_period,
     )
@@ -70,7 +68,6 @@ def _plan_summary(plan: MembershipPlan | None) -> MembershipPlanSummary:
 def _plan_read(plan: MembershipPlan) -> MembershipPlanRead:
     return MembershipPlanRead(
         id=plan.id,
-        code=plan.code,
         name=plan.name,
         description=plan.description,
         price_cents=plan.price_cents,
@@ -108,11 +105,6 @@ def _membership_read(membership: UserMembership | None, user_id: int, plan: Memb
     )
 
 
-async def _get_free_plan(db: AsyncSession) -> MembershipPlan | None:
-    result = await db.execute(select(MembershipPlan).where(MembershipPlan.code == "free"))
-    return result.scalar_one_or_none()
-
-
 async def list_membership_plans(
     db: AsyncSession,
     *,
@@ -142,11 +134,10 @@ async def get_user_membership(db: AsyncSession, user_id: int) -> UserMembershipR
     )
     row = result.one_or_none()
     if row is None:
-        return _membership_read(None, user_id, await _get_free_plan(db))
+        return _membership_read(None, user_id, None)
     membership, plan = row
     if membership.status in {UserMembershipStatus.CANCELED, UserMembershipStatus.EXPIRED}:
-        free_plan = await _get_free_plan(db)
-        return _membership_read(None, user_id, free_plan)
+        return _membership_read(None, user_id, None)
     return _membership_read(membership, user_id, plan)
 
 
@@ -160,21 +151,15 @@ async def get_user_entitlement_config(db: AsyncSession, user_id: int) -> Entitle
     )
     row = result.one_or_none()
     if row is None:
-        free_plan = await _get_free_plan(db)
-        return _config_from_json(free_plan.entitlement_config) if free_plan else default_free_entitlement_config()
+        return default_free_entitlement_config()
     membership, plan = row
     if membership.status != UserMembershipStatus.ACTIVE:
-        free_plan = await _get_free_plan(db)
-        return _config_from_json(free_plan.entitlement_config) if free_plan else default_free_entitlement_config()
+        return default_free_entitlement_config()
     return _config_from_json(plan.entitlement_config)
 
 
 async def create_membership_plan(db: AsyncSession, payload: MembershipPlanCreate) -> MembershipPlanRead:
-    existing = await db.execute(select(MembershipPlan).where(MembershipPlan.code == payload.code))
-    if existing.scalar_one_or_none() is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="会员计划编码已存在")
     plan = MembershipPlan(
-        code=payload.code,
         name=payload.name,
         description=payload.description,
         price_cents=payload.price_cents,
@@ -252,7 +237,7 @@ async def cancel_membership(db: AsyncSession, user_id: int, reason: str | None =
     result = await db.execute(select(UserMembership).where(UserMembership.user_id == user_id).limit(1))
     membership = result.scalar_one_or_none()
     if membership is None:
-        return _membership_read(None, user_id, await _get_free_plan(db))
+        return _membership_read(None, user_id, None)
     membership.status = UserMembershipStatus.CANCELED
     membership.auto_renew = False
     membership.source = MembershipSource.ADMIN if reason else membership.source

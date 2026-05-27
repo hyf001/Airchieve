@@ -1,16 +1,24 @@
 import React from "react";
-import { BarChart3, ClipboardCheck, FileClock, LayoutDashboard, Mic2, Palette, Sparkles, Tags } from "lucide-react";
+import { BarChart3, ClipboardCheck, Crown, FileClock, LayoutDashboard, Mic2, Palette, Sparkles, Tags } from "lucide-react";
 
 import { AuditLogTable } from "@/entities/audit";
-import { AdminArtStyleManager, AdminCharacterManager, AdminDashboard, AdminTaxonomyManager, AdminVoiceManager } from "@/features/admin";
+import {
+  AdminArtStyleManager,
+  AdminCharacterManager,
+  AdminDashboard,
+  AdminMembershipManager,
+  AdminTaxonomyManager,
+  AdminVoiceManager,
+} from "@/features/admin";
 import { AnalyticsDashboard } from "@/features/analytics";
 import { ModerationQueue } from "@/features/moderation";
 import { AppShell } from "@/shared/layout/AppShell";
 
-type AdminTab = "dashboard" | "art-styles" | "characters" | "voices" | "taxonomy" | "moderation" | "analytics" | "audit";
+type AdminTab = "dashboard" | "membership" | "art-styles" | "characters" | "voices" | "taxonomy" | "moderation" | "analytics" | "audit";
 
 const tabs: Array<{ id: AdminTab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { id: "dashboard", label: "概览", icon: LayoutDashboard },
+  { id: "membership", label: "权益", icon: Crown },
   { id: "art-styles", label: "画风", icon: Palette },
   { id: "characters", label: "角色", icon: Sparkles },
   { id: "voices", label: "声音", icon: Mic2 },
@@ -55,6 +63,7 @@ export const AdminPage: React.FC = () => {
 
         <section className="mt-6">
           {tab === "dashboard" ? <AdminDashboard /> : null}
+          {tab === "membership" ? <AdminMembershipManager /> : null}
           {tab === "art-styles" ? <AdminArtStyleManager /> : null}
           {tab === "characters" ? <AdminCharacterManager /> : null}
           {tab === "voices" ? <AdminVoiceManager /> : null}

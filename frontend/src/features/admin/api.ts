@@ -1,11 +1,25 @@
 import { apiClient } from "@/shared/api/client";
 import type { ArtStyle, AssetStorageDTO, CharacterRead, CharacterSummary, ListResponse, VoiceSummary } from "@/entities/asset";
+import type { MembershipPlan, MembershipPlanStatus } from "@/entities/membership";
 import type { GenerationTaskRead } from "@/features/creation/types";
-import type { AdminContentOverviewRead, AdminDashboardRead, SystemArtStyleWrite, SystemCharacterWrite, SystemVoiceWrite } from "./types";
+import type {
+  AdminContentOverviewRead,
+  AdminDashboardRead,
+  MembershipPlanWrite,
+  SystemArtStyleWrite,
+  SystemCharacterWrite,
+  SystemVoiceWrite,
+} from "./types";
 
 export const adminApi = {
   getDashboard: () => apiClient.get<AdminDashboardRead>("/v1/admin/dashboard"),
   getContentOverview: () => apiClient.get<AdminContentOverviewRead>("/v1/admin/content/overview"),
+  listMembershipPlans: () => apiClient.get<MembershipPlan[]>("/v1/admin/membership/plans"),
+  createMembershipPlan: (payload: MembershipPlanWrite) => apiClient.post<MembershipPlan>("/v1/admin/membership/plans", payload),
+  updateMembershipPlan: (id: number, payload: Partial<MembershipPlanWrite>) =>
+    apiClient.patch<MembershipPlan>(`/v1/admin/membership/plans/${id}`, payload),
+  updateMembershipPlanStatus: (id: number, status: MembershipPlanStatus, reason?: string) =>
+    apiClient.patch<MembershipPlan>(`/v1/admin/membership/plans/${id}/status`, { status, reason }),
   listArtStyles: () => apiClient.get<ListResponse<ArtStyle>>("/v1/admin/art-styles"),
   createArtStyle: (payload: SystemArtStyleWrite) => apiClient.post<ArtStyle>("/v1/admin/art-styles", payload),
   updateArtStyle: (id: number, payload: Partial<SystemArtStyleWrite>) =>

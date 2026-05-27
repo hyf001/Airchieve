@@ -37,7 +37,6 @@ class EntitlementConfigDTO(BaseModel):
 
 class MembershipPlanSummary(BaseModel):
     id: int | None = None
-    code: str
     name: str
     billing_period: BillingPeriod
 
@@ -46,7 +45,6 @@ class MembershipPlanRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    code: str
     name: str
     description: str | None = None
     price_cents: int
@@ -60,7 +58,6 @@ class MembershipPlanRead(BaseModel):
 
 
 class MembershipPlanCreate(BaseModel):
-    code: str = Field(min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=120)
     description: str | None = None
     price_cents: int = Field(ge=0)

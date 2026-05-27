@@ -1,5 +1,6 @@
 import type { OperationDashboard } from "@/features/analytics";
 import type { AssetAccessLevel, LibraryItemStatus } from "@/entities/asset";
+import type { BillingPeriod, EntitlementConfig, MembershipPlanStatus } from "@/entities/membership";
 
 export interface AdminDashboardRead {
   pending_moderation_count: number;
@@ -51,4 +52,15 @@ export interface SystemVoiceWrite {
   duration_seconds?: number | null;
   access_level: AssetAccessLevel;
   status: Exclude<LibraryItemStatus, "deleted">;
+}
+
+export interface MembershipPlanWrite {
+  name: string;
+  description?: string | null;
+  price_cents: number;
+  currency: string;
+  billing_period: BillingPeriod;
+  entitlement_config: EntitlementConfig;
+  sort_order: number;
+  status: MembershipPlanStatus;
 }

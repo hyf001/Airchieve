@@ -6,7 +6,7 @@ import type { MembershipPlan } from "./types";
 
 interface MembershipPlanCardProps {
   plan: MembershipPlan;
-  currentPlanCode?: string;
+  currentPlanId?: number | null;
   onSubscribe?: (plan: MembershipPlan) => void;
 }
 
@@ -23,9 +23,9 @@ export const formatPrice = (priceCents: number, currency = "CNY") => {
   return `${prefix}${(priceCents / 100).toFixed(0)}`;
 };
 
-export const MembershipPlanCard: React.FC<MembershipPlanCardProps> = ({ plan, currentPlanCode, onSubscribe }) => {
+export const MembershipPlanCard: React.FC<MembershipPlanCardProps> = ({ plan, currentPlanId, onSubscribe }) => {
   const config = plan.entitlement_config;
-  const isCurrent = currentPlanCode === plan.code;
+  const isCurrent = currentPlanId === plan.id;
   return (
     <article className="app-card flex h-full flex-col p-5">
       <div className="flex items-start justify-between gap-3">

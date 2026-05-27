@@ -112,7 +112,7 @@ async def get_user_entitlements(db: AsyncSession, user_id: int) -> UserEntitleme
         counter = await _get_counter(db, user_id, quota_key, period)
         counters[quota_key] = counter
     return UserEntitlementsRead(
-        plan_code=membership.plan.code,
+        plan_id=membership.plan.id,
         membership_status=membership.status,
         access_level=config.access_level,
         book_access_level=config.book_access_level,
