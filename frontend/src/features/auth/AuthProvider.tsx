@@ -58,13 +58,21 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
       setUser(readStoredUser());
       void refreshUser();
     };
+    const handleAuthExpired = () => {
+      clearAuthSession();
+      setUser(null);
+      setIsLoading(false);
+      showToast("登录已过期，请重新登录", "error");
+    };
     window.addEventListener("airchieve.auth.changed", handleStorageChange);
+    window.addEventListener("airchieve.auth.expired", handleAuthExpired);
     window.addEventListener("storage", handleStorageChange);
     return () => {
       window.removeEventListener("airchieve.auth.changed", handleStorageChange);
+      window.removeEventListener("airchieve.auth.expired", handleAuthExpired);
       window.removeEventListener("storage", handleStorageChange);
     };
-  }, [refreshUser]);
+  }, [refreshUser, showToast]);
 
   const value = React.useMemo(
     () => ({

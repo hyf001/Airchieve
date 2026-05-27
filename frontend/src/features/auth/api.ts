@@ -57,7 +57,7 @@ export const authApi = {
       scene: "register",
       device_id: getDeviceId(),
       captcha_ticket: "slider-local",
-    }),
+    }, { skipAuth: true }),
 
   register: (payload: { username: string; phone: string; password: string; smsCode: string }) =>
     apiClient.post<AuthTokenRead>("/v1/account/auth/register", {
@@ -68,14 +68,14 @@ export const authApi = {
       display_name: payload.username,
       terms_version: TERMS_VERSION,
       privacy_version: PRIVACY_VERSION,
-    }),
+    }, { skipAuth: true }),
 
   loginWithPassword: (payload: { username: string; password: string }) =>
     apiClient.post<AuthTokenRead>("/v1/account/auth/password-login", {
       username: payload.username,
       password: payload.password,
       device_id: getDeviceId(),
-    }),
+    }, { skipAuth: true }),
 };
 
 export const saveAuthSession = (session: AuthTokenRead) => {
