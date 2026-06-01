@@ -67,6 +67,33 @@ export interface VoiceSummary {
   updated_at: string;
 }
 
+export interface BackgroundMusicSummary {
+  id: number;
+  owner_user_id: number | null;
+  name: string;
+  description: string | null;
+  audio_url: string;
+  duration_seconds: number | null;
+  access_level: AssetAccessLevel;
+  source_type: AssetSourceType;
+  is_default: boolean;
+  sort_order: number;
+  status: LibraryItemStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BackgroundMusicBookReference {
+  id: number;
+  title: string;
+  cover_url: string | null;
+  publish_status: string;
+}
+
+export interface BackgroundMusicRead extends BackgroundMusicSummary {
+  referenced_books: BackgroundMusicBookReference[];
+}
+
 export interface ListResponse<T> {
   items: T[];
   total: number;
@@ -77,7 +104,7 @@ export interface ListResponse<T> {
 export interface UploadSessionRead {
   id: number;
   user_id: number | null;
-  purpose: "character" | "voice" | "story_file" | "book_media" | "export" | "task_result";
+  purpose: "character" | "voice" | "background_music" | "story_file" | "book_media" | "export" | "task_result";
   filename: string;
   mime_type: string;
   max_byte_size: number;

@@ -24,7 +24,18 @@ import { StyleStep } from "./steps/StyleStep";
 import { TemplateSourceStep } from "./steps/TemplateSourceStep";
 import { VoiceStep, type VoiceRoleOption } from "./steps/VoiceStep";
 import { sourceLabel, storySteps, templateSteps, type WizardPath, type WizardStep } from "./constants";
-import type { ArtStyleRef, CharacterRef, CreationSession, CreationStorySourceType, GenerationTaskRead, VoiceRef } from "./types";
+import type { ArtStyleRef, CharacterRef, CreationSession, CreationStep, CreationStorySourceType, GenerationTaskRead, VoiceRef } from "./types";
+
+const wizardStepByCreationStep: Record<CreationStep, WizardStep> = {
+  story: "source",
+  template: "source",
+  art_style: "style",
+  character: "character",
+  storyboard: "storyboard",
+  voice: "voice",
+  lip_sync: "lipSync",
+  preview: "preview",
+};
 
 export const CreationWizard: React.FC = () => {
   const [path, setPath] = useState<WizardPath>("story");
@@ -61,6 +72,35 @@ export const CreationWizard: React.FC = () => {
   const ageRanges = useTaxonomyGroup("age_range");
   const themes = useTaxonomyGroup("theme");
   const educationGoals = useTaxonomyGroup("education_goal");
+
+  useEffect(() => {
+    const sessionId = Number(new URLSearchParams(window.location.search).get("sessionId"));
+    if (!Number.isFinite(sessionId) || sessionId <= 0) return;
+
+    let cancelled = false;
+    setBusy(true);
+    setMessage(null);
+    creationApi
+      .getSession(sessionId)
+      .then((loadedSession) => {
+        if (cancelled) return;
+        setSession(loadedSession);
+        setPath(loadedSession.creation_type === "template_book" ? "template" : "story");
+        setStorySource(loadedSession.story_source_type ?? "system_story");
+        setStep(wizardStepByCreationStep[loadedSession.current_step] ?? "source");
+        setMessage("已恢复创作记录，可以继续编辑或生成。");
+      })
+      .catch(() => {
+        if (!cancelled) setMessage("创作记录加载失败，请稍后重试。");
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     templateApi
@@ -168,8 +208,21 @@ export const CreationWizard: React.FC = () => {
 
   useEffect(() => {
     if (path !== "story") return;
+    if (session?.story_id) return;
     setSelectedStory((current) => (current && visibleStories.some((story) => story.id === current.id) ? current : visibleStories[0] ?? null));
-  }, [path, visibleStories]);
+  }, [path, session?.story_id, visibleStories]);
+
+  useEffect(() => {
+    if (!session || path !== "story" || !session.story_id) return;
+    const matchedStory = stories.find((story) => story.id === session.story_id);
+    if (matchedStory) setSelectedStory(matchedStory);
+  }, [path, session, stories]);
+
+  useEffect(() => {
+    if (!session || path !== "template" || !session.template_id) return;
+    const matchedTemplate = templates.find((template) => template.id === session.template_id);
+    if (matchedTemplate) setSelectedTemplate(matchedTemplate);
+  }, [path, session, templates]);
 
   useEffect(() => {
     setStoryPage(1);
@@ -570,7 +623,7 @@ export const CreationWizard: React.FC = () => {
             {step === "storyboard" ? (
               <div className="flex flex-wrap gap-2">
                 <Button disabled={busy || isTaskActive} onClick={handleGenerateImages}>生成全部插图</Button>
-                <Button type="button" variant="secondary" disabled={busy || !isTaskSucceeded || !canContinueFromStoryboard} onClick={() => setStep("voice")}>
+                <Button type="button" variant="secondary" disabled={busy || isTaskActive || !canContinueFromStoryboard} onClick={() => setStep("voice")}>
                   下一步：选择声音
                 </Button>
               </div>

@@ -9,6 +9,10 @@ from app.schema.asset import (
     ArtStyleRead,
     ArtStyleImageUploadRequest,
     AssetStorageDTO,
+    BackgroundMusicCreateRequest,
+    BackgroundMusicListRead,
+    BackgroundMusicRead,
+    BackgroundMusicUpdateRequest,
     CharacterCreateRequest,
     CharacterListRead,
     CharacterRead,
@@ -212,6 +216,72 @@ async def set_default_voice(
     user_id: int = Depends(current_user_id),
 ) -> VoiceRead:
     return await asset.set_default_voice(db, user_id, voice_id)
+
+
+@router.get("/background-music", response_model=BackgroundMusicListRead)
+async def list_background_music(
+    source_type: AssetSourceType | None = None,
+    access_level: AssetAccessLevel | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    user_id: int | None = Depends(optional_current_user_id),
+) -> BackgroundMusicListRead:
+    return await asset.list_background_music(
+        db,
+        user_id=user_id,
+        source_type=source_type,
+        access_level=access_level,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/background-music/{music_id}", response_model=BackgroundMusicRead)
+async def get_background_music(
+    music_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int | None = Depends(optional_current_user_id),
+) -> BackgroundMusicRead:
+    return await asset.get_background_music(db, music_id, user_id=user_id)
+
+
+@router.post("/background-music", response_model=BackgroundMusicRead, status_code=status.HTTP_201_CREATED)
+async def create_background_music(
+    payload: BackgroundMusicCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(current_user_id),
+) -> BackgroundMusicRead:
+    return await asset.create_background_music(db, user_id, payload)
+
+
+@router.patch("/background-music/{music_id}", response_model=BackgroundMusicRead)
+async def update_background_music(
+    music_id: int,
+    payload: BackgroundMusicUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(current_user_id),
+) -> BackgroundMusicRead:
+    return await asset.update_background_music(db, user_id, music_id, payload)
+
+
+@router.delete("/background-music/{music_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_background_music(
+    music_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(current_user_id),
+) -> Response:
+    await asset.delete_background_music(db, user_id, music_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/background-music/{music_id}/default", response_model=BackgroundMusicRead)
+async def set_default_background_music(
+    music_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(current_user_id),
+) -> BackgroundMusicRead:
+    return await asset.set_default_background_music(db, user_id, music_id)
 
 
 @router.post("/uploads", response_model=UploadSessionRead, status_code=status.HTTP_201_CREATED)

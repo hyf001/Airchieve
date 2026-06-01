@@ -22,7 +22,7 @@ from app.schema.privacy import (
     UploadConsentRead,
 )
 
-PERSONAL_ASSET_FLAGS = {"personal_character", "personal_voice"}
+PERSONAL_ASSET_FLAGS = {"personal_character", "personal_voice", "personal_background_music"}
 
 
 def _risk_flags_for_policy(policy: PrivacyVisibilityPolicy | None, target_type: str) -> list[str]:
@@ -31,6 +31,8 @@ def _risk_flags_for_policy(policy: PrivacyVisibilityPolicy | None, target_type: 
         return ["personal_character"]
     if candidate_type == "voice":
         return ["personal_voice"]
+    if candidate_type == "background_music":
+        return ["personal_background_music"]
     return []
 
 

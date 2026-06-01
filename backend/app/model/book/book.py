@@ -106,7 +106,7 @@ class Book(TimestampMixin, Base):
     subtitle: Mapped[str | None] = mapped_column(String(240), nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     cover_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    background_music_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    background_music_id: Mapped[int | None] = mapped_column(ForeignKey("background_music.id"), nullable=True, index=True)
     age_range_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     theme_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     education_goal_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)

@@ -24,6 +24,8 @@ export interface BookDetail extends BookSummary {
   source_story_id?: number | null;
   narrative_style_code?: string | null;
   art_style_code?: string | null;
+  background_music_id?: number | null;
+  background_music_url?: string | null;
   publish_status: "draft" | "published" | "unpublished" | "deleted";
   is_featured: boolean;
   created_at: string;

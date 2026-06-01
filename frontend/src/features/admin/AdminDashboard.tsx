@@ -35,6 +35,7 @@ export const AdminDashboard: React.FC = () => {
     ["模板", overview.templates],
     ["角色", overview.characters],
     ["声音", overview.voices],
+    ["背景音乐", overview.background_music],
     ["分享", overview.share_links],
     ["导出", overview.export_jobs],
   ] as const;
@@ -54,7 +55,7 @@ export const AdminDashboard: React.FC = () => {
       </div>
       <div className="rounded-[var(--radius-md)] border border-[rgba(212,114,92,0.08)] bg-white p-4">
         <h3 className="font-display text-2xl">内容概览</h3>
-        <div className="mt-4 grid grid-cols-7 gap-3 max-lg:grid-cols-3 max-sm:grid-cols-2">
+        <div className="mt-4 grid grid-cols-8 gap-3 max-lg:grid-cols-3 max-sm:grid-cols-2">
           {contentMetrics.map(([label, value]) => (
             <div key={label} className="rounded-[var(--radius-sm)] bg-[rgba(126,200,227,0.1)] p-3">
               <p className="text-xs font-bold text-[var(--text-light)]">{label}</p>

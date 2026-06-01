@@ -11,10 +11,15 @@ from app.schema.asset import (
     ArtStyleListRead,
     ArtStyleRead,
     AssetStorageDTO,
+    BackgroundMusicAudioUploadRequest,
+    BackgroundMusicListRead,
+    BackgroundMusicRead,
     CharacterListRead,
     CharacterRead,
     SystemArtStyleCreate,
     SystemArtStyleUpdate,
+    SystemBackgroundMusicCreate,
+    SystemBackgroundMusicUpdate,
     SystemCharacterCreate,
     SystemCharacterUpdate,
     SystemVoiceCreate,
@@ -405,6 +410,126 @@ async def delete_admin_voice(
             action="admin.voice.delete",
             target_type="voice",
             target_id=voice_id,
+            before_snapshot=AuditSnapshot(values=before.model_dump(mode="json")),
+        ),
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/background-music", response_model=BackgroundMusicListRead)
+async def list_admin_background_music(
+    limit: int = Query(default=100, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    _: int = Depends(current_admin_user_id),
+) -> BackgroundMusicListRead:
+    return await asset_service.list_admin_system_background_music(db, limit=limit, offset=offset)
+
+
+@router.post("/background-music/audio", response_model=AssetStorageDTO, status_code=status.HTTP_201_CREATED)
+async def upload_admin_background_music_audio(
+    payload: BackgroundMusicAudioUploadRequest,
+    db: AsyncSession = Depends(get_db),
+    operator_id: int = Depends(current_admin_user_id),
+) -> AssetStorageDTO:
+    if not payload.mime_type.startswith("audio/"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请上传音频文件")
+    audio = await storage_service.save_base64_asset(
+        db,
+        None,
+        base64_data=payload.base64_data or "",
+        mime_type=payload.mime_type,
+        asset_kind=AssetKind.AUDIO,
+        filename=payload.filename,
+        visibility=AssetVisibility.SYSTEM,
+        path_scope="background-music",
+    )
+    await audit_service.write_audit_log(
+        db,
+        AuditLogCreateInternal(
+            operator_type=AuditOperatorType.ADMIN,
+            operator_id=operator_id,
+            action="admin.background_music.audio_upload",
+            target_type="asset",
+            target_id=audio.id,
+            after_snapshot=AuditSnapshot(values=audio.model_dump(mode="json")),
+        ),
+        commit=False,
+    )
+    await db.commit()
+    return audio
+
+
+@router.post("/background-music", response_model=BackgroundMusicRead, status_code=status.HTTP_201_CREATED)
+async def create_admin_background_music(
+    payload: SystemBackgroundMusicCreate,
+    db: AsyncSession = Depends(get_db),
+    operator_id: int = Depends(current_admin_user_id),
+) -> BackgroundMusicRead:
+    music = await asset_service.create_system_background_music(db, payload)
+    await audit_service.write_audit_log(
+        db,
+        AuditLogCreateInternal(
+            operator_type=AuditOperatorType.ADMIN,
+            operator_id=operator_id,
+            action="admin.background_music.create",
+            target_type="background_music",
+            target_id=music.id,
+            after_snapshot=AuditSnapshot(values=music.model_dump(mode="json")),
+        ),
+    )
+    return music
+
+
+@router.get("/background-music/{music_id}", response_model=BackgroundMusicRead)
+async def get_admin_background_music(
+    music_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: int = Depends(current_admin_user_id),
+) -> BackgroundMusicRead:
+    return await asset_service.get_admin_system_background_music(db, music_id)
+
+
+@router.patch("/background-music/{music_id}", response_model=BackgroundMusicRead)
+async def update_admin_background_music(
+    music_id: int,
+    payload: SystemBackgroundMusicUpdate,
+    db: AsyncSession = Depends(get_db),
+    operator_id: int = Depends(current_admin_user_id),
+) -> BackgroundMusicRead:
+    before = await asset_service.get_admin_system_background_music(db, music_id)
+    music = await asset_service.update_system_background_music(db, music_id, payload)
+    await audit_service.write_audit_log(
+        db,
+        AuditLogCreateInternal(
+            operator_type=AuditOperatorType.ADMIN,
+            operator_id=operator_id,
+            action="admin.background_music.update",
+            target_type="background_music",
+            target_id=music.id,
+            before_snapshot=AuditSnapshot(values=before.model_dump(mode="json")),
+            after_snapshot=AuditSnapshot(values=music.model_dump(mode="json")),
+        ),
+    )
+    return music
+
+
+@router.delete("/background-music/{music_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_admin_background_music(
+    music_id: int,
+    db: AsyncSession = Depends(get_db),
+    operator_id: int = Depends(current_admin_user_id),
+) -> Response:
+    before = await asset_service.get_admin_system_background_music(db, music_id)
+    await asset_service.delete_system_background_music(db, music_id)
+    await audit_service.write_audit_log(
+        db,
+        AuditLogCreateInternal(
+            operator_type=AuditOperatorType.ADMIN,
+            operator_id=operator_id,
+            action="admin.background_music.delete",
+            target_type="background_music",
+            target_id=music_id,
             before_snapshot=AuditSnapshot(values=before.model_dump(mode="json")),
         ),
     )

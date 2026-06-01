@@ -1,5 +1,6 @@
 export * from "./api";
 export * from "./AdminArtStyleManager";
+export * from "./AdminBackgroundMusicManager";
 export * from "./AdminCharacterManager";
 export * from "./AdminDashboard";
 export * from "./AdminMembershipManager";

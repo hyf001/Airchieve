@@ -1,7 +1,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.model.asset import Character, Voice
+from app.model.asset import BackgroundMusic, Character, Voice
 from app.model.audit import AuditLog
 from app.model.book import Book
 from app.model.export import ExportJob
@@ -35,6 +35,7 @@ async def get_content_overview(db: AsyncSession) -> AdminContentOverviewRead:
         templates=await _count(db, BookTemplate),
         characters=await _count(db, Character),
         voices=await _count(db, Voice),
+        background_music=await _count(db, BackgroundMusic),
         share_links=await _count(db, ShareLink),
         export_jobs=await _count(db, ExportJob),
     )

@@ -51,6 +51,7 @@ class BookDetailRead(BookSummary):
     source_story_id: int | None = None
     narrative_style_code: str | None = None
     art_style_code: str | None = None
+    background_music_id: int | None = None
     background_music_url: str | None = None
     publish_status: BookPublishStatus
     is_featured: bool

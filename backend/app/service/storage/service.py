@@ -18,6 +18,7 @@ from app.schema.storage import UploadCompleteRequest, UploadSessionCreate, Uploa
 MAX_UPLOAD_BYTES: dict[UploadPurpose, int] = {
     UploadPurpose.CHARACTER: 20 * 1024 * 1024,
     UploadPurpose.VOICE: 50 * 1024 * 1024,
+    UploadPurpose.BACKGROUND_MUSIC: 80 * 1024 * 1024,
     UploadPurpose.STORY_FILE: 3 * 1024 * 1024,
     UploadPurpose.BOOK_MEDIA: 80 * 1024 * 1024,
     UploadPurpose.EXPORT: 200 * 1024 * 1024,

@@ -161,6 +161,23 @@ class VoiceAudioUploadRequest(BaseModel):
         return self
 
 
+class BackgroundMusicAudioUploadRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    base64_data: str | None = Field(default=None, min_length=1, alias="base64")
+    data_url: str | None = Field(default=None, min_length=1)
+    mime_type: str = Field(default="audio/mpeg", min_length=1, max_length=120)
+    filename: str = Field(default="background-music.mp3", min_length=1, max_length=240)
+
+    @model_validator(mode="after")
+    def normalize_base64_data(self) -> "BackgroundMusicAudioUploadRequest":
+        if self.data_url and not self.base64_data:
+            self.base64_data = self.data_url
+        if not self.base64_data:
+            raise ValueError("必须提供 base64 或 data_url")
+        return self
+
+
 class CharacterSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -334,6 +351,90 @@ class SystemVoiceSampleGenerateRequest(BaseModel):
     voice_style_code: str = Field(min_length=1, max_length=64)
     emotion_type: str | None = Field(default=None, max_length=64)
     sample_text: str = Field(min_length=1, max_length=500)
+
+
+class BackgroundMusicSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    owner_user_id: int | None = None
+    name: str
+    description: str | None = None
+    audio_url: str
+    duration_seconds: int | None = None
+    access_level: AssetAccessLevel
+    source_type: AssetSourceType
+    is_default: bool
+    sort_order: int
+    status: LibraryItemStatus
+    created_at: datetime
+    updated_at: datetime
+
+
+class BackgroundMusicBookReference(BaseModel):
+    id: int
+    title: str
+    cover_url: str | None = None
+    publish_status: str
+
+
+class BackgroundMusicRead(BackgroundMusicSummary):
+    referenced_books: list[BackgroundMusicBookReference] = Field(default_factory=list)
+
+
+class BackgroundMusicListRead(BaseModel):
+    items: list[BackgroundMusicSummary]
+    total: int
+    limit: int
+    offset: int
+
+
+class BackgroundMusicCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=1000)
+    audio_asset_id: int
+    upload_consent_id: int | None = None
+    duration_seconds: int | None = Field(default=None, ge=1, le=7200)
+
+
+class BackgroundMusicUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=1000)
+    audio_asset_id: int | None = None
+    upload_consent_id: int | None = None
+    duration_seconds: int | None = Field(default=None, ge=1, le=7200)
+
+
+class SystemBackgroundMusicCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=1000)
+    audio_url: str = Field(min_length=1, max_length=500)
+    duration_seconds: int | None = Field(default=None, ge=1, le=7200)
+    access_level: AssetAccessLevel = AssetAccessLevel.FREE
+    sort_order: int = 0
+    status: LibraryItemStatus = LibraryItemStatus.ACTIVE
+
+    @model_validator(mode="after")
+    def reject_deleted_status(self) -> "SystemBackgroundMusicCreate":
+        if self.status == LibraryItemStatus.DELETED:
+            raise ValueError("创建系统背景音乐时不能使用删除状态")
+        return self
+
+
+class SystemBackgroundMusicUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=1000)
+    audio_url: str | None = Field(default=None, min_length=1, max_length=500)
+    duration_seconds: int | None = Field(default=None, ge=1, le=7200)
+    access_level: AssetAccessLevel | None = None
+    sort_order: int | None = None
+    status: LibraryItemStatus | None = None
+
+    @model_validator(mode="after")
+    def reject_deleted_status(self) -> "SystemBackgroundMusicUpdate":
+        if self.status == LibraryItemStatus.DELETED:
+            raise ValueError("请使用删除接口删除系统背景音乐")
+        return self
 
 
 class AssetInternalDTO(BaseModel):

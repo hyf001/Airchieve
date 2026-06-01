@@ -15,6 +15,7 @@ export interface AdminContentOverviewRead {
   templates: number;
   characters: number;
   voices: number;
+  background_music: number;
   share_links: number;
   export_jobs: number;
 }
@@ -51,6 +52,16 @@ export interface SystemVoiceWrite {
   sample_url?: string | null;
   duration_seconds?: number | null;
   access_level: AssetAccessLevel;
+  status: Exclude<LibraryItemStatus, "deleted">;
+}
+
+export interface SystemBackgroundMusicWrite {
+  name: string;
+  description?: string | null;
+  audio_url: string;
+  duration_seconds?: number | null;
+  access_level: AssetAccessLevel;
+  sort_order: number;
   status: Exclude<LibraryItemStatus, "deleted">;
 }
 

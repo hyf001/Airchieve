@@ -23,5 +23,6 @@ class AdminContentOverviewRead(BaseModel):
     templates: int
     characters: int
     voices: int
+    background_music: int
     share_links: int
     export_jobs: int

@@ -301,7 +301,7 @@ async def save_book(db: AsyncSession, user_id: int, session_id: int) -> SaveBook
         source_story_id=session.story_id,
         title=title,
         summary="由创作向导保存的个人绘本。",
-        background_music_url=None,
+        background_music_id=None,
         age_range_codes=session.age_range_codes or [],
         theme_codes=session.theme_codes or [],
         education_goal_codes=session.education_goal_codes or [],

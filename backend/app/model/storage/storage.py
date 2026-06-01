@@ -10,6 +10,7 @@ from app.model.base import Base, TimestampMixin
 class UploadPurpose(StrEnum):
     CHARACTER = "character"
     VOICE = "voice"
+    BACKGROUND_MUSIC = "background_music"
     STORY_FILE = "story_file"
     BOOK_MEDIA = "book_media"
     EXPORT = "export"

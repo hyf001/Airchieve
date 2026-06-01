@@ -12,6 +12,7 @@ import { StoriesPage } from "@/pages/StoriesPage";
 import { AuthPage } from "@/pages/auth/AuthPage";
 import { ProfilesPage } from "@/pages/profiles/ProfilesPage";
 import { ArtStylesPage } from "@/pages/assets/ArtStylesPage";
+import { BackgroundMusicPage } from "@/pages/assets/BackgroundMusicPage";
 import { CharactersPage } from "@/pages/assets/CharactersPage";
 import { VoicesPage } from "@/pages/assets/VoicesPage";
 import { AdminPage } from "@/pages/admin/AdminPage";
@@ -54,6 +55,10 @@ const App: React.FC = () => {
 
   if (path === "/characters") {
     return <CharactersPage />;
+  }
+
+  if (path === "/background-music") {
+    return <BackgroundMusicPage />;
   }
 
   if (path === "/voices") {

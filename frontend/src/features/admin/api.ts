@@ -1,5 +1,5 @@
 import { apiClient } from "@/shared/api/client";
-import type { ArtStyle, AssetStorageDTO, CharacterRead, CharacterSummary, ListResponse, VoiceSummary } from "@/entities/asset";
+import type { ArtStyle, AssetStorageDTO, BackgroundMusicRead, BackgroundMusicSummary, CharacterRead, CharacterSummary, ListResponse, VoiceSummary } from "@/entities/asset";
 import type { MembershipPlan, MembershipPlanStatus } from "@/entities/membership";
 import type { GenerationTaskRead } from "@/features/creation/types";
 import type {
@@ -7,6 +7,7 @@ import type {
   AdminDashboardRead,
   MembershipPlanWrite,
   SystemArtStyleWrite,
+  SystemBackgroundMusicWrite,
   SystemCharacterWrite,
   SystemVoiceWrite,
 } from "./types";
@@ -42,5 +43,13 @@ export const adminApi = {
     apiClient.post<AssetStorageDTO>("/v1/admin/voices/audio", payload),
   generateVoiceSample: (payload: { voice_id?: number | null; voice_style_code: string; emotion_type?: string | null; sample_text: string }) =>
     apiClient.post<GenerationTaskRead>("/v1/admin/voices/sample", payload),
+  listBackgroundMusic: () => apiClient.get<ListResponse<BackgroundMusicSummary>>("/v1/admin/background-music"),
+  getBackgroundMusic: (id: number) => apiClient.get<BackgroundMusicRead>(`/v1/admin/background-music/${id}`),
+  createBackgroundMusic: (payload: SystemBackgroundMusicWrite) => apiClient.post<BackgroundMusicRead>("/v1/admin/background-music", payload),
+  updateBackgroundMusic: (id: number, payload: Partial<SystemBackgroundMusicWrite>) =>
+    apiClient.patch<BackgroundMusicRead>(`/v1/admin/background-music/${id}`, payload),
+  deleteBackgroundMusic: (id: number) => apiClient.delete<void>(`/v1/admin/background-music/${id}`),
+  uploadBackgroundMusicAudio: (payload: { base64: string; mime_type: string; filename: string }) =>
+    apiClient.post<AssetStorageDTO>("/v1/admin/background-music/audio", payload),
   getGenerationTask: (taskId: number) => apiClient.get<GenerationTaskRead>(`/v1/generation-tasks/${taskId}`),
 };

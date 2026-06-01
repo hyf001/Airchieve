@@ -5,6 +5,7 @@ export type AppRoute =
   | "/stories"
   | "/artstyle"
   | "/characters"
+  | "/background-music"
   | "/membership"
   | "/auth"
   | "/profile"
@@ -28,6 +29,7 @@ const routes = new Set<AppRoute>([
   "/stories",
   "/artstyle",
   "/characters",
+  "/background-music",
   "/membership",
   "/auth",
   "/profile",

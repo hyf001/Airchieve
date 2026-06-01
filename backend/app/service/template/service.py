@@ -246,7 +246,7 @@ async def create_personal_book_from_template(
         subtitle=source_book.subtitle,
         summary=source_book.summary,
         cover_url=source_book.cover_url,
-        background_music_url=source_book.background_music_url,
+        background_music_id=source_book.background_music_id,
         age_range_codes=list(source_book.age_range_codes or []),
         theme_codes=list(source_book.theme_codes or []),
         education_goal_codes=list(source_book.education_goal_codes or []),

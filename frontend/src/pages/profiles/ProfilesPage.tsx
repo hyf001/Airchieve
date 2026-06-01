@@ -1,5 +1,5 @@
 import React from "react";
-import { BookOpen, Clock, Heart, History, LibraryBig, Palette, Plus, Trash2, UserRound, Volume2, Wand2, X } from "lucide-react";
+import { BookOpen, Clock, Eye, Heart, History, LibraryBig, Palette, Plus, RotateCw, Trash2, UserRound, Volume2, Wand2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -86,6 +86,7 @@ const ProfilesContent: React.FC = () => {
   const [editingProfile, setEditingProfile] = React.useState<ChildProfile | null>(null);
   const [detailProfile, setDetailProfile] = React.useState<ChildProfile | null>(null);
   const [modalOpen, setModalOpen] = React.useState(false);
+  const [activeTab, setActiveTab] = React.useState<"children" | "content">("children");
   const [accountActivity, setAccountActivity] = React.useState<AccountActivityState>(emptyAccountActivityState);
   const activeDetail = detailProfile ?? currentProfile;
 
@@ -143,7 +144,7 @@ const ProfilesContent: React.FC = () => {
 
   return (
     <main>
-      <header className="mx-auto flex max-w-[1320px] items-end justify-between gap-6 px-8 pb-8 pt-12 max-md:flex-col max-md:items-start max-sm:px-4">
+      <header className="mx-auto flex max-w-[1320px] items-end justify-between gap-6 px-8 pb-6 pt-12 max-md:flex-col max-md:items-start max-sm:px-4">
         <div>
           <h1 className="font-display mb-2 flex items-center gap-3 text-[36px] max-sm:text-[29px]">
             <UserRound className="h-8 w-8 text-[var(--terracotta)]" />
@@ -157,56 +158,76 @@ const ProfilesContent: React.FC = () => {
         </Button>
       </header>
 
-      <section className="mx-auto grid max-w-[1320px] grid-cols-[minmax(0,0.95fr)_minmax(360px,0.55fr)] gap-7 px-8 pb-10 max-xl:grid-cols-1 max-sm:px-4">
-        <section>
-          <div className="mb-4 flex items-center justify-between gap-4">
-            <div>
-              <h2 className="font-display text-2xl">孩子档案</h2>
-              <p className="mt-1 text-sm text-[var(--text-light)]">阅读进度、收藏和孩子专属创作会按档案分开记录。</p>
-            </div>
-          </div>
-          {error ? (
-            <div className="mb-5 rounded-[var(--radius-md)] border border-[rgba(245,166,35,0.22)] bg-[rgba(245,166,35,0.08)] px-4 py-3 text-sm text-[var(--text-mid)]">
-              {error}
-            </div>
-          ) : null}
+      <section className="mx-auto max-w-[1320px] px-8 pb-10 max-sm:px-4">
+        <div className="mb-7 inline-flex rounded-full border border-[rgba(212,114,92,0.12)] bg-white/80 p-1 shadow-[0_10px_30px_rgba(92,55,42,0.08)] backdrop-blur">
+          <ProfileTabButton
+            active={activeTab === "children"}
+            icon={<UserRound className="h-4 w-4" />}
+            label="孩子档案"
+            onClick={() => setActiveTab("children")}
+          />
+          <ProfileTabButton
+            active={activeTab === "content"}
+            icon={<LibraryBig className="h-4 w-4" />}
+            label="我的内容"
+            onClick={() => setActiveTab("content")}
+          />
+        </div>
 
-          {isLoading ? (
-            <div className="flex min-h-[280px] items-center justify-center">
-              <LoadingSpinner label="正在加载儿童档案" />
-            </div>
-          ) : profiles.length > 0 ? (
-            <div className="grid grid-cols-3 gap-7 max-xl:grid-cols-2 max-md:grid-cols-1">
-              {profiles.map((profile) => (
-                <ChildProfileCard
-                  key={profile.id}
-                  profile={profile}
-                  onEdit={handleEditProfile}
-                  onOpenDetail={setDetailProfile}
-                  onSelect={(item) => void setCurrentProfile(item.id)}
-                />
-              ))}
-            </div>
-          ) : (
-            <section className="app-card p-8 text-center">
-              <h2 className="font-display mb-2 text-2xl">还没有儿童档案</h2>
-              <p className="mb-6 text-sm text-[var(--text-light)]">添加第一个孩子档案后，首页推荐和创建流程会使用这份默认配置。</p>
-              <Button onClick={handleAddProfile}>
-                <Plus className="h-4 w-4" />
-                添加档案
-              </Button>
+        {activeTab === "children" ? (
+          <div className="grid grid-cols-[minmax(0,0.95fr)_minmax(360px,0.55fr)] gap-7 max-xl:grid-cols-1">
+            <section>
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-display text-2xl">孩子档案</h2>
+                  <p className="mt-1 text-sm text-[var(--text-light)]">阅读进度、收藏和孩子专属创作会按档案分开记录。</p>
+                </div>
+              </div>
+              {error ? (
+                <div className="mb-5 rounded-[var(--radius-md)] border border-[rgba(245,166,35,0.22)] bg-[rgba(245,166,35,0.08)] px-4 py-3 text-sm text-[var(--text-mid)]">
+                  {error}
+                </div>
+              ) : null}
+
+              {isLoading ? (
+                <div className="flex min-h-[280px] items-center justify-center">
+                  <LoadingSpinner label="正在加载儿童档案" />
+                </div>
+              ) : profiles.length > 0 ? (
+                <div className="grid grid-cols-3 gap-7 max-xl:grid-cols-2 max-md:grid-cols-1">
+                  {profiles.map((profile) => (
+                    <ChildProfileCard
+                      key={profile.id}
+                      profile={profile}
+                      onEdit={handleEditProfile}
+                      onOpenDetail={setDetailProfile}
+                      onSelect={(item) => void setCurrentProfile(item.id)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <section className="app-card p-8 text-center">
+                  <h2 className="font-display mb-2 text-2xl">还没有儿童档案</h2>
+                  <p className="mb-6 text-sm text-[var(--text-light)]">添加第一个孩子档案后，首页推荐和创建流程会使用这份默认配置。</p>
+                  <Button onClick={handleAddProfile}>
+                    <Plus className="h-4 w-4" />
+                    添加档案
+                  </Button>
+                </section>
+              )}
             </section>
-          )}
-        </section>
 
-        <aside className="space-y-5">
-          <AccountSummary />
-          <CurrentProfileSummary profile={currentProfile} />
+            <aside className="space-y-5">
+              <AccountSummary />
+              <CurrentProfileSummary profile={currentProfile} />
+            </aside>
+          </div>
+        ) : (
           <AccountContentPanel activity={accountActivity} />
-        </aside>
+        )}
       </section>
 
-      {activeDetail ? (
+      {activeTab === "children" && activeDetail ? (
         <ProfileDetailPanel
           profile={activeDetail}
           onClose={() => setDetailProfile(null)}
@@ -224,6 +245,28 @@ const ProfilesContent: React.FC = () => {
     </main>
   );
 };
+
+const ProfileTabButton: React.FC<{
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}> = ({ active, icon, label, onClick }) => (
+  <button
+    className={cn(
+      "inline-flex h-11 min-w-[120px] items-center justify-center gap-2 rounded-full px-5 text-sm font-bold transition-all focus:outline-none focus:ring-4 focus:ring-[rgba(245,166,35,0.16)] max-sm:min-w-0 max-sm:px-4",
+      active
+        ? "bg-[linear-gradient(135deg,var(--honey),var(--peach))] text-white shadow-[0_8px_18px_rgba(239,123,103,0.28)]"
+        : "text-[var(--text-mid)] hover:bg-[rgba(245,166,35,0.08)] hover:text-[var(--terracotta)]",
+    )}
+    type="button"
+    aria-pressed={active}
+    onClick={onClick}
+  >
+    {icon}
+    {label}
+  </button>
+);
 
 const CurrentProfileSummary: React.FC<{ profile: ChildProfile | null }> = ({ profile }) => {
   const { labelMap: ageLabels } = useTaxonomyGroup("age_range");
@@ -258,32 +301,71 @@ const CurrentProfileSummary: React.FC<{ profile: ChildProfile | null }> = ({ pro
   );
 };
 
-const AccountContentPanel: React.FC<{ activity: AccountActivityState }> = ({ activity }) => (
-  <section className="app-card p-6">
-    <div className="mb-5 flex items-start justify-between gap-3">
-      <div>
-        <h2 className="font-display text-xl">我的内容</h2>
-        <p className="mt-1 text-xs text-[var(--text-light)]">账号维度的创作成果与创作流水</p>
+const AccountContentPanel: React.FC<{ activity: AccountActivityState }> = ({ activity }) => {
+  const [activeContentTab, setActiveContentTab] = React.useState<"books" | "sessions">("books");
+
+  return (
+    <section className="app-card p-6">
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="font-display text-xl">我的内容</h2>
+          <p className="mt-1 text-xs text-[var(--text-light)]">账号维度的创作成果与创作流水</p>
+        </div>
+        <div className="inline-flex rounded-full border border-[rgba(212,114,92,0.12)] bg-[var(--cream)] p-1">
+          <ContentTabButton
+            active={activeContentTab === "books"}
+            icon={<LibraryBig className="h-4 w-4" />}
+            label="我的绘本"
+            onClick={() => setActiveContentTab("books")}
+          />
+          <ContentTabButton
+            active={activeContentTab === "sessions"}
+            icon={<History className="h-4 w-4" />}
+            label="创作记录"
+            onClick={() => setActiveContentTab("sessions")}
+          />
+        </div>
       </div>
-      <span className="rounded-full bg-[rgba(212,114,92,0.08)] px-3 py-1 text-[11px] font-bold text-[var(--terracotta)]">
-        账号
-      </span>
-    </div>
 
-    <DetailSection icon={<LibraryBig className="h-5 w-5" />} title="个人绘本库">
-      {activity.isLoading ? (
-        <LoadingSpinner label="正在加载个人绘本库" />
+      {activeContentTab === "books" ? (
+        <DetailSection icon={<LibraryBig className="h-5 w-5" />} title="我的绘本">
+          {activity.isLoading ? (
+            <LoadingSpinner label="正在加载我的绘本" />
+          ) : (
+            <BookMiniList books={activity.personalBooks} emptyMessage="保存后的创作成果会出现在这里。" compact />
+          )}
+        </DetailSection>
       ) : (
-        <BookMiniList books={activity.personalBooks} emptyMessage="保存后的创作成果会出现在这里。" compact />
+        <DetailSection icon={<History className="h-5 w-5" />} title="创作记录">
+          <CreationSessionList sessions={activity.creationSessions} isLoading={activity.isLoading} />
+        </DetailSection>
       )}
-    </DetailSection>
 
-    <DetailSection icon={<History className="h-5 w-5" />} title="创作记录">
-      <CreationSessionList sessions={activity.creationSessions} isLoading={activity.isLoading} />
-    </DetailSection>
+      {activity.error ? <p className="text-xs text-[var(--terracotta)]">{activity.error}</p> : null}
+    </section>
+  );
+};
 
-    {activity.error ? <p className="text-xs text-[var(--terracotta)]">{activity.error}</p> : null}
-  </section>
+const ContentTabButton: React.FC<{
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}> = ({ active, icon, label, onClick }) => (
+  <button
+    className={cn(
+      "inline-flex h-9 min-w-[104px] items-center justify-center gap-2 rounded-full px-4 text-xs font-bold transition focus:outline-none focus:ring-4 focus:ring-[rgba(245,166,35,0.14)] max-sm:min-w-0",
+      active
+        ? "bg-white text-[var(--terracotta)] shadow-[0_6px_16px_rgba(92,55,42,0.08)]"
+        : "text-[var(--text-mid)] hover:bg-white/70 hover:text-[var(--terracotta)]",
+    )}
+    type="button"
+    aria-pressed={active}
+    onClick={onClick}
+  >
+    {icon}
+    {label}
+  </button>
 );
 
 const ProfileDetailPanel: React.FC<{
@@ -422,6 +504,7 @@ const formatDateTime = (value: string) =>
 
 const bookDetailHref = (bookId: number) => `/book-detail?bookId=${bookId}`;
 const playerHref = (bookId: number) => `/player?bookId=${bookId}`;
+const creationSessionHref = (sessionId: number) => `/create?sessionId=${sessionId}`;
 
 const BookMiniList: React.FC<{ books: BookSummary[]; emptyMessage: string; compact?: boolean }> = ({ books, emptyMessage, compact = false }) => {
   if (books.length === 0) return <EmptyFactState message={emptyMessage} />;
@@ -504,26 +587,32 @@ const CreationSessionList: React.FC<{ sessions: CreationSession[]; isLoading: bo
 
   return (
     <div className="space-y-2.5">
-      {sessions.map((session) => (
-        <div key={session.id} className="rounded-[var(--radius-md)] border border-[rgba(212,114,92,0.1)] bg-white p-3">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-bold text-[var(--text-dark)]">
-                {creationTypeLabels[session.creation_type]} · {session.target_page_count} 页
-              </p>
-              <p className="mt-1 text-xs text-[var(--text-light)]">更新于 {formatDateTime(session.updated_at)}</p>
+      {sessions.map((session) => {
+        const canViewBook = Boolean(session.saved_book_id);
+        return (
+          <a
+            key={session.id}
+            className="group block rounded-[var(--radius-md)] border border-[rgba(212,114,92,0.1)] bg-white p-3 text-inherit no-underline transition hover:border-[rgba(212,114,92,0.24)] hover:shadow-sm"
+            href={canViewBook ? bookDetailHref(session.saved_book_id as number) : creationSessionHref(session.id)}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-bold text-[var(--text-dark)]">
+                  {creationTypeLabels[session.creation_type]} · {session.target_page_count} 页
+                </p>
+                <p className="mt-1 text-xs text-[var(--text-light)]">更新于 {formatDateTime(session.updated_at)}</p>
+                <span className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-[var(--terracotta)] opacity-90 transition group-hover:opacity-100">
+                  {canViewBook ? <Eye className="h-3.5 w-3.5" /> : <RotateCw className="h-3.5 w-3.5" />}
+                  {canViewBook ? "查看绘本" : "继续创作"}
+                </span>
+              </div>
+              <span className="shrink-0 rounded-full bg-[rgba(245,166,35,0.12)] px-2.5 py-1 text-[11px] font-bold text-[#B8751A]">
+                {creationStatusLabels[session.status]}
+              </span>
             </div>
-            <span className="shrink-0 rounded-full bg-[rgba(245,166,35,0.12)] px-2.5 py-1 text-[11px] font-bold text-[#B8751A]">
-              {creationStatusLabels[session.status]}
-            </span>
-          </div>
-          {session.saved_book_id ? (
-            <a className="mt-2 inline-flex text-xs font-bold text-[var(--terracotta)]" href={bookDetailHref(session.saved_book_id)}>
-              查看保存的绘本
-            </a>
-          ) : null}
-        </div>
-      ))}
+          </a>
+        );
+      })}
     </div>
   );
 };

@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.model.asset import AssetAccessLevel, AssetSourceType, LibraryItemStatus, Voice
+from app.model.asset import AssetAccessLevel, AssetSourceType, BackgroundMusic, LibraryItemStatus, Voice
 from app.model.book import (
     Book,
     BookLipSyncStatus,
@@ -49,12 +49,22 @@ class TestGetPlayerPayload:
             source_type=AssetSourceType.SYSTEM,
             status=LibraryItemStatus.ACTIVE,
         )
+        music = BackgroundMusic(
+            owner_user_id=None,
+            name="星光音乐",
+            audio_url="https://example.com/bgm.mp3",
+            access_level=AssetAccessLevel.FREE,
+            source_type=AssetSourceType.SYSTEM,
+            status=LibraryItemStatus.ACTIVE,
+        )
+        db.add(music)
+        await db.flush()
         db.add(voice)
         await db.flush()
         book = await _create_published_book(
             db,
             default_voice_id=voice.id,
-            background_music_url="https://example.com/bgm.mp3",
+            background_music_id=music.id,
         )
         page = BookPage(
             book_id=book.id,
@@ -116,6 +126,7 @@ class TestGetPlayerPayload:
             options=BookPlayerOptions(text_mode="bilingual"),
         )
 
+        assert payload.book.background_music_id == music.id
         assert payload.book.background_music_url == "https://example.com/bgm.mp3"
         assert payload.default_voice is not None
         assert payload.default_voice.id == voice.id

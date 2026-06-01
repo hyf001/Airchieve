@@ -15,15 +15,28 @@ from app.model.asset import (
     AssetSourceType,
     AssetStatus,
     AssetVisibility,
+    BackgroundMusic,
     Character,
     LibraryItemStatus,
     Voice,
 )
+from app.model.book import Book, BookPublishStatus
 from app.model.generation_task import GenerationTask, GenerationTaskStatus, GenerationTaskType
 from app.model.privacy import UploadConsentTargetType
 from app.model.taxonomy import TaxonomyItem, TaxonomyItemStatus, TaxonomyType
-from app.schema.asset import CharacterCreateRequest, CharacterUpdateRequest, SystemVoiceCreate, SystemVoiceSampleGenerateRequest, SystemVoiceUpdate, VoiceCreateRequest, VoiceUpdateRequest
-from app.schema.privacy import UploadConsentCreate
+from app.schema.asset import (
+    BackgroundMusicCreateRequest,
+    BackgroundMusicUpdateRequest,
+    CharacterCreateRequest,
+    CharacterUpdateRequest,
+    SystemBackgroundMusicCreate,
+    SystemVoiceCreate,
+    SystemVoiceSampleGenerateRequest,
+    SystemVoiceUpdate,
+    VoiceCreateRequest,
+    VoiceUpdateRequest,
+)
+from app.schema.privacy import PrivacyTarget, UploadConsentCreate
 from app.service import asset as asset_service
 from app.service import privacy as privacy_service
 
@@ -106,6 +119,26 @@ async def _make_voice(
     await db.commit()
     await db.refresh(v)
     return v
+
+
+async def _make_background_music(
+    db: AsyncSession,
+    *,
+    owner_user_id: int | None = None,
+    audio_url: str = "https://cdn.example.com/bgm.mp3",
+    status: LibraryItemStatus = LibraryItemStatus.ACTIVE,
+) -> BackgroundMusic:
+    music = BackgroundMusic(
+        owner_user_id=owner_user_id,
+        name="Test BGM",
+        audio_url=audio_url,
+        source_type=AssetSourceType.SYSTEM if owner_user_id is None else AssetSourceType.USER_UPLOAD,
+        status=status,
+    )
+    db.add(music)
+    await db.commit()
+    await db.refresh(music)
+    return music
 
 
 # ---------------------------------------------------------------------------
@@ -668,6 +701,100 @@ async def test_assert_asset_usable_unsupported_type(db: AsyncSession):
     with pytest.raises(HTTPException) as exc:
         await asset_service.assert_asset_usable(db, user_id=1, asset_type="unknown", asset_id=1)
     assert exc.value.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Background Music
+# ---------------------------------------------------------------------------
+
+async def test_create_background_music_requires_owned_audio_and_consent(db: AsyncSession):
+    asset = await _make_user_asset(db, user_id=1, kind=AssetKind.AUDIO)
+    consent = await privacy_service.record_upload_consent(
+        db,
+        user_id=1,
+        payload=UploadConsentCreate(
+            target_type=UploadConsentTargetType.UPLOAD_FILE,
+            target_id=asset.id,
+            confirmed_rights=True,
+            confirmed_privacy=True,
+        ),
+    )
+
+    result = await asset_service.create_background_music(
+        db,
+        user_id=1,
+        payload=BackgroundMusicCreateRequest(
+            name="雨夜钢琴",
+            audio_asset_id=asset.id,
+            upload_consent_id=consent.id,
+        ),
+    )
+
+    assert result.owner_user_id == 1
+    assert result.audio_url.endswith(asset.storage_key)
+    flags = await privacy_service.get_privacy_flags(db, PrivacyTarget(target_type="background_music", target_id=result.id), user_id=1)
+    assert flags.risk_flags == ["personal_background_music"]
+
+
+async def test_create_background_music_rejects_foreign_audio_asset(db: AsyncSession):
+    asset = await _make_user_asset(db, user_id=2, kind=AssetKind.AUDIO)
+
+    with pytest.raises(HTTPException) as exc:
+        await asset_service.create_background_music(
+            db,
+            user_id=1,
+            payload=BackgroundMusicCreateRequest(name="Foreign", audio_asset_id=asset.id, upload_consent_id=None),
+        )
+
+    assert exc.value.status_code == 400
+
+
+async def test_update_background_music_replaces_audio_with_owned_asset(db: AsyncSession):
+    music = await _make_background_music(db, owner_user_id=1)
+    asset = await _make_user_asset(db, user_id=1, kind=AssetKind.AUDIO)
+    consent = await privacy_service.record_upload_consent(
+        db,
+        user_id=1,
+        payload=UploadConsentCreate(
+            target_type=UploadConsentTargetType.UPLOAD_FILE,
+            target_id=asset.id,
+            confirmed_rights=True,
+            confirmed_privacy=True,
+        ),
+    )
+
+    result = await asset_service.update_background_music(
+        db,
+        user_id=1,
+        music_id=music.id,
+        payload=BackgroundMusicUpdateRequest(audio_asset_id=asset.id, upload_consent_id=consent.id),
+    )
+
+    assert result.audio_url.endswith(asset.storage_key)
+
+
+async def test_delete_system_background_music_rejects_referenced_books(db: AsyncSession):
+    music = await _make_background_music(db)
+    db.add(
+        Book(
+            owner_user_id=1,
+            source_type="generated",
+            title="引用音乐的绘本",
+            language="zh",
+            page_count=1,
+            publish_status=BookPublishStatus.PUBLISHED,
+            background_music_id=music.id,
+        )
+    )
+    await db.commit()
+
+    detail = await asset_service.get_admin_system_background_music(db, music.id)
+    assert [book.title for book in detail.referenced_books] == ["引用音乐的绘本"]
+
+    with pytest.raises(HTTPException) as exc:
+        await asset_service.delete_system_background_music(db, music.id)
+
+    assert exc.value.status_code == 409
 
 
 # ---------------------------------------------------------------------------

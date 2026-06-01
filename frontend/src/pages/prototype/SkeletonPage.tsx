@@ -15,6 +15,7 @@ const routeMeta: Record<AppRoute, { title: string; subtitle: string; eyebrow: st
   "/stories": { title: "故事库", subtitle: "按年龄、主题和场景筛选绘本", eyebrow: "故事列表", icon: "📚" },
   "/artstyle": { title: "画风", subtitle: "选择水彩、蜡笔、卡通和睡前氛围", eyebrow: "视觉风格", icon: "🎨" },
   "/characters": { title: "形象", subtitle: "管理孩子、家人和故事角色形象", eyebrow: "角色资产", icon: "🧒" },
+  "/background-music": { title: "背景音乐", subtitle: "选择系统音乐或上传自己的氛围音频", eyebrow: "音乐库", icon: "🎵" },
   "/membership": { title: "会员", subtitle: "查看生成权益、试听权益和家庭套餐", eyebrow: "会员权益", icon: "👑" },
   "/auth": { title: "欢迎回来", subtitle: "登录或注册后，可以继续阅读和创建专属绘本", eyebrow: "家长与老师账号", icon: "🔐" },
   "/profile": { title: "我的档案", subtitle: "保存孩子档案、阅读进度和个人素材", eyebrow: "个人中心", icon: "🌱" },

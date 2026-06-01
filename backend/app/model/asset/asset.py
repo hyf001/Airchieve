@@ -1,4 +1,5 @@
 from app.model.asset.art_style import ArtStyle
+from app.model.asset.background_music import BackgroundMusic
 from app.model.asset.character import Character
 from app.model.asset.enums import (
     ArtStyleStatus,
@@ -21,6 +22,7 @@ __all__ = [
     "AssetSourceType",
     "AssetStatus",
     "AssetVisibility",
+    "BackgroundMusic",
     "Character",
     "LibraryItemStatus",
     "Voice",

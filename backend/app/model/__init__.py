@@ -9,7 +9,7 @@ from app.model.account import (
 )
 from app.model.analytics import AnalyticsDailyMetric, AnalyticsEvent
 from app.model.audit import AuditLog
-from app.model.asset import ArtStyle, Asset, Character, Voice
+from app.model.asset import ArtStyle, Asset, BackgroundMusic, Character, Voice
 from app.model.book import Book, BookLearningCard, BookPage, BookPlaybackSegment, BookReadingPrompt, BookSoundEffectCue, BookSubtitleCue
 from app.model.ai_provider import AiProviderCall, AiProviderUsageRecord
 from app.model.creation import CreationPageDraft, CreationSession
@@ -40,6 +40,7 @@ __all__ = [
     "AiProviderCall",
     "AiProviderUsageRecord",
     "Asset",
+    "BackgroundMusic",
     "Base",
     "Book",
     "BookLearningCard",

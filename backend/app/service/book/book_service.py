@@ -3,7 +3,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.model.asset import Voice
+from app.model.asset import BackgroundMusic, LibraryItemStatus, Voice
 from app.model.book import (
     Book,
     BookAccessLevel,
@@ -132,18 +132,29 @@ async def get_book_detail(db: AsyncSession, book_id: int, user_id: int | None = 
 
 async def _book_detail_read(db: AsyncSession, book: Book) -> BookDetailRead:
     related = await _list_related_books_for_book(db, book, limit=6)
+    background_music_url = await _resolve_background_music_url(db, book.background_music_id)
     return BookDetailRead(
         **_book_summary(book).model_dump(),
         source_story_id=book.source_story_id,
         narrative_style_code=book.narrative_style_code,
         art_style_code=book.art_style_code,
-        background_music_url=book.background_music_url,
+        background_music_id=book.background_music_id,
+        background_music_url=background_music_url,
         publish_status=book.publish_status,
         is_featured=book.is_featured,
         created_at=book.created_at,
         updated_at=book.updated_at,
         related_books=related,
     )
+
+
+async def _resolve_background_music_url(db: AsyncSession, background_music_id: int | None) -> str | None:
+    if background_music_id is None:
+        return None
+    music = await db.get(BackgroundMusic, background_music_id)
+    if music is None or music.status != LibraryItemStatus.ACTIVE:
+        return None
+    return music.audio_url
 
 
 async def _get_book_for_player(db: AsyncSession, book_id: int, user_id: int | None = None) -> Book:
