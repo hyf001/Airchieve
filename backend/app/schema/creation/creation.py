@@ -85,6 +85,15 @@ class DialogueMark(BaseModel):
     sort_order: int = 0
 
 
+class PlaybackSegmentMark(BaseModel):
+    segment_type: str = Field(pattern="^(narration|dialogue)$")
+    text: str = Field(min_length=1, max_length=500)
+    speaker_ref: str | None = Field(default=None, max_length=160)
+    start_ms: int | None = None
+    end_ms: int | None = None
+    sort_order: int = 0
+
+
 class CreationSessionCreate(BaseModel):
     creation_type: CreationType
     child_profile_id: int | None = None
@@ -150,6 +159,7 @@ class PageDraftPatch(BaseModel):
     visual_prompt: str = Field(min_length=1, max_length=2000)
     character_appearances: list[CharacterAppearance] = Field(default_factory=list)
     dialogues: list[DialogueMark] = Field(default_factory=list)
+    playback_segments: list[PlaybackSegmentMark] = Field(default_factory=list)
     voice_config: dict = Field(default_factory=dict)
     subtitle_config: PageSubtitleConfig = Field(default_factory=PageSubtitleConfig)
     lip_sync_config: PageLipSyncConfig = Field(default_factory=PageLipSyncConfig)
@@ -157,6 +167,11 @@ class PageDraftPatch(BaseModel):
 
 class GeneratePagesRequest(BaseModel):
     page_ids: list[int] | None = None
+
+
+class GeneratePageImageRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=500)
+    override_prompt: str | None = Field(default=None, max_length=1000)
 
 
 class RegenerateRequest(BaseModel):
@@ -190,6 +205,7 @@ class PageDraftRead(BaseModel):
     visual_prompt: str
     character_appearances: list[dict] = Field(default_factory=list)
     dialogues: list[dict] = Field(default_factory=list)
+    playback_segments: list[dict] = Field(default_factory=list)
     voice_config: dict = Field(default_factory=dict)
     subtitle_config: dict = Field(default_factory=dict)
     lip_sync_config: dict = Field(default_factory=dict)
@@ -249,7 +265,7 @@ TASK_TYPE_BY_REGENERATE_TARGET: dict[RegenerateTargetType, GenerationTaskType] =
     RegenerateTargetType.STORY: GenerationTaskType.STORY,
     RegenerateTargetType.STORYBOARD: GenerationTaskType.STORYBOARD,
     RegenerateTargetType.PAGE_TEXT: GenerationTaskType.STORYBOARD,
-    RegenerateTargetType.PAGE_IMAGE: GenerationTaskType.IMAGE,
+    RegenerateTargetType.PAGE_IMAGE: GenerationTaskType.PAGE_IMAGE,
     RegenerateTargetType.PAGE_DIALOGUE: GenerationTaskType.STORYBOARD,
     RegenerateTargetType.PAGE_AUDIO: GenerationTaskType.AUDIO,
     RegenerateTargetType.BOOK_AUDIO: GenerationTaskType.AUDIO,

@@ -13,6 +13,7 @@ from app.model.taxonomy import TaxonomyType
 from app.model.generation_task import GenerationTask, GenerationTaskType
 from app.schema.book import BookSummary
 from app.schema.generation_task import GenerationTaskCreate
+from app.schema.ai_provider import StoryPromptCharacter
 from app.schema.story import (
     StartCreationFromStoryRequest,
     StoryCreate,
@@ -192,19 +193,22 @@ async def run_story_generation_task(db: AsyncSession, task: GenerationTask) -> N
     if not idea_prompt:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="STORY_PROMPT_MISSING")
     input_payload = task.input_payload or {}
-    generated_story = await ai_provider.generate_story(
+    generated_story = await ai_provider.create_story_content(
         db,
         task_id=task.id,
         idea_prompt=idea_prompt,
-        characters=list(input_payload.get("characters") or story.characters or []),
+        characters=[
+            _story_prompt_character(character)
+            for character in list(input_payload.get("characters") or story.characters or [])
+        ],
         language=str(input_payload.get("language") or story.language),
         age_range_codes=list(input_payload.get("age_range_codes") or story.age_range_codes or []),
         theme_codes=list(input_payload.get("theme_codes") or story.theme_codes or []),
         narrative_style_code=str(input_payload.get("narrative_style_code") or story.narrative_style_code or "") or None,
     )
-    story.title = generated_story["title"]
-    story.summary = generated_story["summary"]
-    story.body = generated_story["body"]
+    story.title = generated_story.title
+    story.summary = generated_story.summary
+    story.body = generated_story.body
     story.meta = {**(story.meta or {}), "characters": list(input_payload.get("characters") or story.characters or [])}
     story.source_type = StorySourceType.GENERATED_IDEA
     story.moderation_status = StoryModerationStatus.APPROVED
@@ -218,6 +222,12 @@ async def mark_story_generation_failed(db: AsyncSession, task: GenerationTask, e
         return
     story.moderation_status = StoryModerationStatus.REJECTED
     story.publish_status = StoryPublishStatus.DELETED
+
+
+def _story_prompt_character(value: object) -> StoryPromptCharacter:
+    if hasattr(value, "model_dump"):
+        value = value.model_dump(mode="json")
+    return StoryPromptCharacter.model_validate(value)
 
 
 async def update_user_story(db: AsyncSession, user_id: int, story_id: int, payload: StoryUpdate) -> StoryRead:

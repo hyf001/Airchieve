@@ -4,14 +4,16 @@ from typing import Any
 from urllib import request as urllib_request
 
 from app.core.config import settings
+from app.schema.ai_provider import LipSyncGenerationRequest
 from app.service.ai_provider.errors import AiProviderError
 
 
 async def kling_avatar_generate_lip_sync(
     model: str,
     *,
-    image_url: str,
-    audio_url: str,
+    request: LipSyncGenerationRequest | None = None,
+    image_url: str | None = None,
+    audio_url: str | None = None,
     prompt: str | None = None,
 ) -> str:
     if not settings.KLING_AVATAR_API_KEY:
@@ -19,14 +21,19 @@ async def kling_avatar_generate_lip_sync(
     if model not in {"kling-avatar-2.0/standard", "kling-avatar-2.0/pro"}:
         raise AiProviderError("可灵 Avatar 2.0 仅支持 standard/pro 模型", error_code="KLING_AVATAR_MODEL_UNSUPPORTED")
 
+    resolved_image_url = request.image_url if request else image_url
+    resolved_audio_url = request.audio_url if request else audio_url
+    if not resolved_image_url or not resolved_audio_url:
+        raise AiProviderError("可灵 Avatar 2.0 需要 image_url 和 audio_url", error_code="KLING_AVATAR_INPUT_MISSING")
+
     body: dict[str, Any] = {
         "model": model,
         "input": {
-            "image_urls": [image_url],
-            "audio_url": audio_url,
+            "image_urls": [resolved_image_url],
+            "audio_url": resolved_audio_url,
         },
     }
-    resolved_prompt = (prompt or settings.KLING_AVATAR_PROMPT or "").strip()
+    resolved_prompt = (_build_kling_avatar_prompt(request) if request else prompt or settings.KLING_AVATAR_PROMPT or "").strip()
     if resolved_prompt:
         body["input"]["prompt"] = resolved_prompt
     if settings.KLING_AVATAR_CALLBACK_URL:
@@ -34,6 +41,23 @@ async def kling_avatar_generate_lip_sync(
 
     task_id = await asyncio.get_running_loop().run_in_executor(None, _submit_avatar_task, body)
     return await _poll_avatar_task(task_id)
+
+
+def _build_kling_avatar_prompt(request: LipSyncGenerationRequest | None) -> str:
+    if request is None:
+        return settings.KLING_AVATAR_PROMPT or ""
+    page = request.page
+    title = str(page.title or "")
+    visual_prompt = str(page.visual_prompt or "")
+    text = str(page.narration_text or page.text_zh or page.text_en or "")
+    prompt = (
+        "A warm children's picture book character speaks naturally to the audience. "
+        "Keep the original illustration style and character identity stable. "
+        "Use gentle facial expressions, subtle head movement, and child-friendly performance. "
+        f"Page title: {title}. Visual context: {visual_prompt}. Spoken content: {text[:240]}"
+    )
+    fallback = (settings.KLING_AVATAR_PROMPT or "").strip()
+    return f"{fallback} {prompt}".strip() if fallback else prompt
 
 
 def _submit_avatar_task(body: dict[str, Any]) -> str:

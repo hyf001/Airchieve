@@ -105,6 +105,7 @@ class CreationPageDraft(TimestampMixin, Base):
     visual_prompt: Mapped[str] = mapped_column(Text, nullable=False)
     character_appearances: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
     dialogues: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
+    playback_segments: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
     voice_config: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     subtitle_config: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     lip_sync_config: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)

@@ -5,6 +5,7 @@ from io import BytesIO
 from typing import Any
 
 from app.core.config import settings
+from app.schema.ai_provider import AudioGenerationRequest, VoicePromptRef
 from app.service.ai_provider.errors import AiProviderError
 
 
@@ -19,14 +20,36 @@ def _audio_mime_type(audio_format: str) -> str:
     return f"audio/{normalized or 'wav'}"
 
 
-async def aliyun_generate_audio(text: str, *, voice: str, emotion_type: str | None = None) -> str:
+async def aliyun_generate_audio(
+    request: AudioGenerationRequest | str,
+    *,
+    voice: str | None = None,
+    emotion_type: str | None = None,
+) -> str:
     if not settings.ALIYUN_TTS_APP_KEY:
         raise AiProviderError("ALIYUN_TTS_APP_KEY 未配置", error_code="ALIYUN_TTS_APP_KEY_MISSING")
-    resolved_voice = voice.strip()
+    text = request.text if isinstance(request, AudioGenerationRequest) else request
+    resolved_voice = _voice_name_from_ref(request.voice_ref) if isinstance(request, AudioGenerationRequest) else voice
+    resolved_voice = (resolved_voice or "").strip()
     if not resolved_voice:
         raise AiProviderError("阿里云 TTS 音色未选择，请为系统声音配置 voice_style_code", error_code="ALIYUN_TTS_VOICE_MISSING")
+    resolved_emotion_type = _voice_emotion_from_ref(request.voice_ref) if isinstance(request, AudioGenerationRequest) else emotion_type
 
-    return await asyncio.get_running_loop().run_in_executor(None, _synthesize_sync, text, resolved_voice, emotion_type)
+    return await asyncio.get_running_loop().run_in_executor(None, _synthesize_sync, text, resolved_voice, resolved_emotion_type)
+
+
+def _voice_name_from_ref(voice_ref: VoicePromptRef | None) -> str | None:
+    if not voice_ref:
+        return None
+    value = voice_ref.provider_voice_id or voice_ref.voice_type or voice_ref.voice_name
+    return str(value) if value else None
+
+
+def _voice_emotion_from_ref(voice_ref: VoicePromptRef | None) -> str | None:
+    if not voice_ref:
+        return None
+    value = voice_ref.emotion_type or voice_ref.emotion
+    return str(value) if value else None
 
 
 def _synthesize_sync(text: str, voice: str, emotion_type: str | None) -> str:

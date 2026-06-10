@@ -8,6 +8,7 @@ from app.schema.creation import (
     CreationSessionCreate,
     CreationSessionRead,
     CreationTaskResponse,
+    GeneratePageImageRequest,
     GeneratePagesRequest,
     IdeaStoryGenerateRequest,
     PageDraftPatch,
@@ -97,11 +98,21 @@ async def update_page_draft(
 @router.post("/sessions/{session_id}/generate-images", response_model=CreationTaskResponse)
 async def generate_images(
     session_id: int,
-    payload: GeneratePagesRequest,
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(current_user_id),
 ) -> CreationTaskResponse:
-    return await creation.generate_images(db, user_id, session_id, payload)
+    return await creation.generate_images(db, user_id, session_id)
+
+
+@router.post("/sessions/{session_id}/page-drafts/{page_id}/generate-image", response_model=CreationTaskResponse)
+async def generate_page_image(
+    session_id: int,
+    page_id: int,
+    payload: GeneratePageImageRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(current_user_id),
+) -> CreationTaskResponse:
+    return await creation.generate_page_image(db, user_id, session_id, page_id, payload)
 
 
 @router.post("/sessions/{session_id}/generate-audio", response_model=CreationTaskResponse)

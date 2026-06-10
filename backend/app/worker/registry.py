@@ -8,6 +8,7 @@ from app.service.asset.character_generation import run_character_image_task
 from app.service.creation.service import (
     run_creation_audio_task,
     run_creation_image_task,
+    run_creation_page_image_task,
     run_creation_lip_sync_task,
     run_story_task,
     run_storyboard_task,
@@ -37,6 +38,7 @@ GENERATION_TASK_HANDLERS: dict[GenerationTaskType, GenerationTaskHandler] = {
     GenerationTaskType.STORY: run_story_generation_task_by_owner,
     GenerationTaskType.STORYBOARD: run_storyboard_task,
     GenerationTaskType.IMAGE: run_creation_image_task,
+    GenerationTaskType.PAGE_IMAGE: run_creation_page_image_task,
     GenerationTaskType.AUDIO: run_audio_task,
     GenerationTaskType.LIP_SYNC: run_creation_lip_sync_task,
     GenerationTaskType.TEMPLATE_COMPOSITE: run_template_composite_task,

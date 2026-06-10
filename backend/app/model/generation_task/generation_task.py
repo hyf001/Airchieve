@@ -12,6 +12,7 @@ class GenerationTaskType(StrEnum):
     STORYBOARD = "storyboard"
     CHARACTER_IMAGE = "character_image"
     IMAGE = "image"
+    PAGE_IMAGE = "page_image"
     AUDIO = "audio"
     LIP_SYNC = "lip_sync"
     TEMPLATE_COMPOSITE = "template_composite"
