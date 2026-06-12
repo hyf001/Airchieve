@@ -12,6 +12,7 @@ from app.model.creation import (
     CreationType,
 )
 from app.model.generation_task import GenerationTaskType
+from app.schema.ai_provider import ImageAspectRatio
 from app.schema.book import BookDetailRead
 from app.schema.generation_task import GenerationTaskRead
 
@@ -68,6 +69,7 @@ class VoiceRef(BaseModel):
     role_code: str | None = Field(default=None, max_length=80)
     provider_voice_id: str | None = Field(default=None, max_length=64)
     emotion_type: str | None = Field(default=None, max_length=64)
+    role_voice_refs: list["VoiceRef"] = Field(default_factory=list)
 
 
 class CharacterAppearance(BaseModel):
@@ -165,6 +167,10 @@ class PageDraftPatch(BaseModel):
     lip_sync_config: PageLipSyncConfig = Field(default_factory=PageLipSyncConfig)
 
 
+class GenerateImagesRequest(BaseModel):
+    aspect_ratio: ImageAspectRatio = ImageAspectRatio.LANDSCAPE_STANDARD
+
+
 class GeneratePagesRequest(BaseModel):
     page_ids: list[int] | None = None
 
@@ -172,6 +178,7 @@ class GeneratePagesRequest(BaseModel):
 class GeneratePageImageRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
     override_prompt: str | None = Field(default=None, max_length=1000)
+    aspect_ratio: ImageAspectRatio = ImageAspectRatio.LANDSCAPE_STANDARD
 
 
 class RegenerateRequest(BaseModel):
@@ -179,6 +186,7 @@ class RegenerateRequest(BaseModel):
     page_ids: list[int] | None = None
     reason: str | None = Field(default=None, max_length=500)
     override_prompt: str | None = Field(default=None, max_length=1000)
+    aspect_ratio: ImageAspectRatio = ImageAspectRatio.LANDSCAPE_STANDARD
 
     @model_validator(mode="after")
     def validate_page_targets(self) -> "RegenerateRequest":

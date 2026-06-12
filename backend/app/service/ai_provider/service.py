@@ -18,6 +18,7 @@ from app.schema.ai_provider import (
     AudioGenerationRequest,
     CharacterPortraitInput,
     GeneratedStoryContent,
+    ImageAspectRatio,
     ImageGenerationRequest,
     LipSyncGenerationRequest,
     PageAudioResult,
@@ -271,6 +272,7 @@ async def create_picture_book_page_images(
     *,
     task_id: int | None,
     pages: list[PageMediaInput],
+    aspect_ratio: ImageAspectRatio = ImageAspectRatio.LANDSCAPE_STANDARD,
 ) -> PictureBookImageResult:
     provider = _provider_for(AiProviderCapability.IMAGE)
     model = _model_for(provider, AiProviderCapability.IMAGE)
@@ -278,12 +280,13 @@ async def create_picture_book_page_images(
     request_snapshot = {
         "page_ids": [page.id for page in pages],
         "page_count": len(pages),
+        "aspect_ratio": aspect_ratio.value,
         "character_reference_image_count": len(_all_character_image_urls(pages)),
         "continuity_reference_image_count": len(_continuity_image_urls(pages)),
     }
     try:
         total = len(pages)
-        request = ImageGenerationRequest(kind="picture_book_pages", pages=pages, image_count=total)
+        request = ImageGenerationRequest(kind="picture_book_pages", pages=pages, image_count=total, aspect_ratio=aspect_ratio)
         generated_images = await _generate_images_with_provider(
             provider,
             model,
@@ -329,17 +332,19 @@ async def create_picture_book_single_page_image(
     *,
     task_id: int | None,
     page: PageMediaInput,
+    aspect_ratio: ImageAspectRatio = ImageAspectRatio.LANDSCAPE_STANDARD,
 ) -> PictureBookImageResult:
     provider = _provider_for(AiProviderCapability.IMAGE)
     model = _model_for(provider, AiProviderCapability.IMAGE)
     started = perf_counter()
     request_snapshot = {
         "page_id": page.id,
+        "aspect_ratio": aspect_ratio.value,
         "character_reference_image_count": len(_all_character_image_urls([page])),
         "continuity_reference_image_count": len(_continuity_image_urls([page])),
     }
     try:
-        request = ImageGenerationRequest(kind="picture_book_single_page", pages=[page], image_count=1)
+        request = ImageGenerationRequest(kind="picture_book_single_page", pages=[page], image_count=1, aspect_ratio=aspect_ratio)
         image_url = await _generate_image_with_provider(
             provider,
             model,
@@ -452,7 +457,7 @@ async def create_picture_book_page_audio(
             if page.playback_segments:
                 segment_results: list[PageSegmentAudioResult] = []
                 for segment in _ordered_playback_segments(page):
-                    audio_url = await _generate_audio_with_provider(provider, model, segment.text, voice_ref=page_voice_ref)
+                    audio_url = await _generate_audio_with_provider(provider, model, segment.text, voice_ref=_voice_ref_for_segment(page_voice_ref, segment))
                     segment_results.append(PageSegmentAudioResult(sort_order=segment.sort_order, audio_url=audio_url))
                 if not segment_results:
                     raise AiProviderError(f"第 {page.page_no or page.id} 页缺少可生成语音的播放片段", error_code="AUDIO_SEGMENTS_MISSING")
@@ -684,6 +689,18 @@ def _has_voice_ref_value(voice_ref: VoicePromptRef | None) -> bool:
     if not voice_ref:
         return False
     return any(str(value or "").strip() for value in (voice_ref.provider_voice_id, voice_ref.voice_type, voice_ref.voice_name))
+
+
+def _voice_ref_for_segment(default_voice_ref: VoicePromptRef | None, segment: StoryboardPlaybackSegment) -> VoicePromptRef | None:
+    if default_voice_ref is None:
+        return None
+    role_code = "narration" if segment.segment_type == StoryboardPlaybackSegmentType.NARRATION else str(segment.speaker_ref or "").strip()
+    if not role_code:
+        return default_voice_ref
+    for role_voice_ref in default_voice_ref.role_voice_refs:
+        if role_voice_ref.role_code == role_code:
+            return role_voice_ref
+    return default_voice_ref
 
 
 def _narration_text_for_page(page: PageMediaInput) -> str:

@@ -55,6 +55,14 @@ class StoryboardPlaybackSegmentType(StrEnum):
     DIALOGUE = "dialogue"
 
 
+class ImageAspectRatio(StrEnum):
+    SQUARE = "1:1"
+    LANDSCAPE_STANDARD = "4:3"
+    PORTRAIT_STANDARD = "3:4"
+    LANDSCAPE_WIDE = "16:9"
+    PORTRAIT_WIDE = "9:16"
+
+
 class StoryboardPlaybackSegment(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -98,11 +106,14 @@ class VoicePromptRef(BaseModel):
 
     source: str | None = Field(default=None, max_length=64)
     voice_id: int | None = None
+    role_code: str | None = Field(default=None, max_length=80)
+    display_name: str | None = Field(default=None, max_length=120)
     voice_name: str | None = Field(default=None, max_length=120)
     voice_type: str | None = Field(default=None, max_length=120)
     provider_voice_id: str | None = Field(default=None, max_length=120)
     emotion_type: str | None = Field(default=None, max_length=64)
     emotion: str | None = Field(default=None, max_length=64)
+    role_voice_refs: list["VoicePromptRef"] = Field(default_factory=list)
 
 
 class PageMediaInput(BaseModel):
@@ -144,6 +155,7 @@ class ImageGenerationRequest(BaseModel):
     pages: list[PageMediaInput] = Field(default_factory=list)
     character: CharacterPortraitInput | None = None
     image_count: int = Field(default=1, ge=1, le=24)
+    aspect_ratio: ImageAspectRatio = ImageAspectRatio.LANDSCAPE_STANDARD
 
 
 class AudioGenerationRequest(BaseModel):

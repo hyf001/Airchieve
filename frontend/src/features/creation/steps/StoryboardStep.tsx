@@ -65,9 +65,13 @@ const toPatchPayload = (page: PageDraft, form: StoryboardFormState): PageDraftPa
 });
 
 export const StoryboardStep: React.FC<{
+  isGenerating: boolean;
   session: CreationSession | null;
+  targetPageCount: number;
+  onGenerateStoryboard: () => void;
   onSessionChange: (session: CreationSession) => void;
-}> = ({ session, onSessionChange }) => {
+  onTargetPageCountChange: (pageCount: number) => void;
+}> = ({ isGenerating, session, targetPageCount, onGenerateStoryboard, onSessionChange, onTargetPageCountChange }) => {
   const pages = session?.page_drafts ?? [];
   const [editingPageId, setEditingPageId] = useState<number | null>(null);
   const [form, setForm] = useState<StoryboardFormState | null>(null);
@@ -112,19 +116,27 @@ export const StoryboardStep: React.FC<{
 
   return (
     <StepPanel icon={<Image className="h-5 w-5" />} title="编辑分镜" desc="确认每页标题、正文、朗读文本和画面描述，下一步会按这些分镜生成插图。">
-      {!session ? (
-        <EmptyState icon={<Loader2 className="h-5 w-5 animate-spin" />} title="正在准备创作会话" desc="请稍候，系统会在角色确认后生成分镜。" />
-      ) : pages.length === 0 ? (
-        <EmptyState icon={<Loader2 className="h-5 w-5 animate-spin" />} title="等待分镜生成" desc="分镜任务完成后，每一页的正文和画面描述会显示在这里。" />
-      ) : (
-        <div className="space-y-4">
-          {error ? (
-            <div className="flex items-start gap-2 rounded-[var(--radius-md)] bg-[rgba(212,114,92,0.08)] px-4 py-3 text-sm text-[var(--terracotta)]">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>{error}</span>
-            </div>
-          ) : null}
+      <div className="space-y-4">
+        <StoryboardControls
+          disabled={isGenerating}
+          pageCount={targetPageCount}
+          pagesReadyCount={pages.length}
+          onGenerate={onGenerateStoryboard}
+          onPageCountChange={onTargetPageCountChange}
+        />
 
+        {error ? (
+          <div className="flex items-start gap-2 rounded-[var(--radius-md)] bg-[rgba(212,114,92,0.08)] px-4 py-3 text-sm text-[var(--terracotta)]">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        ) : null}
+
+        {!session ? (
+          <EmptyState icon={<Image className="h-5 w-5" />} title="还没有创作会话" desc="从上一步进入后会保存角色配置，之后可以在这里生成分镜。" />
+        ) : pages.length === 0 ? (
+          <EmptyState icon={isGenerating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />} title={isGenerating ? "正在生成分镜" : "暂无分镜"} desc={isGenerating ? "任务完成后，每一页的正文和画面描述会显示在这里。" : "设置页数后点击生成分镜，也可以直接去下一步查看已有声音配置。"} />
+        ) : (
           <div className="grid gap-4">
             {pages.map((page) => {
               const isEditing = editingPageId === page.id;
@@ -143,9 +155,56 @@ export const StoryboardStep: React.FC<{
               );
             })}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </StepPanel>
+  );
+};
+
+const StoryboardControls: React.FC<{
+  disabled: boolean;
+  pageCount: number;
+  pagesReadyCount: number;
+  onGenerate: () => void;
+  onPageCountChange: (pageCount: number) => void;
+}> = ({ disabled, pageCount, pagesReadyCount, onGenerate, onPageCountChange }) => {
+  const pageOptions = [6, 8, 10, 12];
+
+  return (
+    <div className="rounded-[var(--radius-md)] border border-[rgba(212,114,92,0.1)] bg-white p-4 shadow-[var(--shadow-soft)]">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div className="text-sm font-bold text-[var(--text-dark)]">分镜页数</div>
+          <div className="mt-1 text-xs text-[var(--text-light)]">当前已有 {pagesReadyCount} 页分镜</div>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="inline-flex rounded-[var(--radius-sm)] bg-[var(--warm-bg)] p-1">
+            {pageOptions.map((option) => {
+              const selected = option === pageCount;
+              return (
+                <button
+                  key={option}
+                  aria-pressed={selected}
+                  className={cn(
+                    "h-9 min-w-12 rounded-lg px-3 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--peach)]",
+                    selected ? "bg-white text-[var(--terracotta)] shadow-[var(--shadow-soft)]" : "text-[var(--text-mid)] hover:bg-white/70",
+                  )}
+                  disabled={disabled}
+                  type="button"
+                  onClick={() => onPageCountChange(option)}
+                >
+                  {option}
+                </button>
+              );
+            })}
+          </div>
+          <Button type="button" disabled={disabled} onClick={onGenerate}>
+            {disabled ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {disabled ? "生成中" : pagesReadyCount ? "重新生成分镜" : "生成分镜"}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 };
 

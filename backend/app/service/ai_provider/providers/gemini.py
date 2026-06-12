@@ -12,6 +12,7 @@ from app.schema.ai_provider import (
     AudioGenerationRequest,
     CharacterPortraitInput,
     GeneratedStoryContent,
+    ImageAspectRatio,
     ImageGenerationRequest,
     PageCharacterImageRef,
     PageMediaInput,
@@ -233,15 +234,23 @@ async def gemini_generate_images(
         raise AiProviderError("google-genai 未安装", error_code="GEMINI_SDK_MISSING") from exc
 
     client = _gemini_client(genai, types)
+    aspect_ratio = request.aspect_ratio if isinstance(request, ImageGenerationRequest) else ImageAspectRatio.LANDSCAPE_STANDARD
     if isinstance(request, ImageGenerationRequest) and request.kind == "picture_book_pages":
-        return await _generate_picture_book_pages_sequentially(client, types, model, request.pages)
+        return await _generate_picture_book_pages_sequentially(client, types, model, request.pages, aspect_ratio=aspect_ratio)
 
     prompt = _build_gemini_image_prompt(request)
     resolved_image_urls = image_urls if isinstance(request, str) else _image_urls_from_request(request)
-    return await _generate_images_once(client, types, model, prompt, resolved_image_urls or [])
+    return await _generate_images_once(client, types, model, prompt, resolved_image_urls or [], aspect_ratio=aspect_ratio)
 
 
-async def _generate_picture_book_pages_sequentially(client: Any, types: Any, model: str, pages: list[PageMediaInput]) -> list[str]:
+async def _generate_picture_book_pages_sequentially(
+    client: Any,
+    types: Any,
+    model: str,
+    pages: list[PageMediaInput],
+    *,
+    aspect_ratio: ImageAspectRatio,
+) -> list[str]:
     images: list[str] = []
     previous_image_url: str | None = None
     total = len(pages)
@@ -250,14 +259,22 @@ async def _generate_picture_book_pages_sequentially(client: Any, types: Any, mod
         image_urls = [*_page_character_image_urls(page)]
         if previous_image_url:
             image_urls.append(previous_image_url)
-        generated = await _generate_images_once(client, types, model, prompt, image_urls)
+        generated = await _generate_images_once(client, types, model, prompt, image_urls, aspect_ratio=aspect_ratio)
         image_url = generated[0]
         images.append(image_url)
         previous_image_url = image_url
     return images
 
 
-async def _generate_images_once(client: Any, types: Any, model: str, prompt: str, image_urls: list[str]) -> list[str]:
+async def _generate_images_once(
+    client: Any,
+    types: Any,
+    model: str,
+    prompt: str,
+    image_urls: list[str],
+    *,
+    aspect_ratio: ImageAspectRatio,
+) -> list[str]:
     parts = []
     for image_url in image_urls:
         parts.append(await _image_url_to_part(types, image_url))
@@ -266,7 +283,10 @@ async def _generate_images_once(client: Any, types: Any, model: str, prompt: str
     response = await client.aio.models.generate_content(
         model=model,
         contents=types.Content(parts=parts),
-        config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"]),
+        config=types.GenerateContentConfig(
+            response_modalities=["TEXT", "IMAGE"],
+            image_config=types.ImageConfig(aspect_ratio=aspect_ratio.value),
+        ),
     )
     if not response.candidates:
         raise AiProviderError("Gemini 图片生成未返回候选内容", error_code="GEMINI_EMPTY_RESPONSE")

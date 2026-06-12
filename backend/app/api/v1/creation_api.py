@@ -8,6 +8,7 @@ from app.schema.creation import (
     CreationSessionCreate,
     CreationSessionRead,
     CreationTaskResponse,
+    GenerateImagesRequest,
     GeneratePageImageRequest,
     GeneratePagesRequest,
     IdeaStoryGenerateRequest,
@@ -98,10 +99,11 @@ async def update_page_draft(
 @router.post("/sessions/{session_id}/generate-images", response_model=CreationTaskResponse)
 async def generate_images(
     session_id: int,
+    payload: GenerateImagesRequest | None = None,
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(current_user_id),
 ) -> CreationTaskResponse:
-    return await creation.generate_images(db, user_id, session_id)
+    return await creation.generate_images(db, user_id, session_id, payload or GenerateImagesRequest())
 
 
 @router.post("/sessions/{session_id}/page-drafts/{page_id}/generate-image", response_model=CreationTaskResponse)

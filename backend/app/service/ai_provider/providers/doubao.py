@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.schema.ai_provider import (
     AudioGenerationRequest,
     CharacterPortraitInput,
+    ImageAspectRatio,
     ImageGenerationRequest,
     PageMediaInput,
     PictureBookStoryboardRequest,
@@ -167,13 +168,14 @@ async def doubao_generate_images(
     prompt = _build_doubao_image_prompt(request)
     resolved_image_urls = image_urls if isinstance(request, str) else _image_urls_from_request(request)
     resolved_image_count = image_count if isinstance(request, str) else request.image_count
+    aspect_ratio = request.aspect_ratio if isinstance(request, ImageGenerationRequest) else ImageAspectRatio.LANDSCAPE_STANDARD
 
     def _call() -> list[str]:
         client = Ark(base_url=settings.DOUBAO_BASE_URL, api_key=settings.DOUBAO_API_KEY)
         kwargs: dict[str, Any] = {
             "model": model,
             "prompt": prompt,
-            "size": "2304x1728",
+            "size": _doubao_image_size(aspect_ratio),
             "watermark": False,
         }
         if resolved_image_count > 1:
@@ -206,6 +208,16 @@ async def doubao_generate_images(
         return results
 
     return await asyncio.get_running_loop().run_in_executor(None, _call)
+
+
+def _doubao_image_size(aspect_ratio: ImageAspectRatio) -> str:
+    return {
+        ImageAspectRatio.SQUARE: "2048x2048",
+        ImageAspectRatio.LANDSCAPE_STANDARD: "2304x1728",
+        ImageAspectRatio.PORTRAIT_STANDARD: "1728x2304",
+        ImageAspectRatio.LANDSCAPE_WIDE: "2560x1440",
+        ImageAspectRatio.PORTRAIT_WIDE: "1440x2560",
+    }[aspect_ratio]
 
 
 async def doubao_generate_image(

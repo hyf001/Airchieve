@@ -29,6 +29,7 @@ export interface VoiceRef {
   role_code?: string | null;
   provider_voice_id?: string | null;
   emotion_type?: string | null;
+  role_voice_refs?: VoiceRef[];
 }
 
 export type PageDraftTaskStatus = "draft" | "pending" | "ready" | "failed" | "skipped";

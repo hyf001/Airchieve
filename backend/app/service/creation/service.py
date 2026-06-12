@@ -36,6 +36,7 @@ from app.schema.creation import (
     CreationSessionCreate,
     CreationSessionRead,
     CreationTaskResponse,
+    GenerateImagesRequest,
     GeneratePageImageRequest,
     GeneratePagesRequest,
     IdeaStoryGenerateRequest,
@@ -45,6 +46,7 @@ from app.schema.creation import (
     TASK_TYPE_BY_REGENERATE_TARGET,
 )
 from app.schema.ai_provider import (
+    ImageAspectRatio,
     PageCharacterImageRef,
     PageMediaInput,
     PictureBookAudioResult,
@@ -149,9 +151,9 @@ async def update_session_config(
     for field, value in data.items():
         setattr(session, field, value)
     if payload.character_refs is not None:
-        session.current_step = CreationStep.ART_STYLE if session.creation_type != CreationType.TEMPLATE_BOOK else CreationStep.VOICE
+        session.current_step = CreationStep.STORYBOARD if session.creation_type != CreationType.TEMPLATE_BOOK else CreationStep.VOICE
     if payload.art_style_ref is not None:
-        session.current_step = CreationStep.STORYBOARD
+        session.current_step = CreationStep.CHARACTER
     if payload.voice_ref is not None:
         session.current_step = CreationStep.VOICE
         session.status = CreationSessionStatus.PREVIEW
@@ -182,12 +184,19 @@ async def generate_story(
 
 
 async def _voice_ref_with_provider_voice_id(db: AsyncSession, user_id: int, voice_ref: dict) -> dict:
-    if voice_ref.get("source") == "template_default" or voice_ref.get("voice_id") is None:
-        return voice_ref
-    voice = await _get_voice_model(db, int(voice_ref["voice_id"]), user_id=user_id)
+    enriched = dict(voice_ref)
+    role_voice_refs = enriched.get("role_voice_refs")
+    if isinstance(role_voice_refs, list):
+        enriched["role_voice_refs"] = [
+            await _voice_ref_with_provider_voice_id(db, user_id, role_voice_ref)
+            for role_voice_ref in role_voice_refs
+            if isinstance(role_voice_ref, dict)
+        ]
+    if enriched.get("source") == "template_default" or enriched.get("voice_id") is None:
+        return enriched
+    voice = await _get_voice_model(db, int(enriched["voice_id"]), user_id=user_id)
     if voice.owner_user_id is None and not voice.voice_style_code:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="系统声音缺少 voice_style_code")
-    enriched = dict(voice_ref)
     enriched["display_name"] = str(enriched.get("display_name") or "").strip() or voice.name
     enriched["provider_voice_id"] = voice.voice_style_code
     enriched["emotion_type"] = voice.emotion_type
@@ -282,6 +291,7 @@ async def generate_images(
     db: AsyncSession,
     user_id: int,
     session_id: int,
+    payload: GenerateImagesRequest,
 ) -> CreationTaskResponse:
     session = await _get_session_model(db, user_id, session_id)
     task = await generation_task.create_task(
@@ -291,7 +301,7 @@ async def generate_images(
             owner_type="creation",
             owner_id=session.id,
             user_id=user_id,
-            input_payload={},
+            input_payload=payload.model_dump(mode="json"),
         ),
     )
     for page in session.page_drafts:
@@ -659,8 +669,14 @@ async def run_storyboard_task(db: AsyncSession, task: GenerationTask) -> None:
 
 async def run_creation_image_task(db: AsyncSession, task: GenerationTask) -> None:
     session = await _get_task_session_model(db, task)
+    aspect_ratio = _task_aspect_ratio(task)
     try:
-        image_result = await ai_provider.create_picture_book_page_images(db, task_id=task.id, pages=_page_payloads(session, None))
+        image_result = await ai_provider.create_picture_book_page_images(
+            db,
+            task_id=task.id,
+            pages=_page_payloads(session, None),
+            aspect_ratio=aspect_ratio,
+        )
         await _persist_media_result_urls(db, session.user_id, image_result, url_key="image_url", asset_kind=AssetKind.IMAGE, extension=".png")
         _apply_image_results(session, image_result)
         for page in session.page_drafts:
@@ -675,11 +691,13 @@ async def run_creation_image_task(db: AsyncSession, task: GenerationTask) -> Non
 async def run_creation_page_image_task(db: AsyncSession, task: GenerationTask) -> None:
     session = await _get_task_session_model(db, task)
     page_id = _task_page_id(task)
+    aspect_ratio = _task_aspect_ratio(task)
     try:
         image_result = await ai_provider.create_picture_book_single_page_image(
             db,
             task_id=task.id,
             page=_single_page_payload(session, page_id),
+            aspect_ratio=aspect_ratio,
         )
         await _persist_media_result_urls(db, session.user_id, image_result, url_key="image_url", asset_kind=AssetKind.IMAGE, extension=".png")
         _apply_image_results(session, image_result)
@@ -1057,6 +1075,13 @@ def _task_page_ids(task: GenerationTask) -> list[int] | None:
     if not page_ids:
         return None
     return [int(page_id) for page_id in page_ids]
+
+
+def _task_aspect_ratio(task: GenerationTask) -> ImageAspectRatio:
+    value = (task.input_payload or {}).get("aspect_ratio")
+    if value is None:
+        return ImageAspectRatio.LANDSCAPE_STANDARD
+    return ImageAspectRatio(value)
 
 
 def _task_page_id(task: GenerationTask) -> int:

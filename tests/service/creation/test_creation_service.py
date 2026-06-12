@@ -15,7 +15,7 @@ from app.model.book import (
     BookSegmentFallbackMode,
     BookSubtitlePosition,
 )
-from app.model.asset import AssetAccessLevel, AssetSourceType, LibraryItemStatus, Voice
+from app.model.asset import ArtStyle, AssetAccessLevel, AssetSourceType, LibraryItemStatus, Voice
 from app.model.creation import CreationPageDraft, CreationSession, CreationSessionStatus, CreationStep, CreationType, PageDraftTaskStatus
 from app.model.generation_task import GenerationTask, GenerationTaskStatus
 
@@ -135,6 +135,68 @@ class TestUpdateSessionConfigVoiceRef:
         assert result.voice_ref["provider_voice_id"] == "xiaoyun"
         assert result.voice_ref["emotion_type"] == "happy"
         assert result.voice_ref["display_name"] == "阿里云小云"
+
+
+class TestUpdateSessionConfigArtStyleRef:
+    async def test_art_style_ref_moves_session_to_character_step(self, db: AsyncSession):
+        session = await _create_test_session(db, current_step=CreationStep.ART_STYLE)
+        art_style = ArtStyle(
+            owner_user_id=None,
+            code="watercolor",
+            name="水彩画风",
+            description="柔和水彩",
+            prompt="soft watercolor",
+            access_level=AssetAccessLevel.FREE,
+        )
+        db.add(art_style)
+        await db.commit()
+
+        from app.schema.creation import ArtStyleRef, CreationConfigPatch
+        from app.schema.creation.creation import ArtStyleSource
+        from app.service.creation import update_session_config
+
+        result = await update_session_config(
+            db,
+            user_id=1,
+            session_id=session.id,
+            payload=CreationConfigPatch(
+                art_style_ref=ArtStyleRef(
+                    source=ArtStyleSource.SYSTEM,
+                    art_style_id=art_style.id,
+                    art_style_code=art_style.code,
+                )
+            ),
+        )
+
+        assert result.current_step == CreationStep.CHARACTER
+        assert result.art_style_ref is not None
+        assert result.art_style_ref["art_style_id"] == art_style.id
+
+    async def test_character_refs_move_story_session_to_storyboard_step(self, db: AsyncSession):
+        session = await _create_test_session(db, current_step=CreationStep.CHARACTER)
+        await db.commit()
+
+        from app.schema.creation import CharacterRef, CreationConfigPatch
+        from app.schema.creation.creation import CharacterRefSource
+        from app.service.creation import update_session_config
+
+        result = await update_session_config(
+            db,
+            user_id=1,
+            session_id=session.id,
+            payload=CreationConfigPatch(
+                character_refs=[
+                    CharacterRef(
+                        source=CharacterRefSource.GENERATED,
+                        character_id=None,
+                        role_code="role_1",
+                        display_name="小猫",
+                    )
+                ]
+            ),
+        )
+
+        assert result.current_step == CreationStep.STORYBOARD
 
 
 class TestGenerateLipSync:
