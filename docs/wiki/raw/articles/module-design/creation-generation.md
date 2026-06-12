@@ -170,8 +170,11 @@ sha256: 1f176c2d04cc8a3029703de62ed56073f28aa00b1e62506a08c0b4aede12d175
 | visual_prompt | text | 画面描述 |
 | character_appearances | `CharacterAppearance[]` | 出场形象 |
 | dialogues | `DialogueMark[]` | 对白标记 |
+| playback_segments | `PlaybackSegmentMark[]` | 播放片段 |
 
 `DialogueMark` 字段：`speaker_ref`、`text`、`narration_text` nullable、`start_ms` nullable、`end_ms` nullable、`sort_order`。
+
+`PlaybackSegmentMark` 字段：`segment_type`(`narration`/`dialogue`)、`text`、`speaker_ref` nullable、`start_ms` nullable、`end_ms` nullable、`sort_order`。
 
 校验：
 

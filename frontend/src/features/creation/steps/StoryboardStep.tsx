@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { AlertCircle, CheckCircle2, Edit3, Image, Loader2, Save, Volume2, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Edit3, Image, Loader2, MessageCircle, PlayCircle, Save, Sparkles, Type, Volume2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,8 @@ type StoryboardFormState = {
   narrationText: string;
   visualPrompt: string;
 };
+
+type PreviewTab = "content" | "visual" | "dialogue" | "playback";
 
 const statusMeta: Record<PageDraftTaskStatus, { label: string; className: string }> = {
   draft: {
@@ -56,6 +58,7 @@ const toPatchPayload = (page: PageDraft, form: StoryboardFormState): PageDraftPa
   visual_prompt: form.visualPrompt.trim(),
   character_appearances: page.character_appearances,
   dialogues: page.dialogues,
+  playback_segments: page.playback_segments,
   voice_config: page.voice_config,
   subtitle_config: page.subtitle_config,
   lip_sync_config: page.lip_sync_config,
@@ -161,6 +164,8 @@ const PageDraftCard: React.FC<{
     .map((appearance) => String(appearance.display_name ?? appearance.character_ref ?? appearance.role_code ?? "").trim())
     .filter(Boolean);
   const dialogueCount = page.dialogues.length;
+  const playbackCount = page.playback_segments.length;
+  const [activeTab, setActiveTab] = useState<PreviewTab>("content");
 
   return (
     <article className="rounded-[var(--radius-md)] border border-[rgba(212,114,92,0.1)] bg-white p-4 shadow-[var(--shadow-soft)]">
@@ -179,6 +184,12 @@ const PageDraftCard: React.FC<{
               <span className="inline-flex items-center gap-1 rounded-full bg-[rgba(126,200,227,0.14)] px-2.5 py-1 text-xs font-bold text-[var(--sky-deep)]">
                 <Volume2 className="h-3 w-3" />
                 已有音频
+              </span>
+            ) : null}
+            {playbackCount ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-[rgba(126,200,227,0.14)] px-2.5 py-1 text-xs font-bold text-[var(--sky-deep)]">
+                <PlayCircle className="h-3 w-3" />
+                {playbackCount} 段播放
               </span>
             ) : null}
           </div>
@@ -207,7 +218,14 @@ const PageDraftCard: React.FC<{
       {isEditing && form ? (
         <PageDraftForm form={form} onChange={onFormChange} />
       ) : (
-        <PageDraftPreview appearanceLabels={appearanceLabels} dialogueCount={dialogueCount} page={page} />
+        <PageDraftPreview
+          activeTab={activeTab}
+          appearanceLabels={appearanceLabels}
+          dialogueCount={dialogueCount}
+          page={page}
+          playbackCount={playbackCount}
+          onTabChange={setActiveTab}
+        />
       )}
     </article>
   );
@@ -263,11 +281,14 @@ const PageDraftForm: React.FC<{
 );
 
 const PageDraftPreview: React.FC<{
+  activeTab: PreviewTab;
   appearanceLabels: string[];
   dialogueCount: number;
+  onTabChange: (tab: PreviewTab) => void;
   page: PageDraft;
-}> = ({ appearanceLabels, dialogueCount, page }) => (
-  <div className="mt-4 grid gap-4 md:grid-cols-[180px_1fr]">
+  playbackCount: number;
+}> = ({ activeTab, appearanceLabels, dialogueCount, onTabChange, page, playbackCount }) => (
+  <div className="mt-4 grid gap-4 lg:grid-cols-[220px_1fr]">
     <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-[var(--radius-sm)] bg-[var(--warm-bg)]">
       {page.image_url ? (
         <img alt={`${page.title || `第${page.page_no}页`}插图`} className="h-full w-full object-cover" src={page.image_url} />
@@ -276,21 +297,166 @@ const PageDraftPreview: React.FC<{
       )}
     </div>
 
-    <div className="min-w-0 space-y-3">
-      <TextBlock label="正文" value={page.text_zh || page.text_en || "暂无正文"} />
-      <TextBlock label="朗读" value={page.narration_text || page.text_zh || page.text_en || "默认沿用正文"} />
-      <TextBlock label="画面" value={page.visual_prompt} />
-      <div className="flex flex-wrap gap-2 text-xs">
+    <div className="min-w-0">
+      <TabList activeTab={activeTab} dialogueCount={dialogueCount} playbackCount={playbackCount} onTabChange={onTabChange} />
+      <div className="mt-4 min-h-[210px] rounded-[var(--radius-sm)] bg-[var(--warm-bg)] p-4">
+        {activeTab === "content" ? (
+          <div className="grid gap-4">
+            <TextBlock label="正文" value={page.text_zh || page.text_en || "暂无正文"} />
+            {page.text_en ? <TextBlock label="英文" value={page.text_en} /> : null}
+            <TextBlock label="朗读" value={page.narration_text || page.text_zh || page.text_en || "默认沿用正文"} />
+          </div>
+        ) : null}
+        {activeTab === "visual" ? (
+          <div className="grid gap-4">
+            <TextBlock label="画面" value={page.visual_prompt} />
+            <TokenList emptyText="未指定出场角色" items={appearanceLabels} label="出场" />
+          </div>
+        ) : null}
+        {activeTab === "dialogue" ? <DialogueList page={page} /> : null}
+        {activeTab === "playback" ? <PlaybackSegmentList page={page} /> : null}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2 text-xs">
         <span className="rounded-full bg-[rgba(212,114,92,0.08)] px-2.5 py-1 font-semibold text-[var(--text-mid)]">
           出场：{appearanceLabels.length ? appearanceLabels.join("、") : "未指定"}
         </span>
         <span className="rounded-full bg-[rgba(212,114,92,0.08)] px-2.5 py-1 font-semibold text-[var(--text-mid)]">
           对白：{dialogueCount} 条
         </span>
+        <span className="rounded-full bg-[rgba(212,114,92,0.08)] px-2.5 py-1 font-semibold text-[var(--text-mid)]">
+          播放：{playbackCount} 段
+        </span>
       </div>
     </div>
   </div>
 );
+
+const tabMeta: Record<PreviewTab, { icon: React.ReactNode; label: string }> = {
+  content: { icon: <Type className="h-3.5 w-3.5" />, label: "内容" },
+  visual: { icon: <Sparkles className="h-3.5 w-3.5" />, label: "画面" },
+  dialogue: { icon: <MessageCircle className="h-3.5 w-3.5" />, label: "对白" },
+  playback: { icon: <PlayCircle className="h-3.5 w-3.5" />, label: "播放" },
+};
+
+const TabList: React.FC<{
+  activeTab: PreviewTab;
+  dialogueCount: number;
+  onTabChange: (tab: PreviewTab) => void;
+  playbackCount: number;
+}> = ({ activeTab, dialogueCount, onTabChange, playbackCount }) => {
+  const tabs: Array<{ count?: number; value: PreviewTab }> = [
+    { value: "content" },
+    { value: "visual" },
+    { value: "dialogue", count: dialogueCount },
+    { value: "playback", count: playbackCount },
+  ];
+
+  return (
+    <div className="flex flex-wrap gap-2" role="tablist" aria-label="分镜内容分类">
+      {tabs.map((tab) => {
+        const meta = tabMeta[tab.value];
+        const selected = activeTab === tab.value;
+        return (
+          <button
+            key={tab.value}
+            aria-selected={selected}
+            className={cn(
+              "inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--peach)]",
+              selected
+                ? "bg-[rgba(212,114,92,0.12)] text-[var(--terracotta)]"
+                : "bg-[rgba(120,120,120,0.08)] text-[var(--text-mid)] hover:bg-[rgba(212,114,92,0.08)]",
+            )}
+            role="tab"
+            type="button"
+            onClick={() => onTabChange(tab.value)}
+          >
+            {meta.icon}
+            {meta.label}
+            {typeof tab.count === "number" ? <span className="text-[var(--text-light)]">{tab.count}</span> : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+const DialogueList: React.FC<{ page: PageDraft }> = ({ page }) => {
+  if (!page.dialogues.length) {
+    return <EmptyInlineState text="当前页面没有对白标记" />;
+  }
+  return (
+    <div className="grid gap-3">
+      {orderedBySort(page.dialogues).map((dialogue, index) => (
+        <div key={`${dialogue.speaker_ref}-${dialogue.sort_order}-${index}`} className="rounded-[var(--radius-sm)] bg-white p-3">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-[var(--text-light)]">
+            <span>{dialogue.speaker_ref || "未指定角色"}</span>
+            <TimeRange startMs={dialogue.start_ms} endMs={dialogue.end_ms} />
+          </div>
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--text-mid)]">{dialogue.text}</p>
+          {dialogue.narration_text ? <p className="mt-2 text-xs leading-5 text-[var(--text-light)]">旁白：{dialogue.narration_text}</p> : null}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const PlaybackSegmentList: React.FC<{ page: PageDraft }> = ({ page }) => {
+  if (!page.playback_segments.length) {
+    return <EmptyInlineState text="当前页面没有播放片段" />;
+  }
+  return (
+    <div className="grid gap-3">
+      {orderedBySort(page.playback_segments).map((segment, index) => (
+        <div key={`${segment.segment_type}-${segment.sort_order}-${index}`} className="rounded-[var(--radius-sm)] bg-white p-3">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-[var(--text-light)]">
+            <span>{segment.segment_type === "dialogue" ? "对白" : "旁白"}</span>
+            {segment.speaker_ref ? <span>{segment.speaker_ref}</span> : null}
+            <TimeRange startMs={segment.start_ms} endMs={segment.end_ms} />
+          </div>
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--text-mid)]">{segment.text}</p>
+          {(segment.audio_url || segment.lip_sync_url) && (
+            <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-[var(--sage-deep)]">
+              {segment.audio_url ? <span>已有音频</span> : null}
+              {segment.lip_sync_url ? <span>已有对口型</span> : null}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const TokenList: React.FC<{ emptyText: string; items: string[]; label: string }> = ({ emptyText, items, label }) => (
+  <div>
+    <div className="text-xs font-bold text-[var(--text-light)]">{label}</div>
+    <div className="mt-2 flex flex-wrap gap-2">
+      {items.length ? (
+        items.map((item) => (
+          <span key={item} className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-[var(--text-mid)]">
+            {item}
+          </span>
+        ))
+      ) : (
+        <span className="text-sm text-[var(--text-light)]">{emptyText}</span>
+      )}
+    </div>
+  </div>
+);
+
+const TimeRange: React.FC<{ endMs?: number | null; startMs?: number | null }> = ({ endMs, startMs }) => {
+  if (typeof startMs !== "number" && typeof endMs !== "number") return null;
+  return (
+    <span>
+      {formatMs(startMs)} - {formatMs(endMs)}
+    </span>
+  );
+};
+
+const EmptyInlineState: React.FC<{ text: string }> = ({ text }) => <p className="text-sm leading-6 text-[var(--text-light)]">{text}</p>;
+
+const orderedBySort = <T extends { sort_order: number }>(items: T[]): T[] => [...items].sort((first, second) => first.sort_order - second.sort_order);
+
+const formatMs = (value?: number | null): string => (typeof value === "number" ? `${(value / 1000).toFixed(1)}s` : "--");
 
 const Field: React.FC<React.PropsWithChildren<{ label: string }>> = ({ children, label }) => (
   <label className="grid gap-1.5 text-sm font-semibold text-[var(--text-mid)]">

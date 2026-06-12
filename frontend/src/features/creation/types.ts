@@ -33,6 +33,33 @@ export interface VoiceRef {
 
 export type PageDraftTaskStatus = "draft" | "pending" | "ready" | "failed" | "skipped";
 
+export interface CharacterAppearance {
+  role_code: string;
+  character_ref?: string | null;
+  display_name?: string | null;
+}
+
+export interface DialogueMark {
+  speaker_ref: string;
+  text: string;
+  narration_text?: string | null;
+  start_ms?: number | null;
+  end_ms?: number | null;
+  sort_order: number;
+}
+
+export interface PlaybackSegmentMark {
+  segment_type: "narration" | "dialogue";
+  text: string;
+  speaker_ref?: string | null;
+  start_ms?: number | null;
+  end_ms?: number | null;
+  sort_order: number;
+  audio_url?: string | null;
+  audio_asset_id?: number | null;
+  lip_sync_url?: string | null;
+}
+
 export interface PageDraft {
   id: number;
   session_id: number;
@@ -42,8 +69,9 @@ export interface PageDraft {
   text_en?: string | null;
   narration_text?: string | null;
   visual_prompt: string;
-  character_appearances: Record<string, unknown>[];
-  dialogues: Record<string, unknown>[];
+  character_appearances: CharacterAppearance[];
+  dialogues: DialogueMark[];
+  playback_segments: PlaybackSegmentMark[];
   voice_config: Record<string, unknown>;
   subtitle_config: Record<string, unknown>;
   lip_sync_config: Record<string, unknown>;
@@ -65,8 +93,9 @@ export interface PageDraftPatch {
   text_en?: string | null;
   narration_text?: string | null;
   visual_prompt: string;
-  character_appearances: Record<string, unknown>[];
-  dialogues: Record<string, unknown>[];
+  character_appearances: CharacterAppearance[];
+  dialogues: DialogueMark[];
+  playback_segments: PlaybackSegmentMark[];
   voice_config?: Record<string, unknown>;
   subtitle_config?: Record<string, unknown>;
   lip_sync_config?: Record<string, unknown>;
