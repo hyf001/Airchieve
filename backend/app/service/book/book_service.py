@@ -221,13 +221,13 @@ def _page_read(page: BookPage) -> BookPageRead:
         audio_url=page.audio_url,
         duration_seconds=page.duration_seconds,
         playback_segments=_playback_segments_for_page(page),
-        sound_effects=[_sound_effect_read(effect) for effect in page.sound_effects],
+        sound_effects=[_sound_effect_read(effect) for effect in sorted(page.sound_effects, key=lambda item: item.sort_order)],
     )
 
 
 def _playback_segments_for_page(page: BookPage) -> list[BookPlaybackSegmentRead]:
     if page.playback_segments:
-        return [_segment_read(segment) for segment in page.playback_segments]
+        return [_segment_read(segment, page) for segment in sorted(page.playback_segments, key=lambda item: item.sort_order)]
     if not (page.audio_url or page.narration_text or page.text_zh or page.text_en):
         return []
     return [
@@ -263,36 +263,74 @@ def _playback_segments_for_page(page: BookPage) -> list[BookPlaybackSegmentRead]
     ]
 
 
-def _segment_read(segment: BookPlaybackSegment) -> BookPlaybackSegmentRead:
+def _segment_read(segment: BookPlaybackSegment, page: BookPage) -> BookPlaybackSegmentRead:
+    media_mode = segment.media_mode
+    lip_sync_url = segment.lip_sync_url
+    audio_url = segment.audio_url or (page.audio_url if segment.segment_type == BookPlaybackSegmentType.NARRATION else None)
+    fallback_mode = segment.fallback_mode
+    lip_sync_status = segment.lip_sync_status
+
+    if media_mode == BookPlaybackMediaMode.LIP_SYNC and not lip_sync_url:
+        media_mode = BookPlaybackMediaMode.AUDIO
+        fallback_mode = BookSegmentFallbackMode.PAGE_IMAGE_DIALOGUE_AUDIO
+        lip_sync_status = BookLipSyncStatus.FAILED
+
+    subtitle_cues = [
+        BookSubtitleCueRead(
+            id=cue.id,
+            cue_type=cue.cue_type,
+            speaker_ref=cue.speaker_ref,
+            start_ms=cue.start_ms,
+            end_ms=cue.end_ms,
+            text_zh=cue.text_zh,
+            text_en=cue.text_en,
+            position=cue.position,
+            position_config=cue.position_config,
+            sort_order=cue.sort_order,
+        )
+        for cue in sorted(segment.subtitle_cues, key=lambda item: item.sort_order)
+    ]
+    if not subtitle_cues:
+        subtitle_cues = [_fallback_subtitle_cue(segment, page)]
+
     return BookPlaybackSegmentRead(
         id=segment.id,
         segment_type=segment.segment_type,
         speaker_ref=segment.speaker_ref,
-        image_url=segment.image_url,
-        audio_url=segment.audio_url,
-        lip_sync_url=segment.lip_sync_url,
-        media_mode=segment.media_mode,
+        image_url=segment.image_url or page.image_url,
+        audio_url=audio_url,
+        lip_sync_url=lip_sync_url,
+        media_mode=media_mode,
         start_ms=segment.start_ms,
         end_ms=segment.end_ms,
-        fallback_mode=segment.fallback_mode,
-        lip_sync_status=segment.lip_sync_status,
+        fallback_mode=fallback_mode,
+        lip_sync_status=lip_sync_status,
         sort_order=segment.sort_order,
-        subtitle_cues=[
-            BookSubtitleCueRead(
-                id=cue.id,
-                cue_type=cue.cue_type,
-                speaker_ref=cue.speaker_ref,
-                start_ms=cue.start_ms,
-                end_ms=cue.end_ms,
-                text_zh=cue.text_zh,
-                text_en=cue.text_en,
-                position=cue.position,
-                position_config=cue.position_config,
-                sort_order=cue.sort_order,
-            )
-            for cue in segment.subtitle_cues
-        ],
-        sound_effects=[_sound_effect_read(effect) for effect in segment.sound_effects],
+        subtitle_cues=subtitle_cues,
+        sound_effects=[_sound_effect_read(effect) for effect in sorted(segment.sound_effects, key=lambda item: item.sort_order)],
+    )
+
+
+def _fallback_subtitle_cue(segment: BookPlaybackSegment, page: BookPage) -> BookSubtitleCueRead:
+    cue_type = (
+        BookSubtitleCueType.DIALOGUE
+        if segment.segment_type == BookPlaybackSegmentType.DIALOGUE
+        else BookSubtitleCueType.NARRATION
+    )
+    end_ms = segment.end_ms
+    if end_ms is None and page.duration_seconds is not None:
+        end_ms = page.duration_seconds * 1000
+    return BookSubtitleCueRead(
+        id=-(segment.id),
+        cue_type=cue_type,
+        speaker_ref=segment.speaker_ref,
+        start_ms=segment.start_ms or 0,
+        end_ms=end_ms,
+        text_zh=page.narration_text or page.text_zh,
+        text_en=page.text_en,
+        position="bottom",
+        position_config=None,
+        sort_order=0,
     )
 
 
