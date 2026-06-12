@@ -1,10 +1,10 @@
 ---
 title: 创作生成与异步任务
 created: 2026-05-19
-updated: 2026-05-24
+updated: 2026-06-10
 type: entity
 tags: [creation, generation-task, ai-provider, module-design]
-sources: [raw/articles/module-design/creation-generation.md, raw/articles/generation-task-execution-design.md, raw/articles/external/gemini-tts-speech-generation.md, raw/articles/external/volcengine-tts-http.md, raw/articles/external/aliyun-nls-python-sdk-tts.md, raw/articles/external/aliyun-speech-synthesis-overview.md, raw/articles/external/kling-avatar-20-lip-sync.md]
+sources: [raw/articles/module-design/creation-generation.md, raw/articles/generation-task-execution-design.md, raw/articles/external/gemini-tts-speech-generation.md, raw/articles/external/volcengine-tts-http.md, raw/articles/external/aliyun-nls-python-sdk-tts.md, raw/articles/external/aliyun-speech-synthesis-overview.md, raw/articles/external/kling-avatar-20-lip-sync.md, raw/articles/external/volcengine-seedream-image-prompting.md]
 ---
 
 # 创作生成与异步任务 (creation / generation_task / ai_provider)
@@ -73,6 +73,13 @@ sources: [raw/articles/module-design/creation-generation.md, raw/articles/genera
 - [ ] 明确情绪意图存储位置：分镜页 metadata、`dialogues` 标记，或 provider 调用前的临时推断。
 - [ ] 将 TTS 输出从长期 `data:` URL 迁移到 [[asset-storage]] 持久化文件 URL，便于后续对口型、播放器和分享稳定访问。
 
+## AI Provider 图片生成提示词参考
+
+- [[seedream-image-prompting]] 记录火山方舟 Seedream 4.0-5.0 图片提示词规则，并映射到 AIrchieve 的绘本页插图、角色形象和参考图生图。
+- 绘本页 `visual_prompt` 应使用自然语言描述主体、动作、环境，并按需补充风格、色彩、光影和构图；避免把正文、对白或抽象关键词堆叠成图片 prompt。
+- 参考图输入必须说明每张图的职责：角色参考图用于保持人物身份和主要视觉特征，前序页面参考图用于保持故事、场景、色彩、画风和构图连贯。
+- 整本生成应明确“一组共 N 张”以及每张图与页面顺序一一对应；单页重生成应明确只重画当前页，不补画其它页面。
+
 ## AI Provider 对口型生成参考
 
 - Kling Avatar 2.0：官方产品资料说明它可基于角色图片、语音内容和可选表演 prompt 生成动态 avatar 视频，适合绘本页插图 + 朗读音频的链路。
@@ -89,12 +96,14 @@ sources: [raw/articles/module-design/creation-generation.md, raw/articles/genera
 - Aliyun NLS Python SDK TTS 参考摘要：`raw/articles/external/aliyun-nls-python-sdk-tts.md`
 - Aliyun 语音合成音色与多情感参考摘要：`raw/articles/external/aliyun-speech-synthesis-overview.md`
 - Kling Avatar 2.0 对口型参考摘要：`raw/articles/external/kling-avatar-20-lip-sync.md`
+- Volcengine Seedream 图片提示词参考摘要：`raw/articles/external/volcengine-seedream-image-prompting.md`
 - 本页是模块索引与摘要；API、契约、Service、数据库字段、跨模块协作和边界规则以 raw 全文为准。
 
 ## 相关页面
 
 - [[story-library]] — 故事来源
 - [[generation-task-execution]] — 异步生成任务执行机制
+- [[seedream-image-prompting]] — 图片生成提示词结构
 - [[template]] — 模板创作路径
 - [[asset-storage]] — 角色形象和声音选择
 - [[membership-payment]] — 生成额度

@@ -75,3 +75,10 @@
 - Updated `concepts/generation-task-execution.md` so lip-sync task output is described as a URL.
 - Added subtitle-track requirements for narrator and dialogue text across Chinese, English, and bilingual display modes.
 - Added design rules for seamless video-like playback using a unified page timeline, preloading, transitions, audio mixing, and subtitle cue synchronization.
+
+## [2026-06-10] ingest | Seedream image prompting guide
+
+- Added `raw/articles/external/volcengine-seedream-image-prompting.md` from Volcengine Ark Seedream 4.0-5.0 prompt guidance.
+- Created `concepts/seedream-image-prompting.md` for text-to-image, reference-image, multi-image input, and multi-image output prompt rules.
+- Updated `entities/creation-generation.md` with Seedream image prompt mapping for storyboard `visual_prompt`, role reference images, continuity images, and page sequence generation.
+- Updated `concepts/source-inventory.md` and `index.md`.

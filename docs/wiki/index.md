@@ -1,7 +1,7 @@
 # Wiki Index
 
 > AIrchieve 绘本网站项目知识库。每个模块页面包含前后端归属、数据模型、接口、边界和跨模块引用。
-> Last updated: 2026-05-24 | Total pages: 22
+> Last updated: 2026-06-10 | Total pages: 23
 
 ## Start Here
 
@@ -13,6 +13,7 @@
 - [产品需求与用户故事](concepts/product-requirements.md) — PRD 用户画像、15 个 User Stories 和验收标准归属索引
 - [前端原型索引](concepts/frontend-prototypes.md) — `docs/frontend/*.html` 原型的无损 raw 来源和模块归属
 - [Generation Task Execution](concepts/generation-task-execution.md) — 生成任务的 worker claim、handler 分发、事务、重试和 task 类型执行规则
+- [Seedream Image Prompting](concepts/seedream-image-prompting.md) — 豆包/Seedream 图片生成提示词结构、参考图、多图输出和 AIrchieve 映射
 - [Source Inventory](concepts/source-inventory.md) — wiki raw 层完整来源清单和无损使用原则
 
 ## Module Map

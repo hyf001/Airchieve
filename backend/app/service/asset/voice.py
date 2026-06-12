@@ -25,6 +25,7 @@ from app.schema.asset import (
 )
 from app.schema.entitlement import EntitlementResourceType
 from app.schema.generation_task import GenerationTaskCreate, GenerationTaskRead
+from app.schema.ai_provider import VoicePromptRef
 from app.service import generation_task
 from app.service import entitlement as entitlement_service
 from app.service.ai_provider import service as ai_provider_service
@@ -137,14 +138,14 @@ async def run_system_voice_sample_task(db: AsyncSession, task: GenerationTask) -
     payload = SystemVoiceSampleGenerateRequest.model_validate(task.input_payload or {})
     if task.owner_id and payload.voice_id is None:
         payload.voice_id = task.owner_id
-    data_url = await ai_provider_service.generate_single_audio_sample(
+    data_url = await ai_provider_service.create_voice_sample_audio(
         db,
         text=payload.sample_text,
-        voice_ref={
-            "source": "system",
-            "provider_voice_id": payload.voice_style_code,
-            "emotion_type": payload.emotion_type,
-        },
+        voice_ref=VoicePromptRef(
+            source="system",
+            provider_voice_id=payload.voice_style_code,
+            emotion_type=payload.emotion_type,
+        ),
     )
     audio = await storage_service.save_generated_data_url(
         db,

@@ -268,12 +268,16 @@ export const CreationWizard: React.FC = () => {
       try {
         const nextTask = await creationApi.getTask(task.id);
         if (cancelled) return;
-        setTask(nextTask);
         if (nextTask.status !== "queued" && nextTask.status !== "running") {
           window.clearInterval(timer);
           const nextSession = await creationApi.getSession(session.id);
-          if (!cancelled) setSession(nextSession);
+          if (!cancelled) {
+            setSession(nextSession);
+            setTask(nextTask);
+          }
+          return;
         }
+        setTask(nextTask);
       } catch {
         window.clearInterval(timer);
       }

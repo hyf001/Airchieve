@@ -37,10 +37,13 @@ export const creationApi = {
     apiClient.post<CreationTaskResponse>(`/v1/creation/sessions/${sessionId}/generate-storyboard`, {}),
   updatePageDraft: (sessionId: number, pageId: number, payload: PageDraftPatch) =>
     apiClient.patch<CreationSession>(`/v1/creation/sessions/${sessionId}/page-drafts/${pageId}`, payload),
-  generateImages: (sessionId: number, pageIds?: number[]) =>
-    apiClient.post<CreationTaskResponse>(`/v1/creation/sessions/${sessionId}/generate-images`, {
-      page_ids: pageIds ?? null,
-    }),
+  generateImages: (sessionId: number) =>
+    apiClient.post<CreationTaskResponse>(`/v1/creation/sessions/${sessionId}/generate-images`, {}),
+  generatePageImage: (sessionId: number, pageId: number, payload?: { reason?: string; override_prompt?: string }) =>
+    apiClient.post<CreationTaskResponse>(
+      `/v1/creation/sessions/${sessionId}/page-drafts/${pageId}/generate-image`,
+      payload ?? {},
+    ),
   generateAudio: (sessionId: number, pageIds?: number[]) =>
     apiClient.post<CreationTaskResponse>(`/v1/creation/sessions/${sessionId}/generate-audio`, {
       page_ids: pageIds ?? null,

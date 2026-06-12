@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.model.asset import ArtStyle, Asset, AssetKind, AssetStatus, AssetVisibility, Character, LibraryItemStatus
 from app.model.generation_task import GenerationTask
+from app.schema.ai_provider import CharacterPortraitInput
 from app.service import ai_provider
 from app.service import generation_task as generation_task_service
 from app.service import storage as storage_service
@@ -33,12 +34,11 @@ async def run_character_image_task(db: AsyncSession, task: GenerationTask) -> No
         if reference is not None:
             reference_image_url = reference.image_url
 
-    prompt = await _build_character_prompt(db, character)
-    image_result = await ai_provider.generate_character_image(
+    portrait_input = await _build_character_portrait_input(db, character, reference_image_url=reference_image_url)
+    image_result = await ai_provider.create_character_portrait(
         db,
         task_id=task.id,
-        prompt=prompt,
-        reference_image_url=reference_image_url,
+        character=portrait_input,
     )
 
     image_url = image_result
@@ -65,17 +65,23 @@ async def run_character_image_task(db: AsyncSession, task: GenerationTask) -> No
     )
 
 
-async def _build_character_prompt(db: AsyncSession, character: Character) -> str:
+async def _build_character_portrait_input(
+    db: AsyncSession,
+    character: Character,
+    *,
+    reference_image_url: str | None,
+) -> CharacterPortraitInput:
     style_prompt = None
     if character.art_style_id is not None:
         style = await db.get(ArtStyle, character.art_style_id)
         if style is not None:
             style_prompt = style.prompt or style.description or style.name
-    parts = [
-        f"角色名称：{character.name}",
-        f"角色描述：{character.description}" if character.description else None,
-        f"生成要求：{character.generation_prompt}" if character.generation_prompt else None,
-        f"画风要求：{style_prompt}" if style_prompt else None,
-        f"分类：{character.category_code}" if character.category_code else None,
-    ]
-    return "\n".join(part for part in parts if part)
+    return CharacterPortraitInput(
+        name=character.name,
+        description=character.description,
+        generation_prompt=character.generation_prompt,
+        art_style_prompt=style_prompt,
+        category_code=character.category_code,
+        reference_image_url=reference_image_url,
+        reference_image_policy="preserve_identity_transfer_style" if style_prompt else "preserve_identity_and_style",
+    )
