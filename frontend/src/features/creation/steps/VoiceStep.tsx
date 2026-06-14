@@ -19,27 +19,23 @@ export const VoiceStep: React.FC<{
   isGenerating: boolean;
   path: WizardPath;
   roleOptions: VoiceRoleOption[];
-  selectedRoleCode: string;
   selectedVoicesByRole: Record<string, VoiceSummary | null>;
   session: CreationSession | null;
   voices: VoiceSummary[];
   voicesLoading: boolean;
   onGenerateAllAudio: () => void;
   onGeneratePageAudio: (pageId: number) => void;
-  onSelectRole: (roleCode: string) => void;
-  onSelectVoice: (voice: VoiceSummary | null) => void;
+  onSelectVoice: (roleCode: string, voice: VoiceSummary | null) => void;
 }> = ({
   isGenerating,
   path,
   roleOptions,
-  selectedRoleCode,
   selectedVoicesByRole,
   session,
   voices,
   voicesLoading,
   onGenerateAllAudio,
   onGeneratePageAudio,
-  onSelectRole,
   onSelectVoice,
 }) => {
   const activeVoices = voices.filter((voice) => voice.status === "active");
@@ -48,7 +44,7 @@ export const VoiceStep: React.FC<{
     <StepPanel
       icon={<Mic2 className="h-5 w-5" />}
       title="生成语音"
-      desc={path === "template" ? "可使用模板默认声音；替换声音时不改变正文、对白和播放节奏。" : "选择默认配音声音，再按每页播放片段生成和试听语音。"}
+      desc={path === "template" ? "可使用模板默认声音；替换声音时不改变正文、对白和播放节奏。" : "为每个配音对象设置声音，再按每页播放片段生成和试听语音。"}
     >
       <div className="space-y-5">
         <section>
@@ -66,14 +62,12 @@ export const VoiceStep: React.FC<{
               return (
                 <VoiceRoleCard
                   key={role.roleCode}
-                  selected={selectedRoleCode === role.roleCode}
                   activeVoices={activeVoices}
                   fallbackVoice={fallbackVoice}
                   role={role}
                   selectedVoice={voice}
                   voicesLoading={voicesLoading}
-                  onSelectRole={() => onSelectRole(role.roleCode)}
-                  onSelectVoice={(nextVoice) => onSelectVoice(nextVoice)}
+                  onSelectVoice={(nextVoice) => onSelectVoice(role.roleCode, nextVoice)}
                 />
               );
             })}
@@ -110,26 +104,21 @@ const VoiceRoleCard: React.FC<{
   activeVoices: VoiceSummary[];
   fallbackVoice: VoiceSummary | null;
   role: VoiceRoleOption;
-  selected: boolean;
   selectedVoice: VoiceSummary | null;
   voicesLoading: boolean;
-  onSelectRole: () => void;
   onSelectVoice: (voice: VoiceSummary | null) => void;
-}> = ({ activeVoices, fallbackVoice, role, selected, selectedVoice, voicesLoading, onSelectRole, onSelectVoice }) => {
+}> = ({ activeVoices, fallbackVoice, role, selectedVoice, voicesLoading, onSelectVoice }) => {
   const effectiveVoice = selectedVoice ?? fallbackVoice;
   const isInherited = !selectedVoice && !!fallbackVoice;
 
   return (
   <article
-    className={cn(
-      "rounded-[var(--radius-md)] border bg-white p-4 text-left transition hover:-translate-y-0.5",
-      selected ? "border-[var(--terracotta)] shadow-[var(--shadow-hover)]" : "border-[rgba(212,114,92,0.1)] shadow-[var(--shadow-soft)]",
-    )}
+    className="rounded-[var(--radius-md)] border border-[rgba(212,114,92,0.1)] bg-white p-4 text-left shadow-[var(--shadow-soft)]"
   >
-    <button className="block w-full text-left" type="button" onClick={onSelectRole}>
+    <div>
       <div className="font-bold text-[var(--text-dark)]">{role.label}</div>
       <div className="mt-1 text-xs leading-5 text-[var(--text-light)]">{role.desc}</div>
-    </button>
+    </div>
 
     <label className="mt-4 block text-xs font-bold text-[var(--text-light)]">
       声音
@@ -145,8 +134,6 @@ const VoiceRoleCard: React.FC<{
           }
           onSelectVoice(activeVoices.find((voice) => voice.id === Number(value)) ?? null);
         }}
-        onClick={(event) => event.stopPropagation()}
-        onMouseDown={(event) => event.stopPropagation()}
       >
         {role.roleCode === "narration" ? <option value="">系统默认声音</option> : <option value="">沿用旁白声音</option>}
         {activeVoices.map((voice) => (

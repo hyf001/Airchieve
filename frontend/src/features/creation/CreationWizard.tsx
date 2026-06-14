@@ -70,7 +70,6 @@ export const CreationWizard: React.FC = () => {
   const [voices, setVoices] = useState<VoiceSummary[]>([]);
   const [voicesLoading, setVoicesLoading] = useState(true);
   const [selectedVoicesByRole, setSelectedVoicesByRole] = useState<Record<string, VoiceSummary | null>>({});
-  const [selectedVoiceRoleCode, setSelectedVoiceRoleCode] = useState("narration");
   const [session, setSession] = useState<CreationSession | null>(null);
   const [task, setTask] = useState<GenerationTaskRead | null>(null);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
@@ -213,7 +212,6 @@ export const CreationWizard: React.FC = () => {
     setStep("source");
     setMessage(null);
     setSelectedCharactersByRole({});
-    setSelectedVoiceRoleCode("narration");
   };
 
   useEffect(() => {
@@ -348,10 +346,6 @@ export const CreationWizard: React.FC = () => {
     const firstRoleCode = storyCharacters.length ? roleCodeFor(storyCharacters[0], 0) : null;
     setSelectedStoryRoleCode((current) => (current && storyCharacters.some((character, index) => roleCodeFor(character, index) === current) ? current : firstRoleCode));
   }, [storyCharacters]);
-
-  useEffect(() => {
-    setSelectedVoiceRoleCode((current) => (voiceRoleOptions.some((role) => role.roleCode === current) ? current : "narration"));
-  }, [voiceRoleOptions]);
 
   const previewItems = useMemo<Array<[string, string]>>(
     () => [
@@ -690,16 +684,14 @@ export const CreationWizard: React.FC = () => {
               isGenerating={busy || isTaskActive}
               path={path}
               roleOptions={voiceRoleOptions}
-              selectedRoleCode={selectedVoiceRoleCode}
               selectedVoicesByRole={selectedVoicesByRole}
               session={session}
               voices={voices}
               voicesLoading={voicesLoading}
               onGenerateAllAudio={handleGenerateAllAudio}
               onGeneratePageAudio={handleGeneratePageAudio}
-              onSelectRole={setSelectedVoiceRoleCode}
-              onSelectVoice={(voice) => {
-                setSelectedVoicesByRole((current) => ({ ...current, [selectedVoiceRoleCode]: voice }));
+              onSelectVoice={(roleCode, voice) => {
+                setSelectedVoicesByRole((current) => ({ ...current, [roleCode]: voice }));
                 setTask(null);
                 setMessage(null);
               }}
