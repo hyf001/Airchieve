@@ -69,6 +69,7 @@ async def create_voice(db: AsyncSession, user_id: int, payload: VoiceCreateReque
         owner_user_id=user_id,
         name=payload.name,
         voice_style_code=payload.voice_style_code,
+        voice_language=payload.voice_language,
         emotion_type=payload.emotion_type,
         sample_url=payload.sample_url,
         duration_seconds=payload.duration_seconds,
@@ -102,6 +103,7 @@ async def create_system_voice(db: AsyncSession, payload: SystemVoiceCreate) -> V
         owner_user_id=None,
         name=payload.name,
         voice_style_code=payload.voice_style_code,
+        voice_language=payload.voice_language,
         emotion_type=payload.emotion_type,
         sample_url=payload.sample_url,
         duration_seconds=payload.duration_seconds,
@@ -120,6 +122,8 @@ async def create_system_voice_sample_task(db: AsyncSession, payload: SystemVoice
         voice = await db.get(Voice, payload.voice_id)
         if voice is None or voice.owner_user_id is not None or voice.status == LibraryItemStatus.DELETED:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="系统声音不存在")
+        payload.voice_style_code = payload.voice_style_code or voice.voice_style_code or ""
+        payload.voice_language = payload.voice_language or voice.voice_language
     task = await generation_task.create_task(
         db,
         GenerationTaskCreate(
@@ -138,23 +142,26 @@ async def run_system_voice_sample_task(db: AsyncSession, task: GenerationTask) -
     payload = SystemVoiceSampleGenerateRequest.model_validate(task.input_payload or {})
     if task.owner_id and payload.voice_id is None:
         payload.voice_id = task.owner_id
-    data_url = await ai_provider_service.create_voice_sample_audio(
+    if payload.voice_id is not None and (not payload.voice_style_code or not payload.voice_language):
+        voice = await db.get(Voice, payload.voice_id)
+        if voice is None or voice.owner_user_id is not None or voice.status == LibraryItemStatus.DELETED:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="系统声音不存在")
+        payload.voice_style_code = payload.voice_style_code or voice.voice_style_code or ""
+        payload.voice_language = payload.voice_language or voice.voice_language
+    audio_result_url = await ai_provider_service.create_voice_sample_audio(
         db,
         text=payload.sample_text,
         voice_ref=VoicePromptRef(
             source="system",
             provider_voice_id=payload.voice_style_code,
+            voice_language=payload.voice_language,
             emotion_type=payload.emotion_type,
         ),
     )
-    audio = await storage_service.save_generated_data_url(
+    audio = await _save_generated_audio_result(
         db,
         None,
-        data_url=data_url,
-        asset_kind=AssetKind.AUDIO,
-        filename_extension=_audio_extension_from_data_url(data_url),
-        visibility=AssetVisibility.SYSTEM,
-        path_scope="voice/sample",
+        audio_url=audio_result_url,
     )
     if payload.voice_id is not None:
         voice = await db.get(Voice, payload.voice_id)
@@ -181,6 +188,27 @@ def _audio_extension_from_data_url(data_url: str) -> str:
     if data_url.startswith("data:audio/L16;") or data_url.startswith("data:audio/pcm;"):
         return ".pcm"
     return ".wav"
+
+
+async def _save_generated_audio_result(db: AsyncSession, user_id: int | None, *, audio_url: str) -> AssetStorageDTO:
+    if audio_url.startswith("data:"):
+        return await storage_service.save_generated_data_url(
+            db,
+            user_id,
+            data_url=audio_url,
+            asset_kind=AssetKind.AUDIO,
+            filename_extension=_audio_extension_from_data_url(audio_url),
+            visibility=AssetVisibility.SYSTEM,
+            path_scope="voice/sample",
+        )
+    return await storage_service.save_generated_url(
+        db,
+        user_id,
+        url=audio_url,
+        asset_kind=AssetKind.AUDIO,
+        visibility=AssetVisibility.SYSTEM,
+        path_scope="voice/sample",
+    )
 
 
 async def update_system_voice(db: AsyncSession, voice_id: int, payload: SystemVoiceUpdate) -> VoiceRead:

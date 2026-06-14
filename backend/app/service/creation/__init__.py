@@ -1,5 +1,6 @@
 from app.service.creation.service import (
     create_session,
+    duplicate_session,
     generate_audio,
     generate_images,
     generate_page_image,
@@ -23,6 +24,7 @@ from app.service.creation.service import (
 
 __all__ = [
     "create_session",
+    "duplicate_session",
     "generate_audio",
     "generate_images",
     "generate_page_image",

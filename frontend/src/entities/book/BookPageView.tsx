@@ -11,10 +11,10 @@ interface BookPageViewProps {
   activeCue?: BookSubtitleCue | null;
   videoRef?: React.RefObject<HTMLVideoElement | null>;
   videoSrc?: string | null;
-  onVideoTimeUpdate?: () => void;
-  onVideoLoadedMetadata?: () => void;
-  onVideoEnded?: () => void;
-  onVideoError?: () => void;
+  onVideoTimeUpdate?: (event: React.SyntheticEvent<HTMLVideoElement>) => void;
+  onVideoLoadedMetadata?: (event: React.SyntheticEvent<HTMLVideoElement>) => void;
+  onVideoEnded?: (event: React.SyntheticEvent<HTMLVideoElement>) => void;
+  onVideoError?: (event: React.SyntheticEvent<HTMLVideoElement>) => void;
 }
 
 export const BookPageView: React.FC<BookPageViewProps> = ({
@@ -31,7 +31,7 @@ export const BookPageView: React.FC<BookPageViewProps> = ({
   onVideoEnded,
   onVideoError,
 }) => {
-  const zh = page.text_zh || page.narration_text || "";
+  const zh = page.text_zh || "";
   const en = page.text_en || "";
   const playbackSegments = page.playback_segments ?? [];
   const dialogueSegments = playbackSegments.filter((segment) => segment.segment_type === "dialogue");
@@ -44,7 +44,7 @@ export const BookPageView: React.FC<BookPageViewProps> = ({
         : [zh, en]
       : [textMode === "en" ? en || zh : zh || en];
   const subtitle = activeCue ? cueText(activeCue, textMode, bilingualEnglishFirst) : "";
-  const showVideo = Boolean(videoSrc && activeSegment?.media_mode === "lip_sync");
+  const showVideo = Boolean(videoSrc && activeSegment?.lip_sync_url);
 
   return (
     <div className="grid grid-cols-[minmax(240px,1fr)_minmax(260px,0.9fr)] gap-5 max-lg:grid-cols-1">

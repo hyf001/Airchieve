@@ -68,6 +68,7 @@ class VoiceRef(BaseModel):
     display_name: str | None = Field(default=None, max_length=120)
     role_code: str | None = Field(default=None, max_length=80)
     provider_voice_id: str | None = Field(default=None, max_length=64)
+    voice_language: str | None = Field(default=None, max_length=16)
     emotion_type: str | None = Field(default=None, max_length=64)
     role_voice_refs: list["VoiceRef"] = Field(default_factory=list)
 
@@ -81,7 +82,6 @@ class CharacterAppearance(BaseModel):
 class DialogueMark(BaseModel):
     speaker_ref: str
     text: str = Field(min_length=1, max_length=500)
-    narration_text: str | None = Field(default=None, max_length=500)
     start_ms: int | None = None
     end_ms: int | None = None
     sort_order: int = 0
@@ -139,6 +139,7 @@ class PageVoiceConfig(BaseModel):
     display_name: str | None = Field(default=None, max_length=120)
     role_code: str | None = Field(default=None, max_length=80)
     provider_voice_id: str | None = Field(default=None, max_length=64)
+    voice_language: str | None = Field(default=None, max_length=16)
     emotion_type: str | None = Field(default=None, max_length=64)
 
 
@@ -157,7 +158,6 @@ class PageDraftPatch(BaseModel):
     title: str | None = Field(default=None, max_length=160)
     text_zh: str | None = Field(default=None, max_length=1200)
     text_en: str | None = Field(default=None, max_length=1600)
-    narration_text: str | None = Field(default=None, max_length=1600)
     visual_prompt: str = Field(min_length=1, max_length=2000)
     character_appearances: list[CharacterAppearance] = Field(default_factory=list)
     dialogues: list[DialogueMark] = Field(default_factory=list)
@@ -209,7 +209,6 @@ class PageDraftRead(BaseModel):
     title: str | None = None
     text_zh: str | None = None
     text_en: str | None = None
-    narration_text: str | None = None
     visual_prompt: str
     character_appearances: list[dict] = Field(default_factory=list)
     dialogues: list[dict] = Field(default_factory=list)
@@ -244,6 +243,11 @@ class CreationSessionRead(BaseModel):
     template_id: int | None = None
     idea_prompt: str | None = None
     reference_book_id: int | None = None
+    duplicated_from_session_id: int | None = None
+    title_snapshot: str | None = None
+    display_title: str = "我的专属绘本"
+    saved_book_title: str | None = None
+    saved_book_cover_url: str | None = None
     language: CreationLanguage
     target_page_count: int
     age_range_codes: list[str] = Field(default_factory=list)

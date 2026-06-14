@@ -1,7 +1,7 @@
 ---
 title: Source Inventory
 created: 2026-05-20
-updated: 2026-06-10
+updated: 2026-06-14
 type: concept
 tags: [module-design, frontend, backend, api, database]
 sources: [raw/articles/module-design.md, raw/articles/generation-task-execution-design.md, raw/articles/picture-book-website-prd.md]
@@ -60,7 +60,7 @@ sources: [raw/articles/module-design.md, raw/articles/generation-task-execution-
 - 模块页按 [[module-contract-standard]] 组织，模块之间的允许依赖以 [[module-dependency-matrix]] 为准。
 - 模块级详细字段、接口、契约、Service、数据库定义以 `raw/articles/module-design/*.md` 为准。
 - 生成任务执行机制以 `raw/articles/generation-task-execution-design.md` 为准。
-- 外部供应商接口参考以 `raw/articles/external/*.md` 为准；这些文件保存来源 URL、摄取日期、关键契约和 AIrchieve 实现映射，不复制完整第三方文档正文。
+- 外部供应商接口参考以 `raw/articles/external/*.md` 为准；这些文件保存来源 URL、摄取日期、关键契约和 AIrchieve 实现映射，不复制完整第三方文档正文。Kling Avatar 以官方 `klingai.com/document-api/apiReference/model/avatar` 和通用鉴权页为准。
 - Seedream 图片提示词规则以 [[seedream-image-prompting]] 和 `raw/articles/external/volcengine-seedream-image-prompting.md` 为准。
 - PRD 验收标准以 `raw/articles/picture-book-website-prd.md` 为准。
 - 前端 HTML 原型以 `raw/prototypes/*.html` 为准，来源和 sha256 以 `raw/prototypes/manifest.md` 为准。

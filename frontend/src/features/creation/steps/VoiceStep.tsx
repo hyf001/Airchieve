@@ -149,6 +149,7 @@ const VoiceRoleCard: React.FC<{
         <span>{effectiveVoice?.name ?? "系统默认声音"}</span>
         {isInherited ? <span>沿用旁白</span> : null}
         {effectiveVoice?.voice_style_code ? <span>{effectiveVoice.voice_style_code}</span> : null}
+        {effectiveVoice?.voice_language ? <span>{effectiveVoice.voice_language.toUpperCase()}</span> : null}
       </div>
       {effectiveVoice?.sample_url ? (
         <audio className="mt-2 h-8 w-full" controls src={effectiveVoice.sample_url} />
@@ -256,7 +257,7 @@ const EmptyVoiceState: React.FC<{ title: string; desc: string }> = ({ title, des
 );
 
 const fallbackSegments = (page: PageDraft): PlaybackSegmentMark[] => {
-  const text = page.narration_text || page.text_zh || page.text_en || "";
+  const text = page.text_zh || page.text_en || "";
   if (!text.trim()) return [];
   return [
     {

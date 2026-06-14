@@ -55,7 +55,8 @@ from app.service.ai_provider.providers import (
     gemini_generate_audio,
     gemini_generate_image,
     gemini_generate_images,
-    kling_avatar_generate_lip_sync,
+    kling_generate_audio,
+    kling_generate_lip_sync,
 )
 from app.service.taxonomy import list_taxonomy
 
@@ -152,6 +153,7 @@ async def create_story_content(
     task_id: int | None,
     idea_prompt: str,
     characters: list[StoryPromptCharacter] | None = None,
+    target_word_count: int = 800,
     language: str,
     age_range_codes: list[str] | None = None,
     theme_codes: list[str] | None = None,
@@ -171,6 +173,7 @@ async def create_story_content(
     request = StoryGenerationRequest(
         idea_prompt=idea_prompt,
         characters=characters or [],
+        target_word_count=target_word_count,
         language=language,
         age_ranges=taxonomy_labels.age_ranges,
         themes=taxonomy_labels.themes,
@@ -180,6 +183,7 @@ async def create_story_content(
         "idea_preview": idea_prompt[:120],
         "language": language,
         "characters": [character.model_dump(mode="json", exclude_none=True) for character in characters or []],
+        "target_word_count": target_word_count,
         "age_range_codes": age_range_codes or [],
         "theme_codes": theme_codes or [],
         "narrative_style_code": narrative_style_code,
@@ -198,7 +202,11 @@ async def create_story_content(
             provider=provider,
             model=model,
             request_payload=request_snapshot,
-            response_payload={"title": result.title, "summary_preview": result.summary[:120]},
+            response_payload={
+                "title": result.title,
+                "summary_preview": result.summary[:120],
+                "characters": [character.model_dump(mode="json", exclude_none=True) for character in result.characters],
+            },
             latency_ms=_elapsed_ms(started),
         )
         return result
@@ -554,32 +562,29 @@ async def create_picture_book_page_lip_sync(
         results: list[PageLipSyncResult] = []
         for page in pages:
             image_url = _public_url_for_page(page, key="image_url", error_code="LIP_SYNC_IMAGE_URL_MISSING")
-            if page.playback_segments:
-                segment_results: list[PageSegmentLipSyncResult] = []
-                for segment in _ordered_playback_segments(page):
-                    if segment.segment_type != StoryboardPlaybackSegmentType.DIALOGUE:
-                        continue
-                    audio_url = _public_url_for_segment(page, segment)
-                    lip_sync_url = await _generate_lip_sync_with_provider(
-                        provider,
-                        model,
-                        request=LipSyncGenerationRequest(
-                            page=_page_for_lip_sync_segment(page, segment),
-                            audio_url=audio_url,
-                            image_url=image_url,
-                        ),
-                    )
-                    segment_results.append(PageSegmentLipSyncResult(sort_order=segment.sort_order, lip_sync_url=lip_sync_url))
-                page_lip_sync_url = segment_results[0].lip_sync_url if segment_results else ""
-                results.append(PageLipSyncResult(page_id=page.id, lip_sync_url=page_lip_sync_url, segment_results=segment_results))
-            else:
-                audio_url = _public_url_for_page(page, key="audio_url", error_code="LIP_SYNC_AUDIO_URL_MISSING")
+            dialogue_segments = [
+                segment
+                for segment in _ordered_playback_segments(page)
+                if segment.segment_type == StoryboardPlaybackSegmentType.DIALOGUE
+            ]
+            if not dialogue_segments:
+                results.append(PageLipSyncResult(page_id=page.id, lip_sync_url="", segment_results=[]))
+                continue
+            segment_results: list[PageSegmentLipSyncResult] = []
+            for segment in dialogue_segments:
+                audio_url = _public_url_for_segment(page, segment)
                 lip_sync_url = await _generate_lip_sync_with_provider(
                     provider,
                     model,
-                    request=LipSyncGenerationRequest(page=page, audio_url=audio_url, image_url=image_url),
+                    request=LipSyncGenerationRequest(
+                        page=_page_for_lip_sync_segment(page, segment),
+                        audio_url=audio_url,
+                        image_url=image_url,
+                    ),
                 )
-                results.append(PageLipSyncResult(page_id=page.id, lip_sync_url=lip_sync_url))
+                segment_results.append(PageSegmentLipSyncResult(sort_order=segment.sort_order, lip_sync_url=lip_sync_url))
+            page_lip_sync_url = segment_results[0].lip_sync_url if segment_results else ""
+            results.append(PageLipSyncResult(page_id=page.id, lip_sync_url=page_lip_sync_url, segment_results=segment_results))
         response = PictureBookLipSyncResult(page_results=results)
         await record_provider_call(
             db,
@@ -660,14 +665,19 @@ async def _generate_images_with_provider(
 
 async def _generate_audio_with_provider(provider: str, model: str, text: str, *, voice_ref: VoicePromptRef | None) -> str:
     request = AudioGenerationRequest(text=text, voice_ref=voice_ref)
+    resolved_voice_ref = request.voice_ref
     if provider == "gemini":
         return await gemini_generate_audio(model, request)
     if provider == "doubao":
         return await doubao_generate_audio(request)
     if provider == "aliyun":
-        if not _has_voice_ref_value(voice_ref):
+        if not _has_voice_ref_value(resolved_voice_ref):
             raise AiProviderError("阿里云 TTS 需要从声音模块选择带 voice_style_code 的系统声音", error_code="ALIYUN_TTS_VOICE_MISSING")
         return await aliyun_generate_audio(request)
+    if provider == "kling":
+        if not _has_voice_ref_value(resolved_voice_ref):
+            raise AiProviderError("可灵 TTS 需要从声音模块选择带 voice_style_code 的系统声音", error_code="KLING_TTS_VOICE_MISSING")
+        return await kling_generate_audio(request)
     raise AiProviderError(f"不支持的语音 AI provider: {provider}", error_code="UNSUPPORTED_PROVIDER")
 
 
@@ -678,7 +688,7 @@ async def _generate_lip_sync_with_provider(
     request: LipSyncGenerationRequest,
 ) -> str:
     if provider in {"kling", "kling_avatar"}:
-        return await kling_avatar_generate_lip_sync(
+        return await kling_generate_lip_sync(
             model,
             request=request,
         )
@@ -704,7 +714,7 @@ def _voice_ref_for_segment(default_voice_ref: VoicePromptRef | None, segment: St
 
 
 def _narration_text_for_page(page: PageMediaInput) -> str:
-    text = str(page.narration_text or page.text_zh or page.text_en or "").strip()
+    text = str(page.text_zh or page.text_en or "").strip()
     if not text:
         raise AiProviderError(f"第 {page.page_no or page.id} 页缺少朗读文本", error_code="AUDIO_TEXT_MISSING")
     return text
@@ -723,7 +733,7 @@ def _public_url_for_segment(page: PageMediaInput, segment: StoryboardPlaybackSeg
 
 
 def _page_for_lip_sync_segment(page: PageMediaInput, segment: StoryboardPlaybackSegment) -> PageMediaInput:
-    return page.model_copy(update={"narration_text": segment.text, "text_zh": segment.text})
+    return page.model_copy(update={"text_zh": segment.text})
 
 
 def _public_url_for_page(page: PageMediaInput, *, key: str, error_code: str) -> str:
@@ -840,8 +850,10 @@ def _model_for(provider: str, capability: AiProviderCapability) -> str:
         raise AiProviderError(f"阿里云语音合成不支持该能力: {capability}", error_code="UNSUPPORTED_PROVIDER")
     if provider in {"kling", "kling_avatar"}:
         if capability == AiProviderCapability.LIP_SYNC:
-            return settings.KLING_AVATAR_MODEL
-        raise AiProviderError(f"可灵 Avatar 不支持该能力: {capability}", error_code="UNSUPPORTED_PROVIDER")
+            return settings.KLING_AVATAR_MODE
+        if capability == AiProviderCapability.AUDIO and provider == "kling":
+            return "kling-tts"
+        raise AiProviderError(f"可灵不支持该能力: {capability}", error_code="UNSUPPORTED_PROVIDER")
     raise AiProviderError(f"不支持的 AI provider: {provider}", error_code="UNSUPPORTED_PROVIDER")
 
 

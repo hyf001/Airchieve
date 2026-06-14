@@ -15,6 +15,8 @@ export const creationApi = {
   createSession: (payload: CreationSessionCreatePayload) =>
     apiClient.post<CreationSession>("/v1/creation/sessions", payload),
   getSession: (sessionId: number) => apiClient.get<CreationSession>(`/v1/creation/sessions/${sessionId}`),
+  duplicateSession: (sessionId: number) =>
+    apiClient.post<CreationSession>(`/v1/creation/sessions/${sessionId}/duplicate`, {}),
   listSessions: (childProfileId?: number | null, limit = 10, offset = 0) => {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
     if (childProfileId) params.set("child_profile_id", String(childProfileId));

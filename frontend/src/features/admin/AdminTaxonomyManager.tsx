@@ -19,7 +19,6 @@ const taxonomyTypes: Array<{ type: TaxonomyType; label: string; desc: string }> 
   { type: "language", label: "语言", desc: "内容语言选项" },
   { type: "narrative_style", label: "叙事风格", desc: "睡前、冒险、科普等风格" },
   { type: "scene", label: "场景", desc: "推荐和创作场景" },
-  { type: "voice_style", label: "声音风格", desc: "系统声音与克隆声音分类" },
 ];
 
 interface TaxonomyFormState {

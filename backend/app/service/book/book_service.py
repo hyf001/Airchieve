@@ -196,7 +196,6 @@ def _fallback_pages(book: Book) -> list[BookPageRead]:
                 title=book.title if page_no == 1 else None,
                 text_zh=book.summary or f"{book.title} 第 {page_no} 页",
                 text_en=None,
-                narration_text=book.summary or book.title,
                 visual_prompt=book.summary,
                 image_url=book.cover_url if page_no == 1 else None,
                 audio_url=None,
@@ -215,7 +214,6 @@ def _page_read(page: BookPage) -> BookPageRead:
         title=page.title,
         text_zh=page.text_zh,
         text_en=page.text_en,
-        narration_text=page.narration_text,
         visual_prompt=page.visual_prompt,
         image_url=page.image_url,
         audio_url=page.audio_url,
@@ -228,7 +226,7 @@ def _page_read(page: BookPage) -> BookPageRead:
 def _playback_segments_for_page(page: BookPage) -> list[BookPlaybackSegmentRead]:
     if page.playback_segments:
         return [_segment_read(segment, page) for segment in sorted(page.playback_segments, key=lambda item: item.sort_order)]
-    if not (page.audio_url or page.narration_text or page.text_zh or page.text_en):
+    if not (page.audio_url or page.text_zh or page.text_en):
         return []
     return [
         BookPlaybackSegmentRead(
@@ -251,7 +249,7 @@ def _playback_segments_for_page(page: BookPage) -> list[BookPlaybackSegmentRead]
                     speaker_ref=None,
                     start_ms=0,
                     end_ms=page.duration_seconds * 1000 if page.duration_seconds is not None else None,
-                    text_zh=page.narration_text or page.text_zh,
+                    text_zh=page.text_zh,
                     text_en=page.text_en,
                     position="bottom",
                     position_config=None,
@@ -326,7 +324,7 @@ def _fallback_subtitle_cue(segment: BookPlaybackSegment, page: BookPage) -> Book
         speaker_ref=segment.speaker_ref,
         start_ms=segment.start_ms or 0,
         end_ms=end_ms,
-        text_zh=page.narration_text or page.text_zh,
+        text_zh=page.text_zh,
         text_en=page.text_en,
         position="bottom",
         position_config=None,

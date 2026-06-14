@@ -25,6 +25,7 @@ class Voice(TimestampMixin, Base):
     owner_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
     voice_style_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    voice_language: Mapped[str | None] = mapped_column(String(16), nullable=True)
     emotion_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     sample_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)

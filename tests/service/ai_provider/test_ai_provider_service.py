@@ -137,7 +137,7 @@ class TestGenerateAudio:
         result = await generate_audio(
             db,
             task_id=1,
-            pages=[{"id": 10, "page_no": 1, "narration_text": "你好"}],
+            pages=[{"id": 10, "page_no": 1, "text_zh": "你好"}],
         )
         assert result["page_results"] == [{"page_id": 10, "audio_url": "data:audio/wav;base64,abc"}]
 

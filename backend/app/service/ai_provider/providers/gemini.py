@@ -122,7 +122,7 @@ def _text_generation_config(
 
 
 def _build_story_prompt(request: StoryGenerationRequest) -> str:
-    supplemental_lines = [f"- Language: {request.language}"]
+    supplemental_lines = [f"- Language: {request.language}", f"- Target word count: about {request.target_word_count} words"]
     if request.age_ranges:
         supplemental_lines.append(f"- Age ranges: {', '.join(request.age_ranges)}")
     if request.themes:
@@ -137,9 +137,11 @@ def _build_story_prompt(request: StoryGenerationRequest) -> str:
         "You are a professional children's picture book writer. Create a warm, age-appropriate story "
         "from the user's idea and supplemental constraints.\n\n"
         "Return JSON only, matching this shape:\n"
-        '{ "title": "short story title", "summary": "one sentence summary", "body": "complete story body" }\n\n'
+        '{ "title": "short story title", "summary": "one sentence summary", "body": "complete story body", '
+        '"characters": [{"name": "character name", "is_protagonist": true}] }\n\n'
         "Requirements: positive and child-safe; complete beginning, development, and ending; easy to read aloud; "
-        "use the provided characters when present, with the protagonist driving the core action; no Markdown and no explanation.\n\n"
+        "write close to the target word count; use the provided characters when present, with the protagonist driving the core action; "
+        "when no characters are provided, infer the main story characters and return them in characters; no Markdown and no explanation.\n\n"
         f"Supplemental constraints:\n{chr(10).join(supplemental_lines)}\n\n"
         f"User idea:\n{request.idea_prompt.strip()}"
     )
@@ -158,7 +160,6 @@ def _build_storyboard_prompt(request: PictureBookStoryboardRequest) -> str:
         '      "title": "page title",\n'
         '      "text_zh": "Chinese page text",\n'
         '      "text_en": null,\n'
-        '      "narration_text": "read-aloud text",\n'
         '      "visual_prompt": "Chinese image prompt for the illustration model",\n'
         '      "character_appearances": [{"role_code": "role code from character list", "display_name": "character display name"}],\n'
         '      "dialogues": [{"speaker_ref": "speaker role_code", "text": "dialogue text", "sort_order": 1}],\n'
@@ -172,7 +173,7 @@ def _build_storyboard_prompt(request: PictureBookStoryboardRequest) -> str:
         f"Requirements: pages must contain exactly {request.target_page_count} items; page_no starts at 1 and increments continuously; "
         "storyboard order must follow the source story; content must be child-safe, warm, and appropriate; "
         "text_zh must include all narration and dialogue for the page; playback_segments must split that same text into ordered narration/dialogue segments; "
-        "narration_text should include only narration, while dialogues should include only character speech for backward compatibility; "
+        "dialogues should include only character speech for backward compatibility; "
         "visual_prompt should describe concrete visible subjects, actions, setting, style, color, lighting, and composition; "
         "visual_prompt must not include text to render inside the image; "
         "character_appearances should include only characters visible on that page, and role_code must come from the character list.\n\n"

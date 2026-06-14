@@ -108,7 +108,6 @@ class BookPageRead(BaseModel):
     title: str | None = None
     text_zh: str | None = None
     text_en: str | None = None
-    narration_text: str | None = None
     visual_prompt: str | None = None
     image_url: str | None = None
     audio_url: str | None = None

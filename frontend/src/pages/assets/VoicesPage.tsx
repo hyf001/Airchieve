@@ -3,9 +3,7 @@ import { Check, Edit3, Headphones, Mic2, Plus, Save, Star, Trash2, Upload, X } f
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { aliyunVoiceLabelMap, aliyunVoiceOptions } from "@/entities/asset/aliyunVoiceOptions";
 import type { VoiceSummary } from "@/entities/asset";
-import { useTaxonomyGroup } from "@/entities/taxonomy";
 import { useAuth } from "@/features/auth";
 import { voiceLibraryApi, type VoiceCreatePayload } from "@/features/voice-library";
 import { cn } from "@/lib/utils";
@@ -15,6 +13,7 @@ import { useToast } from "@/shared/ui/toast";
 interface VoiceFormState {
   name: string;
   voice_style_code: string;
+  voice_language: string;
   sample_url: string;
   duration_seconds: string;
 }
@@ -22,6 +21,7 @@ interface VoiceFormState {
 const emptyVoiceForm: VoiceFormState = {
   name: "",
   voice_style_code: "",
+  voice_language: "zh",
   sample_url: "",
   duration_seconds: "",
 };
@@ -29,6 +29,7 @@ const emptyVoiceForm: VoiceFormState = {
 const toForm = (voice: VoiceSummary): VoiceFormState => ({
   name: voice.name,
   voice_style_code: voice.voice_style_code ?? "",
+  voice_language: voice.voice_language ?? "zh",
   sample_url: voice.sample_url ?? "",
   duration_seconds: voice.duration_seconds ? String(voice.duration_seconds) : "",
 });
@@ -36,6 +37,7 @@ const toForm = (voice: VoiceSummary): VoiceFormState => ({
 const toPayload = (form: VoiceFormState): VoiceCreatePayload => ({
   name: form.name.trim(),
   voice_style_code: form.voice_style_code.trim() || null,
+  voice_language: form.voice_language.trim() || null,
   sample_url: form.sample_url.trim() || null,
   duration_seconds: form.duration_seconds ? Number(form.duration_seconds) || null : null,
 });
@@ -51,7 +53,6 @@ export const VoicesPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const { isAuthenticated } = useAuth();
-  const { labelMap: voiceStyleLabelMap } = useTaxonomyGroup("voice_style");
   const { showToast } = useToast();
 
   const systemVoices = useMemo(() => voices.filter((voice) => voice.owner_user_id === null), [voices]);
@@ -217,7 +218,6 @@ export const VoicesPage: React.FC = () => {
                     key={voice.id}
                     selected={selectedId === voice.id}
                     voice={voice}
-                    voiceStyleLabelMap={voiceStyleLabelMap}
                     onSelect={() => handleSelect(voice)}
                   />
                 ))}
@@ -246,7 +246,6 @@ export const VoicesPage: React.FC = () => {
                     key={voice.id}
                     selected={selectedId === voice.id}
                     voice={voice}
-                    voiceStyleLabelMap={voiceStyleLabelMap}
                     onDelete={() => void handleDeleteCustom(voice)}
                     onEdit={() => openEdit(voice)}
                     onSelect={() => handleSelect(voice)}
@@ -267,7 +266,6 @@ export const VoicesPage: React.FC = () => {
         isSaving={isSaving}
         pendingAudioFile={pendingAudioFile}
         title={editingId ? "编辑自定义声音" : "新增自定义声音"}
-        voiceStyleLabelMap={voiceStyleLabelMap}
         onClose={closeDialog}
         onSelectAudio={handleSelectAudio}
         onSubmit={handleSubmitVoice}
@@ -304,15 +302,14 @@ const SectionTitle: React.FC<{ title: string; badge?: string }> = ({ title, badg
 const VoiceCard: React.FC<{
   selected: boolean;
   voice: VoiceSummary;
-  voiceStyleLabelMap: Record<string, string>;
   onDelete?: () => void;
   onEdit?: () => void;
   onSelect: () => void;
   onSetDefault?: () => void;
-}> = ({ selected, voice, voiceStyleLabelMap, onDelete, onEdit, onSelect, onSetDefault }) => {
-  const styleLabel = voice.voice_style_code
-    ? aliyunVoiceLabelMap[voice.voice_style_code] ?? voiceStyleLabelMap[voice.voice_style_code] ?? voice.voice_style_code
-    : "未设置音色";
+}> = ({ selected, voice, onDelete, onEdit, onSelect, onSetDefault }) => {
+  const styleLabel = [voice.voice_style_code ?? "未设置音色", voice.voice_language ? voice.voice_language.toUpperCase() : null]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <article
       className={cn(
@@ -412,12 +409,11 @@ const EditDialog: React.FC<{
   isSaving: boolean;
   pendingAudioFile: File | null;
   title: string;
-  voiceStyleLabelMap: Record<string, string>;
   onClose: () => void;
   onSelectAudio: (file: File) => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   onUpdate: <K extends keyof VoiceFormState>(key: K, value: VoiceFormState[K]) => void;
-}> = ({ form, isOpen, isSaving, pendingAudioFile, title, voiceStyleLabelMap, onClose, onSelectAudio, onSubmit, onUpdate }) => {
+}> = ({ form, isOpen, isSaving, pendingAudioFile, title, onClose, onSelectAudio, onSubmit, onUpdate }) => {
   const inputId = React.useId();
 
   if (!isOpen) return null;
@@ -473,32 +469,28 @@ const EditDialog: React.FC<{
               <Field label="名称">
                 <Input value={form.name} onChange={(event) => onUpdate("name", event.target.value)} placeholder="温柔姐姐" />
               </Field>
-              <Field label="阿里云音色">
+              <Field label="音色 ID">
+                <Input
+                  value={form.voice_style_code}
+                  placeholder="genshin_vindi2"
+                  onChange={(event) => onUpdate("voice_style_code", event.target.value)}
+                />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+              <Field label="语种">
                 <select
                   className="h-[46px] w-full rounded-[var(--radius-sm)] border-2 border-[rgba(212,114,92,0.14)] bg-white px-3.5 text-sm"
-                  value={form.voice_style_code}
-                  onChange={(event) => onUpdate("voice_style_code", event.target.value)}
+                  value={form.voice_language}
+                  onChange={(event) => onUpdate("voice_language", event.target.value)}
                 >
-                  <option value="">未设置</option>
-                  <optgroup label="多情感音色">
-                    {aliyunVoiceOptions
-                      .filter((option) => option.supportedEmotions.length > 0)
-                      .map((option) => (
-                        <option key={option.code} value={option.code}>
-                          {option.label}
-                        </option>
-                      ))}
-                  </optgroup>
-                  <optgroup label="通用音色">
-                    {aliyunVoiceOptions
-                      .filter((option) => option.supportedEmotions.length === 0)
-                      .map((option) => (
-                        <option key={option.code} value={option.code}>
-                          {option.label}
-                        </option>
-                      ))}
-                  </optgroup>
+                  <option value="zh">中文</option>
+                  <option value="en">English</option>
                 </select>
+              </Field>
+              <Field label="时长（秒）">
+                <Input inputMode="numeric" value={form.duration_seconds} onChange={(event) => onUpdate("duration_seconds", event.target.value)} placeholder="30" />
               </Field>
             </div>
 
@@ -508,9 +500,6 @@ const EditDialog: React.FC<{
               </Field>
             ) : null}
 
-            <Field label="时长（秒）">
-              <Input inputMode="numeric" value={form.duration_seconds} onChange={(event) => onUpdate("duration_seconds", event.target.value)} placeholder="30" />
-            </Field>
           </div>
         </div>
 

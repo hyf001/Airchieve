@@ -1,8 +1,13 @@
+import base64
+import copy
+
+import httpx
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.model.book import (
     Book,
     BookLipSyncStatus,
@@ -19,6 +24,8 @@ from app.model.book import (
     BookSubtitleCueType,
     BookSubtitlePosition,
 )
+from app.model.story import Story
+from app.model.template import BookTemplate
 from app.model.asset import ArtStyle, ArtStyleStatus, AssetKind, LibraryItemStatus
 from app.model.asset.character import Character
 from app.model.creation import (
@@ -59,6 +66,7 @@ from app.schema.ai_provider import (
     StoryboardPage,
     VoicePromptRef,
 )
+from app.schema.asset import AssetStorageDTO
 from app.schema.generation_task import GenerationTaskCreate, GenerationTaskRead
 from app.service import ai_provider
 from app.service import account as account_service
@@ -69,9 +77,78 @@ from app.service import storage as storage_service
 from app.service import template as template_service
 from app.service.asset.voice import _get_voice_model
 
+LIP_SYNC_VIDEO_DOWNLOAD_TIMEOUT_SECONDS = 120
+
 
 def _session_read(session: CreationSession) -> CreationSessionRead:
-    return CreationSessionRead.model_validate(session)
+    return CreationSessionRead.model_validate(session).model_copy(
+        update={
+            "display_title": _session_display_title(session),
+            "saved_book_title": None,
+            "saved_book_cover_url": None,
+        },
+    )
+
+
+async def _session_read_with_titles(db: AsyncSession, session: CreationSession) -> CreationSessionRead:
+    saved_book: Book | None = None
+    if session.saved_book_id is not None:
+        saved_book = await db.get(Book, session.saved_book_id)
+    display_title = (
+        (saved_book.title if saved_book is not None else None)
+        or session.title_snapshot
+        or await _resolve_source_title(db, session)
+        or _session_display_title(session)
+    )
+    return CreationSessionRead.model_validate(session).model_copy(
+        update={
+            "display_title": display_title,
+            "saved_book_title": saved_book.title if saved_book is not None else None,
+            "saved_book_cover_url": saved_book.cover_url if saved_book is not None else None,
+        },
+    )
+
+
+def _session_display_title(session: CreationSession) -> str:
+    if session.title_snapshot:
+        return session.title_snapshot
+    if session.idea_prompt:
+        prompt = session.idea_prompt.strip()
+        return prompt[:32] if prompt else "我的专属绘本"
+    return "我的专属绘本"
+
+
+async def _resolve_source_title(db: AsyncSession, session: CreationSession) -> str | None:
+    if session.story_id is not None:
+        story = await db.get(Story, session.story_id)
+        if story is not None:
+            return story.title
+    if session.template_id is not None:
+        template = await db.get(BookTemplate, session.template_id)
+        if template is not None:
+            return template.title
+    if session.reference_book_id is not None:
+        book = await db.get(Book, session.reference_book_id)
+        if book is not None:
+            return book.title
+    if session.duplicated_from_session_id is not None:
+        source_session = await db.get(CreationSession, session.duplicated_from_session_id)
+        if source_session is not None:
+            return source_session.title_snapshot or await _resolve_source_title(db, source_session)
+    return None
+
+
+async def _initial_session_title(db: AsyncSession, user_id: int, payload: CreationSessionCreate) -> str | None:
+    if payload.story_id is not None:
+        story = await story_service.assert_story_usable(db, user_id, payload.story_id)
+        return story.title
+    if payload.template_id is not None:
+        template = await db.get(BookTemplate, payload.template_id)
+        return template.title if template is not None else None
+    if payload.reference_book_id is not None:
+        book = await db.get(Book, payload.reference_book_id)
+        return book.title if book is not None else None
+    return None
 
 
 async def create_session(db: AsyncSession, user_id: int, payload: CreationSessionCreate) -> CreationSessionRead:
@@ -92,6 +169,7 @@ async def create_session(db: AsyncSession, user_id: int, payload: CreationSessio
         story_id=payload.story_id,
         template_id=payload.template_id,
         reference_book_id=payload.reference_book_id,
+        title_snapshot=await _initial_session_title(db, user_id, payload),
         language=payload.language,
         target_page_count=payload.target_page_count,
         age_range_codes=payload.age_range_codes,
@@ -106,7 +184,69 @@ async def create_session(db: AsyncSession, user_id: int, payload: CreationSessio
 
 async def get_session(db: AsyncSession, user_id: int, session_id: int) -> CreationSessionRead:
     session = await _get_session_model(db, user_id, session_id)
-    return _session_read(session)
+    return await _session_read_with_titles(db, session)
+
+
+async def duplicate_session(db: AsyncSession, user_id: int, session_id: int) -> CreationSessionRead:
+    source = await _get_session_model(db, user_id, session_id)
+    source_title = (
+        source.title_snapshot
+        or await _resolve_source_title(db, source)
+        or _session_display_title(source)
+    )
+    duplicate = CreationSession(
+        user_id=user_id,
+        child_profile_id=source.child_profile_id,
+        creation_type=source.creation_type,
+        status=CreationSessionStatus.PREVIEW if source.page_drafts else CreationSessionStatus.DRAFT,
+        current_step=source.current_step,
+        story_source_type=source.story_source_type,
+        story_id=source.story_id,
+        template_id=source.template_id,
+        idea_prompt=source.idea_prompt,
+        reference_book_id=source.reference_book_id,
+        duplicated_from_session_id=source.id,
+        title_snapshot=source_title,
+        language=source.language,
+        target_page_count=source.target_page_count,
+        age_range_codes=list(source.age_range_codes or []),
+        theme_codes=list(source.theme_codes or []),
+        education_goal_codes=list(source.education_goal_codes or []),
+        narrative_style_code=source.narrative_style_code,
+        character_refs=copy.deepcopy(source.character_refs or []),
+        art_style_ref=copy.deepcopy(source.art_style_ref) if source.art_style_ref else None,
+        voice_ref=copy.deepcopy(source.voice_ref) if source.voice_ref else None,
+    )
+    db.add(duplicate)
+    await db.flush()
+    for page in source.page_drafts:
+        db.add(
+            CreationPageDraft(
+                session_id=duplicate.id,
+                page_no=page.page_no,
+                title=page.title,
+                text_zh=page.text_zh,
+                text_en=page.text_en,
+                visual_prompt=page.visual_prompt,
+                character_appearances=copy.deepcopy(page.character_appearances or []),
+                dialogues=copy.deepcopy(page.dialogues or []),
+                playback_segments=copy.deepcopy(page.playback_segments or []),
+                voice_config=copy.deepcopy(page.voice_config or {}),
+                subtitle_config=copy.deepcopy(page.subtitle_config or {}),
+                lip_sync_config=copy.deepcopy(page.lip_sync_config or {}),
+                image_asset_id=page.image_asset_id,
+                image_url=page.image_url,
+                audio_asset_id=page.audio_asset_id,
+                audio_url=page.audio_url,
+                lip_sync_url=page.lip_sync_url,
+                storyboard_status=page.storyboard_status,
+                image_status=page.image_status,
+                audio_status=page.audio_status,
+                lip_sync_status=page.lip_sync_status,
+            )
+        )
+    await db.commit()
+    return await get_session(db, user_id, duplicate.id)
 
 
 async def list_sessions(
@@ -129,7 +269,7 @@ async def list_sessions(
         .offset(offset)
         .limit(limit)
     )
-    return [_session_read(session) for session in result.scalars().unique().all()]
+    return [await _session_read_with_titles(db, session) for session in result.scalars().unique().all()]
 
 
 async def update_session_config(
@@ -199,6 +339,7 @@ async def _voice_ref_with_provider_voice_id(db: AsyncSession, user_id: int, voic
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="系统声音缺少 voice_style_code")
     enriched["display_name"] = str(enriched.get("display_name") or "").strip() or voice.name
     enriched["provider_voice_id"] = voice.voice_style_code
+    enriched["voice_language"] = voice.voice_language
     enriched["emotion_type"] = voice.emotion_type
     return enriched
 
@@ -434,7 +575,6 @@ async def save_book(db: AsyncSession, user_id: int, session_id: int) -> SaveBook
             title=page_draft.title,
             text_zh=page_draft.text_zh,
             text_en=page_draft.text_en,
-            narration_text=page_draft.narration_text,
             visual_prompt=page_draft.visual_prompt,
             image_url=page_draft.image_url,
             audio_url=page_draft.audio_url,
@@ -469,11 +609,11 @@ async def _create_default_playback_segments(db: AsyncSession, page: BookPage, pa
     if page_draft.playback_segments:
         await _create_scripted_playback_segments(db, page, page_draft)
         return
-    narration_text = page_draft.narration_text or page_draft.text_zh or page_draft.text_en
+    narration_segment_text = _narration_text_from_segments(page_draft.playback_segments) or page_draft.text_zh or page_draft.text_en
     subtitle_config = page_draft.subtitle_config or {}
     subtitle_position = _subtitle_position(str(subtitle_config.get("position") or "bottom"))
     subtitle_position_config = subtitle_config.get("position_config") if isinstance(subtitle_config.get("position_config"), dict) else None
-    if narration_text or page_draft.audio_url:
+    if narration_segment_text or page_draft.audio_url:
         has_lip_sync = bool(page_draft.lip_sync_url)
         segment = BookPlaybackSegment(
             page_id=page.id,
@@ -495,7 +635,7 @@ async def _create_default_playback_segments(db: AsyncSession, page: BookPage, pa
                 cue_type=BookSubtitleCueType.NARRATION,
                 speaker_ref=None,
                 start_ms=0,
-                text_zh=narration_text,
+                text_zh=narration_segment_text,
                 text_en=page_draft.text_en,
                 position=subtitle_position,
                 position_config=subtitle_position_config,
@@ -736,6 +876,7 @@ async def run_creation_lip_sync_task(db: AsyncSession, task: GenerationTask) -> 
     page_ids = _task_page_ids(task)
     try:
         lip_sync_result = await ai_provider.create_picture_book_page_lip_sync(db, task_id=task.id, pages=_page_payloads(session, page_ids))
+        await _persist_lip_sync_result_urls(db, session.user_id, lip_sync_result)
         _apply_lip_sync_results(session, lip_sync_result)
         for page in session.page_drafts:
             if page_ids is None or page.id in page_ids:
@@ -761,7 +902,6 @@ def _page_payloads(session: CreationSession, page_ids: list[int] | None) -> list
             title=page.title,
             text_zh=page.text_zh,
             text_en=page.text_en,
-            narration_text=page.narration_text,
             visual_prompt=page.visual_prompt,
             art_style_prompt=_art_style_prompt_for_session(session),
             all_character_refs=all_character_refs,
@@ -833,31 +973,118 @@ async def _persist_media_result_urls(
 ) -> None:
     for item in result.page_results:
         url = str(getattr(item, url_key) or "")
-        if url.startswith("data:"):
-            stored = await storage_service.save_generated_data_url(
-                db,
-                user_id,
-                data_url=url,
-                asset_kind=asset_kind,
-                filename_extension=extension,
-            )
+        stored = await _persist_generated_media_url(db, user_id, url, asset_kind=asset_kind, extension=extension)
+        if stored is not None:
             setattr(item, url_key, stored.url)
             asset_key = f"{asset_kind.value}_asset_id"
             setattr(item, asset_key, stored.id)
         for segment_item in getattr(item, "segment_results", []) or []:
             segment_url = str(getattr(segment_item, url_key) or "")
-            if not segment_url.startswith("data:"):
+            stored = await _persist_generated_media_url(db, user_id, segment_url, asset_kind=asset_kind, extension=extension)
+            if stored is None:
                 continue
-            stored = await storage_service.save_generated_data_url(
-                db,
-                user_id,
-                data_url=segment_url,
-                asset_kind=asset_kind,
-                filename_extension=extension,
-            )
             setattr(segment_item, url_key, stored.url)
             asset_key = f"{asset_kind.value}_asset_id"
             setattr(segment_item, asset_key, stored.id)
+
+
+async def _persist_generated_media_url(
+    db: AsyncSession,
+    user_id: int,
+    url: str,
+    *,
+    asset_kind: AssetKind,
+    extension: str,
+) -> AssetStorageDTO | None:
+    if not url or _is_oss_file_url(url):
+        return None
+    if url.startswith("data:"):
+        return await storage_service.save_generated_data_url(
+            db,
+            user_id,
+            data_url=url,
+            asset_kind=asset_kind,
+            filename_extension=extension,
+        )
+    if url.startswith(("http://", "https://")):
+        return await storage_service.save_generated_url(
+            db,
+            user_id,
+            url=url,
+            asset_kind=asset_kind,
+            filename_extension=extension,
+        )
+    return None
+
+
+async def _persist_lip_sync_result_urls(db: AsyncSession, user_id: int, result: PictureBookLipSyncResult) -> None:
+    stored_url_by_source: dict[str, str] = {}
+    for item in result.page_results:
+        page_url = str(item.lip_sync_url or "")
+        if page_url:
+            item.lip_sync_url = await _persist_lip_sync_video_url(db, user_id, page_url, stored_url_by_source)
+        for segment_item in item.segment_results:
+            segment_url = str(segment_item.lip_sync_url or "")
+            if segment_url:
+                segment_item.lip_sync_url = await _persist_lip_sync_video_url(db, user_id, segment_url, stored_url_by_source)
+
+
+async def _persist_lip_sync_video_url(db: AsyncSession, user_id: int, url: str, stored_url_by_source: dict[str, str]) -> str:
+    if _is_oss_file_url(url):
+        return url
+    if url in stored_url_by_source:
+        return stored_url_by_source[url]
+    if url.startswith("data:"):
+        stored = await storage_service.save_generated_data_url(
+            db,
+            user_id,
+            data_url=url,
+            asset_kind=AssetKind.VIDEO,
+            filename_extension=".mp4",
+        )
+        stored_url_by_source[url] = stored.url
+        return stored.url
+    content, mime_type = await _download_generated_video(url)
+    stored = await storage_service.save_base64_asset(
+        db,
+        user_id,
+        base64_data=base64.b64encode(content).decode("ascii"),
+        mime_type=mime_type,
+        asset_kind=AssetKind.VIDEO,
+        filename=_filename_for_generated_video(mime_type),
+    )
+    stored_url_by_source[url] = stored.url
+    return stored.url
+
+
+async def _download_generated_video(url: str) -> tuple[bytes, str]:
+    try:
+        async with httpx.AsyncClient(timeout=LIP_SYNC_VIDEO_DOWNLOAD_TIMEOUT_SECONDS, follow_redirects=True) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="对口型视频下载失败，无法转存到 OSS") from exc
+    mime_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower() or "video/mp4"
+    if not mime_type.startswith("video/"):
+        mime_type = "video/mp4"
+    return response.content, mime_type
+
+
+def _filename_for_generated_video(mime_type: str) -> str:
+    extension_by_mime = {
+        "video/mp4": ".mp4",
+        "video/mpeg": ".mpeg",
+        "video/quicktime": ".mov",
+        "video/webm": ".webm",
+    }
+    return f"generated{extension_by_mime.get(mime_type, '.mp4')}"
+
+
+def _is_oss_file_url(url: str) -> bool:
+    if not settings.OSS_BUCKET_NAME or not settings.OSS_ENDPOINT:
+        return False
+    endpoint = settings.OSS_ENDPOINT.removeprefix("https://").removeprefix("http://").rstrip("/")
+    return url.startswith(f"https://{settings.OSS_BUCKET_NAME}.{endpoint}/") or url.startswith(f"http://{settings.OSS_BUCKET_NAME}.{endpoint}/")
 
 
 def _apply_audio_results(session: CreationSession, audio_result: PictureBookAudioResult) -> None:
@@ -938,6 +1165,16 @@ def _segment_text(segment: dict) -> str:
     return str(segment.get("text") or "").strip()
 
 
+def _narration_text_from_segments(segments: list[dict]) -> str | None:
+    text = "\n".join(
+        _segment_text(segment)
+        for segment in _ordered_raw_playback_segments(segments)
+        if str(segment.get("segment_type") or segment.get("type") or "").strip() == StoryboardPlaybackSegmentType.NARRATION.value
+        and _segment_text(segment)
+    )
+    return text or None
+
+
 async def _replace_page_drafts(db: AsyncSession, session: CreationSession, pages: list[StoryboardPage]) -> None:
     character_refs_by_role = _session_character_refs_by_role(session)
     for page in list(session.page_drafts):
@@ -951,7 +1188,6 @@ async def _replace_page_drafts(db: AsyncSession, session: CreationSession, pages
                 title=item.title,
                 text_zh=item.text_zh,
                 text_en=item.text_en,
-                narration_text=item.narration_text,
                 visual_prompt=item.visual_prompt or "儿童绘本插图",
                 character_appearances=_storyboard_appearances_for_storage(
                     item.character_appearances,

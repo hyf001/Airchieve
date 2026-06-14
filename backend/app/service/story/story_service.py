@@ -42,6 +42,20 @@ def _story_meta_with_characters(characters: list[StoryCharacter] | None) -> dict
     return {"characters": [character.model_dump(mode="json") for character in characters]}
 
 
+def _story_characters_from_prompt_values(values: list[object]) -> list[StoryCharacter]:
+    characters: list[StoryCharacter] = []
+    for value in values:
+        if hasattr(value, "model_dump"):
+            value = value.model_dump(mode="json")
+        if not isinstance(value, dict):
+            continue
+        name = str(value.get("name") or value.get("display_name") or "").strip()
+        if not name:
+            continue
+        characters.append(StoryCharacter(name=name[:120], is_protagonist=bool(value.get("is_protagonist"))))
+    return characters
+
+
 async def _validate_story_taxonomy(
     db: AsyncSession,
     *,
@@ -173,9 +187,11 @@ async def generate_user_story(db: AsyncSession, user_id: int, payload: StoryGene
             input_payload={
                 "idea_prompt": payload.idea_prompt,
                 "characters": [character.model_dump(mode="json") for character in payload.characters],
+                "target_word_count": payload.target_word_count,
                 "language": payload.language,
                 "age_range_codes": payload.age_range_codes,
                 "theme_codes": payload.theme_codes,
+                "education_goal_codes": payload.education_goal_codes,
                 "narrative_style_code": payload.narrative_style_code,
             },
         ),
@@ -201,6 +217,7 @@ async def run_story_generation_task(db: AsyncSession, task: GenerationTask) -> N
             _story_prompt_character(character)
             for character in list(input_payload.get("characters") or story.characters or [])
         ],
+        target_word_count=int(input_payload.get("target_word_count") or 800),
         language=str(input_payload.get("language") or story.language),
         age_range_codes=list(input_payload.get("age_range_codes") or story.age_range_codes or []),
         theme_codes=list(input_payload.get("theme_codes") or story.theme_codes or []),
@@ -209,7 +226,9 @@ async def run_story_generation_task(db: AsyncSession, task: GenerationTask) -> N
     story.title = generated_story.title
     story.summary = generated_story.summary
     story.body = generated_story.body
-    story.meta = {**(story.meta or {}), "characters": list(input_payload.get("characters") or story.characters or [])}
+    generated_characters = _story_characters_from_prompt_values(list(generated_story.characters or []))
+    fallback_characters = _story_characters_from_prompt_values(list(input_payload.get("characters") or story.characters or []))
+    story.meta = {**(story.meta or {}), **_story_meta_with_characters(generated_characters or fallback_characters)}
     story.source_type = StorySourceType.GENERATED_IDEA
     story.moderation_status = StoryModerationStatus.APPROVED
     story.publish_status = StoryPublishStatus.PUBLISHED

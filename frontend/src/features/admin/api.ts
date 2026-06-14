@@ -41,7 +41,13 @@ export const adminApi = {
   deleteVoice: (id: number) => apiClient.delete<void>(`/v1/admin/voices/${id}`),
   uploadVoiceAudio: (payload: { base64: string; mime_type: string; filename: string }) =>
     apiClient.post<AssetStorageDTO>("/v1/admin/voices/audio", payload),
-  generateVoiceSample: (payload: { voice_id?: number | null; voice_style_code: string; emotion_type?: string | null; sample_text: string }) =>
+  generateVoiceSample: (payload: {
+    voice_id?: number | null;
+    voice_style_code: string;
+    voice_language?: string | null;
+    emotion_type?: string | null;
+    sample_text: string;
+  }) =>
     apiClient.post<GenerationTaskRead>("/v1/admin/voices/sample", payload),
   listBackgroundMusic: () => apiClient.get<ListResponse<BackgroundMusicSummary>>("/v1/admin/background-music"),
   getBackgroundMusic: (id: number) => apiClient.get<BackgroundMusicRead>(`/v1/admin/background-music/${id}`),

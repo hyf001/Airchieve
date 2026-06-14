@@ -83,6 +83,7 @@ export const BookPlayer: React.FC<BookPlayerProps> = ({ payload, readonly = fals
   const [voice, setVoice] = React.useState<BookVoiceOption | null>(payload.default_voice ?? payload.voice_options[0] ?? null);
   const [mediaError, setMediaError] = React.useState<string | null>(null);
   const [measuredDurations, setMeasuredDurations] = React.useState<Record<number, number>>({});
+  const [videoFallbackSegmentIds, setVideoFallbackSegmentIds] = React.useState<Set<number>>(() => new Set());
   const [isSeeking, setIsSeeking] = React.useState(false);
   const [seekPreviewMs, setSeekPreviewMs] = React.useState<number | null>(null);
 
@@ -104,9 +105,10 @@ export const BookPlayer: React.FC<BookPlayerProps> = ({ payload, readonly = fals
   const overallPositionMs = elapsedBeforePageMs + pagePositionMs;
   const displayedPositionMs = seekPreviewMs ?? overallPositionMs;
   const progressPercent = totalDurationMs > 0 ? Math.min(100, Math.round((displayedPositionMs / totalDurationMs) * 100)) : 0;
-  const activeMediaKind = activeSegment?.segment.media_mode === "lip_sync" && activeSegment.mediaUrl ? "video" : "audio";
-  const activeAudioSrc = activeMediaKind === "audio" ? activeSegment?.mediaUrl : null;
-  const activeVideoSrc = activeMediaKind === "video" ? activeSegment?.mediaUrl : null;
+  const activeMediaKind = activeSegment?.segment.lip_sync_url && !videoFallbackSegmentIds.has(activeSegment.segment.id) ? "video" : "audio";
+  const activeAudioSrc = activeMediaKind === "audio" ? activeSegment?.segment.audio_url ?? null : null;
+  const activeVideoSrc = activeMediaKind === "video" ? activeSegment?.segment.lip_sync_url ?? null : null;
+  const activeMediaSrc = activeMediaKind === "video" ? activeVideoSrc : activeAudioSrc;
   const nextSegment = pageSegments[currentSegmentIndex + 1] ?? null;
 
   const saveProgress = React.useCallback(
@@ -282,15 +284,15 @@ export const BookPlayer: React.FC<BookPlayerProps> = ({ payload, readonly = fals
       video.currentTime = seekSeconds;
       video.playbackRate = speed;
     }
-    if (!activeSegmentRef.current?.mediaUrl) {
+    if (!activeMediaSrc) {
       pendingSeekMsRef.current = null;
     }
     if (!isPlayingRef.current) return;
-    void playActiveMedia(activeMediaKind, audio, video, activeSegmentRef.current).catch(() => {
+    void playActiveMedia(activeMediaKind, audio, video, activeMediaSrc).catch(() => {
       setMediaError("当前片段暂时无法播放，已跳过。");
       handleSegmentEndedRef.current();
     });
-  }, [activeAudioSrc, activeMediaKind, activeSegment?.segment.id, activeVideoSrc]);
+  }, [activeAudioSrc, activeMediaKind, activeMediaSrc, activeSegment?.segment.id, activeVideoSrc]);
 
   React.useEffect(() => {
     const audio = audioRef.current;
@@ -300,18 +302,18 @@ export const BookPlayer: React.FC<BookPlayerProps> = ({ payload, readonly = fals
       video?.pause();
       return;
     }
-    void playActiveMedia(activeMediaKind, audio, video, activeSegmentRef.current).catch(() => {
+    void playActiveMedia(activeMediaKind, audio, video, activeMediaSrc).catch(() => {
       setMediaError("当前片段暂时无法播放，已跳过。");
       handleSegmentEndedRef.current();
     });
-  }, [activeMediaKind, isPlaying]);
+  }, [activeMediaKind, activeMediaSrc, isPlaying]);
 
   React.useEffect(() => {
     triggerSoundEffects(page, activeSegment, pagePositionMs, segmentPositionMs, soundEnabled, soundEffectRefs.current, playedSoundEffectKeysRef.current);
   }, [activeSegment, page, pagePositionMs, segmentPositionMs, soundEnabled]);
 
   React.useEffect(() => {
-    if (!isPlaying || !activeSegment || activeSegment.mediaUrl) return;
+    if (!isPlaying || !activeSegment || activeMediaSrc) return;
     const interval = window.setInterval(() => {
       setSegmentPositionMs((current) => {
         const next = current + 250 * speed;
@@ -324,12 +326,12 @@ export const BookPlayer: React.FC<BookPlayerProps> = ({ payload, readonly = fals
       });
     }, 250);
     return () => window.clearInterval(interval);
-  }, [activeSegment, isPlaying, speed]);
+  }, [activeMediaSrc, activeSegment, isPlaying, speed]);
 
   React.useEffect(() => {
     const mediaUrl = nextSegment?.mediaUrl;
     if (!mediaUrl) return;
-    if (nextSegment.segment.media_mode === "lip_sync") {
+    if (nextSegment.segment.lip_sync_url) {
       const video = document.createElement("video");
       video.preload = "auto";
       video.src = mediaUrl;
@@ -364,15 +366,30 @@ export const BookPlayer: React.FC<BookPlayerProps> = ({ payload, readonly = fals
     void saveProgress(currentIndex, pagePositionMs);
   }, [currentIndex, isPlaying, pagePositionMs, saveProgress]);
 
-  const handleMediaTimeUpdate = () => {
+  const isCurrentMediaEvent = React.useCallback(
+    (media: HTMLMediaElement | null) => {
+      if (!media || !activeMediaSrc) return false;
+      const currentSrc = media.currentSrc || media.getAttribute("src") || "";
+      try {
+        return new URL(currentSrc, window.location.href).href === new URL(activeMediaSrc, window.location.href).href;
+      } catch {
+        return currentSrc === activeMediaSrc;
+      }
+    },
+    [activeMediaSrc],
+  );
+
+  const handleMediaTimeUpdate = (event: React.SyntheticEvent<HTMLMediaElement>) => {
     if (isSeekingRef.current) return;
-    const media = activeMediaKind === "video" ? videoRef.current : audioRef.current;
+    const media = event.currentTarget;
+    if (!isCurrentMediaEvent(media)) return;
     const nextMs = media ? media.currentTime * 1000 : segmentPositionMs;
     setSegmentPositionMs(Math.min(activeSegment?.durationMs ?? nextMs, Math.max(0, nextMs)));
   };
 
-  const handleMediaLoadedMetadata = () => {
-    const media = activeMediaKind === "video" ? videoRef.current : audioRef.current;
+  const handleMediaLoadedMetadata = (event: React.SyntheticEvent<HTMLMediaElement>) => {
+    const media = event.currentTarget;
+    if (!isCurrentMediaEvent(media)) return;
     if (media) media.playbackRate = speed;
     if (media && activeSegment && Number.isFinite(media.duration) && media.duration > 0) {
       setMeasuredDurations((current) => ({
@@ -390,6 +407,26 @@ export const BookPlayer: React.FC<BookPlayerProps> = ({ payload, readonly = fals
         handleSegmentEndedRef.current();
       });
     }
+  };
+
+  const handleMediaEnded = (event: React.SyntheticEvent<HTMLMediaElement>) => {
+    if (!isCurrentMediaEvent(event.currentTarget)) return;
+    handleSegmentEnded();
+  };
+
+  const handleMediaError = (kind: "audio" | "video", event: React.SyntheticEvent<HTMLMediaElement>) => {
+    if (!isCurrentMediaEvent(event.currentTarget)) return;
+    if (kind === "video" && activeSegment?.segment.audio_url) {
+      setVideoFallbackSegmentIds((current) => {
+        const next = new Set(current);
+        next.add(activeSegment.segment.id);
+        return next;
+      });
+      setMediaError("当前对口型视频暂时无法播放，已切换为音频。");
+      return;
+    }
+    setMediaError(kind === "video" ? "当前视频暂时无法播放，已跳过。" : "当前音频暂时无法播放，已跳过。");
+    handleSegmentEndedRef.current();
   };
 
   const handlePlayToggle = async () => {
@@ -465,11 +502,8 @@ export const BookPlayer: React.FC<BookPlayerProps> = ({ payload, readonly = fals
         preload="auto"
         onTimeUpdate={handleMediaTimeUpdate}
         onLoadedMetadata={handleMediaLoadedMetadata}
-        onEnded={handleSegmentEnded}
-        onError={() => {
-          setMediaError("当前音频暂时无法播放，已跳过。");
-          handleSegmentEndedRef.current();
-        }}
+        onEnded={handleMediaEnded}
+        onError={(event) => handleMediaError("audio", event)}
       />
       {payload.book.background_music_url ? <audio ref={musicRef} className="hidden" src={payload.book.background_music_url} loop preload="auto" /> : null}
 
@@ -514,11 +548,8 @@ export const BookPlayer: React.FC<BookPlayerProps> = ({ payload, readonly = fals
         videoSrc={activeVideoSrc}
         onVideoTimeUpdate={handleMediaTimeUpdate}
         onVideoLoadedMetadata={handleMediaLoadedMetadata}
-        onVideoEnded={handleSegmentEnded}
-        onVideoError={() => {
-          setMediaError("当前视频暂时无法播放，已降级跳过。");
-          handleSegmentEndedRef.current();
-        }}
+        onVideoEnded={handleMediaEnded}
+        onVideoError={(event) => handleMediaError("video", event)}
       />
 
       <div className="app-card mt-5 p-4">
@@ -634,7 +665,7 @@ const buildPageTimeline = (page: BookPage, measuredDurations: Record<number, num
           },
         ];
   return segments.map((segment) => {
-    const mediaUrl = segment.media_mode === "lip_sync" && segment.lip_sync_url ? segment.lip_sync_url : segment.audio_url ?? null;
+    const mediaUrl = segment.lip_sync_url || segment.audio_url || null;
     const startMs = segment.start_ms ?? 0;
     const endMs = segment.end_ms ?? null;
     const cueEnd = Math.max(0, ...segment.subtitle_cues.map((cue) => cue.end_ms ?? 0));
@@ -708,9 +739,9 @@ const playActiveMedia = async (
   kind: "audio" | "video",
   audio: HTMLAudioElement | null,
   video: HTMLVideoElement | null,
-  segment: TimelineSegment | null,
+  mediaSrc: string | null,
 ) => {
-  if (!segment?.mediaUrl) return;
+  if (!mediaSrc) return;
   if (kind === "video") {
     audio?.pause();
     await video?.play();

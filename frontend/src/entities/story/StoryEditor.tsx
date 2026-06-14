@@ -19,6 +19,7 @@ export const StoryEditor: React.FC<StoryEditorProps> = ({ mode, onGenerate, onSu
   const [body, setBody] = useState("");
   const [ideaPrompt, setIdeaPrompt] = useState("");
   const [storyCharacters, setStoryCharacters] = useState<StoryCharacter[]>([{ name: "", is_protagonist: true }]);
+  const [targetWordCount, setTargetWordCount] = useState<StoryGeneratePayload["target_word_count"]>(800);
   const [language, setLanguage] = useState<StoryLanguage>("zh");
   const [ageRangeCodes, setAgeRangeCodes] = useState<string[]>([]);
   const [themeCodes, setThemeCodes] = useState<string[]>([]);
@@ -38,6 +39,7 @@ export const StoryEditor: React.FC<StoryEditorProps> = ({ mode, onGenerate, onSu
         await onGenerate({
           idea_prompt: ideaPrompt,
           characters: normalizedCharacters,
+          target_word_count: targetWordCount,
           age_range_codes: ageRangeCodes,
           theme_codes: themeCodes,
           education_goal_codes: educationGoalCodes,
@@ -63,6 +65,7 @@ export const StoryEditor: React.FC<StoryEditorProps> = ({ mode, onGenerate, onSu
       setBody("");
       setIdeaPrompt("");
       setStoryCharacters([{ name: "", is_protagonist: true }]);
+      setTargetWordCount(800);
       setLanguage("zh");
       setAgeRangeCodes([]);
       setThemeCodes([]);
@@ -100,7 +103,8 @@ export const StoryEditor: React.FC<StoryEditorProps> = ({ mode, onGenerate, onSu
               maxLength={1000}
             />
           </label>
-          <StoryCharacterFields characters={storyCharacters} required onChange={setStoryCharacters} />
+          <StoryWordCountField value={targetWordCount} onChange={setTargetWordCount} />
+          <StoryCharacterFields characters={storyCharacters} onChange={setStoryCharacters} />
           <StoryMetadataFields
             ageRangeCodes={ageRangeCodes}
             educationGoalCodes={educationGoalCodes}
@@ -139,7 +143,7 @@ export const StoryEditor: React.FC<StoryEditorProps> = ({ mode, onGenerate, onSu
           />
         </>
       )}
-      <Button type="submit" disabled={submitting || (isAiMode ? !ideaPrompt || normalizedCharacters.length === 0 : !title || !body)}>
+      <Button type="submit" disabled={submitting || (isAiMode ? !ideaPrompt : !title || !body)}>
         {isAiMode ? <Sparkles className="h-4 w-4" /> : <Save className="h-4 w-4" />}
         {submitting ? "提交中..." : isAiMode ? "开始生成" : "保存故事"}
       </Button>
@@ -165,7 +169,7 @@ const StoryCharacterFields: React.FC<{
       <div>
         <h3 className="text-sm font-bold text-[var(--text-dark)]">故事角色{required ? "" : "（选填）"}</h3>
         <p className="mt-1 text-xs leading-5 text-[var(--text-light)]">
-          AI 生成故事时会按这里的角色写作；后续创作绘本时会逐个为这些角色选择形象。
+          可先指定角色；未填写时，AI 会在生成故事后返回故事里的角色，后续创作绘本时再逐个选择形象。
         </p>
       </div>
       <div className="grid gap-2">
@@ -198,6 +202,27 @@ const StoryCharacterFields: React.FC<{
     </section>
   );
 };
+
+const StoryWordCountField: React.FC<{
+  value: StoryGeneratePayload["target_word_count"];
+  onChange: (value: StoryGeneratePayload["target_word_count"]) => void;
+}> = ({ value, onChange }) => (
+  <label className="grid gap-1.5 text-sm font-bold text-[var(--text-mid)]">
+    故事字数
+    <select
+      className="h-10 rounded-[var(--radius-sm)] border-[1.5px] border-[rgba(212,114,92,0.15)] bg-white px-3 text-sm font-normal text-[var(--text-dark)] outline-none focus:border-[var(--honey)]"
+      value={value}
+      onChange={(event) => onChange(Number(event.target.value) as StoryGeneratePayload["target_word_count"])}
+      required
+    >
+      <option value={300}>300 字</option>
+      <option value={500}>500 字</option>
+      <option value={800}>800 字</option>
+      <option value={1000}>1000 字</option>
+      <option value={2000}>2000 字</option>
+    </select>
+  </label>
+);
 
 const StoryMetadataFields: React.FC<{
   ageRangeCodes: string[];

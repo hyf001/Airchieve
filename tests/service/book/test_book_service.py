@@ -71,7 +71,6 @@ class TestGetPlayerPayload:
             page_no=1,
             title="启程",
             text_zh="我们出发",
-            narration_text="我们出发",
             image_url="https://example.com/page.png",
             audio_url="https://example.com/page.wav",
         )
@@ -148,9 +147,8 @@ class TestGetPlayerPayload:
             book_id=book.id,
             page_no=1,
             title="旧页",
-            text_zh="旧文本",
+            text_zh="旧旁白",
             text_en="Legacy text",
-            narration_text="旧旁白",
             image_url="https://example.com/legacy.png",
             audio_url="https://example.com/legacy.wav",
             duration_seconds=7,

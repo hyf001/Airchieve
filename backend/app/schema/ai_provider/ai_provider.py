@@ -16,11 +16,13 @@ class GeneratedStoryContent(BaseModel):
     title: str = Field(max_length=160)
     summary: str = Field(max_length=1000)
     body: str = Field(max_length=3000)
+    characters: list[StoryPromptCharacter] = Field(default_factory=list)
 
 
 class StoryGenerationRequest(BaseModel):
     idea_prompt: str = Field(min_length=1, max_length=5000)
     characters: list[StoryPromptCharacter] = Field(default_factory=list)
+    target_word_count: int = Field(default=800, ge=300, le=2000)
     language: str = Field(default="zh", max_length=32)
     age_ranges: list[str] = Field(default_factory=list)
     themes: list[str] = Field(default_factory=list)
@@ -44,7 +46,6 @@ class StoryboardDialogueMark(BaseModel):
 
     speaker_ref: str | None = Field(default=None, max_length=160)
     text: str = Field(default="", max_length=500)
-    narration_text: str | None = Field(default=None, max_length=500)
     start_ms: int | None = None
     end_ms: int | None = None
     sort_order: int = 0
@@ -82,7 +83,6 @@ class StoryboardPage(BaseModel):
     title: str | None = Field(default=None, max_length=160)
     text_zh: str = Field(default="", max_length=1200)
     text_en: str | None = Field(default=None, max_length=1600)
-    narration_text: str | None = Field(default=None, max_length=1600)
     visual_prompt: str = Field(default="", max_length=2000)
     character_appearances: list[StoryboardCharacterAppearance] = Field(default_factory=list)
     dialogues: list[StoryboardDialogueMark] = Field(default_factory=list)
@@ -111,6 +111,7 @@ class VoicePromptRef(BaseModel):
     voice_name: str | None = Field(default=None, max_length=120)
     voice_type: str | None = Field(default=None, max_length=120)
     provider_voice_id: str | None = Field(default=None, max_length=120)
+    voice_language: str | None = Field(default=None, max_length=16)
     emotion_type: str | None = Field(default=None, max_length=64)
     emotion: str | None = Field(default=None, max_length=64)
     role_voice_refs: list["VoicePromptRef"] = Field(default_factory=list)
@@ -122,7 +123,6 @@ class PageMediaInput(BaseModel):
     title: str | None = Field(default=None, max_length=160)
     text_zh: str | None = Field(default=None, max_length=1200)
     text_en: str | None = Field(default=None, max_length=1600)
-    narration_text: str | None = Field(default=None, max_length=1600)
     visual_prompt: str | None = Field(default=None, max_length=2000)
     art_style_prompt: str | None = Field(default=None, max_length=2000)
     all_character_refs: list[PageCharacterImageRef] = Field(default_factory=list)

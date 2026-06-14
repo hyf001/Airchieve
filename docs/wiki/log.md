@@ -82,3 +82,10 @@
 - Created `concepts/seedream-image-prompting.md` for text-to-image, reference-image, multi-image input, and multi-image output prompt rules.
 - Updated `entities/creation-generation.md` with Seedream image prompt mapping for storyboard `visual_prompt`, role reference images, continuity images, and page sequence generation.
 - Updated `concepts/source-inventory.md` and `index.md`.
+
+## [2026-06-14] update | Official Kling Avatar API integration
+
+- Updated `raw/articles/external/kling-avatar-20-lip-sync.md` from the official Kling Avatar API reference instead of the previous compatible-provider contract.
+- Updated `entities/creation-generation.md` so lip-sync generation maps to official `image2video` fields, status values, result shape, and 30-day URL retention warning.
+- Removed compatibility with legacy provider token/model names; configuration now follows official AccessKey + SecretKey and `mode` naming.
+- Updated `concepts/source-inventory.md` and `index.md` timestamps.

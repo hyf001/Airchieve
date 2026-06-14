@@ -82,10 +82,11 @@ sources: [raw/articles/module-design/creation-generation.md, raw/articles/genera
 
 ## AI Provider 对口型生成参考
 
-- Kling Avatar 2.0：官方产品资料说明它可基于角色图片、语音内容和可选表演 prompt 生成动态 avatar 视频，适合绘本页插图 + 朗读音频的链路。
+- Kling Avatar：官方 Avatar API 可基于数字人参考图、语音文件和可选表演 prompt 生成动态 avatar 视频，适合绘本页插图 + 朗读音频的链路。
 - AIrchieve 当前保留“图片 + 音频”对口型路径：输入要求是公网可访问的 `image_url` 和 `audio_url`；因此 provider 返回的 `data:` 图片/音频需要先通过 [[asset-storage]] 持久化。
-- API 适配采用 Avatar 2.0 compatible async workflow：提交后返回 `task_id`，随后查询任务状态；完成后从 `files` 中取 `file_type=video` 的 URL。
-- 生成结果写回 `CreationStoryboardPage.lip_sync_url`；保存绘本时作为 `BookPage.video_url` 输出，并将 `lip_sync_status` 标记为 `ready`。生产链路仍应把供应商临时结果落 OSS，形成稳定书页媒体。
+- API 适配采用官方 `POST /v1/videos/avatar/image2video` + `GET /v1/videos/avatar/image2video/{task_id}` 异步 workflow；请求体使用 `image`、`sound_file`、`mode`，成功业务码为 `0`。
+- 任务状态读取 `task_status`：`submitted` / `processing` / `succeed` / `failed`；完成后从 `task_result.videos[].url` 取生成视频 URL，失败原因读取 `task_status_msg`。
+- 生成结果写回 `CreationStoryboardPage.lip_sync_url`；保存绘本时作为 `BookPage.video_url` 输出，并将 `lip_sync_status` 标记为 `ready`。官方提示生成视频 URL 会在 30 天后清理，生产链路仍应把供应商临时结果落 OSS，形成稳定书页媒体。
 
 ## 完整来源
 

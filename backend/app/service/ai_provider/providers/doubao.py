@@ -63,7 +63,7 @@ async def doubao_create_picture_book_storyboard(model: str, request: PictureBook
 
 
 def _build_story_prompt(request: StoryGenerationRequest) -> str:
-    supplemental_lines = [f"- 语言：{request.language}"]
+    supplemental_lines = [f"- 语言：{request.language}", f"- 目标字数：约 {request.target_word_count} 字"]
     if request.age_ranges:
         supplemental_lines.append(f"- 适龄范围：{', '.join(request.age_ranges)}")
     if request.themes:
@@ -80,10 +80,13 @@ def _build_story_prompt(request: StoryGenerationRequest) -> str:
         "{\n"
         '  "title": "故事标题，20字以内",\n'
         '  "summary": "一句话简介，80字以内",\n'
-        '  "body": "完整故事正文，600到1200字，分段清晰"\n'
+        '  "body": "完整故事正文，按目标字数创作，分段清晰",\n'
+        '  "characters": [{"name": "故事角色姓名", "is_protagonist": true}]\n'
         "}\n\n"
         "要求：故事积极、温暖、适合儿童；情节完整，有开端、发展和结尾；语言适合朗读；"
-        "必须使用补充信息里的角色列表，主角需要承担核心行动；"
+        "如果补充信息提供了角色列表，必须使用这些角色，主角需要承担核心行动；"
+        "如果未提供角色列表，请根据故事自然设计角色，并在 characters 中返回故事实际出现的主要角色；"
+        f"正文尽量接近 {request.target_word_count} 字；"
         "不要包含暴力、惊吓、歧视、成人化或不适宜儿童的内容；不要输出 Markdown；不要解释生成过程。\n\n"
         f"补充信息：\n{chr(10).join(supplemental_lines)}\n\n"
         f"用户灵感：\n{request.idea_prompt.strip()}"
@@ -104,7 +107,6 @@ def _build_storyboard_prompt(request: PictureBookStoryboardRequest) -> str:
         '      "title": "页标题",\n'
         '      "text_zh": "本页中文正文",\n'
         '      "text_en": null,\n'
-        '      "narration_text": "朗读文本",\n'
         '      "visual_prompt": "给插画模型的中文画面提示词",\n'
         '      "character_appearances": [{"role_code": "必须来自故事角色列表中的 role_code", "display_name": "角色展示名"}],\n'
         '      "dialogues": [{"speaker_ref": "说话角色 role_code", "text": "对白文本", "sort_order": 1}],\n'
@@ -121,7 +123,7 @@ def _build_storyboard_prompt(request: PictureBookStoryboardRequest) -> str:
         "text_zh 是本页完整文本，必须包含本页全部旁白和对白，语言要适合朗读，避免英文引号；"
         "playback_segments 必须把 text_zh 拆成按播放顺序穿插的片段，segment_type 只能是 narration 或 dialogue；"
         "旁白片段使用 segment_type=narration 且不填 speaker_ref；对白片段使用 segment_type=dialogue 且 speaker_ref 必须来自故事角色列表；"
-        "narration_text 只汇总本页旁白部分，不包含角色对白；dialogues 只列出本页对白部分，用于兼容旧结构；"
+        "dialogues 只列出本页对白部分，用于兼容旧结构；"
         "visual_prompt 只描述可见画面，必须包含构图、光影、色彩、角色神态、动作和环境细节，达到可直接用于图片生成的标准；"
         "visual_prompt 不要包含图片中文字、标题、标牌、对话框、边框或水印，不要堆叠抽象形容词；"
         "相邻页面必须按故事时间线推进，避免重复同一画面或同一构图；"

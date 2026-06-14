@@ -168,7 +168,6 @@ class BookPage(TimestampMixin, Base):
     title: Mapped[str | None] = mapped_column(String(160), nullable=True)
     text_zh: Mapped[str | None] = mapped_column(Text, nullable=True)
     text_en: Mapped[str | None] = mapped_column(Text, nullable=True)
-    narration_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     visual_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     audio_url: Mapped[str | None] = mapped_column(Text, nullable=True)

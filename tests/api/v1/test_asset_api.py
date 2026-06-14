@@ -69,6 +69,7 @@ def _voice_payload(**overrides):
         "owner_user_id": USER_ID,
         "name": "Mom",
         "voice_style_code": None,
+        "voice_language": None,
         "emotion_type": None,
         "sample_url": None,
         "duration_seconds": None,

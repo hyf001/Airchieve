@@ -90,7 +90,6 @@ export interface BookPage {
   title?: string | null;
   text_zh?: string | null;
   text_en?: string | null;
-  narration_text?: string | null;
   visual_prompt?: string | null;
   image_url?: string | null;
   audio_url?: string | null;

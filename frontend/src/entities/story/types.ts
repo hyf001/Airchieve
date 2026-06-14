@@ -58,7 +58,8 @@ export interface StoryPayload {
 
 export interface StoryGeneratePayload {
   idea_prompt: string;
-  characters: StoryCharacter[];
+  characters?: StoryCharacter[];
+  target_word_count: 300 | 500 | 800 | 1000 | 2000;
   age_range_codes?: string[];
   theme_codes?: string[];
   education_goal_codes?: string[];

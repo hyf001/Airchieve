@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.model.story import (
@@ -68,7 +70,8 @@ class StoryCreate(BaseModel):
 
 class StoryGenerateRequest(BaseModel):
     idea_prompt: str = Field(min_length=2, max_length=1000)
-    characters: list[StoryCharacter] = Field(min_length=1)
+    characters: list[StoryCharacter] = Field(default_factory=list)
+    target_word_count: Literal[300, 500, 800, 1000, 2000] = 800
     age_range_codes: list[str] = Field(default_factory=list)
     theme_codes: list[str] = Field(default_factory=list)
     education_goal_codes: list[str] = Field(default_factory=list)

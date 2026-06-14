@@ -272,7 +272,6 @@ async def create_personal_book_from_template(
             title=source_page.title,
             text_zh=source_page.text_zh,
             text_en=source_page.text_en,
-            narration_text=source_page.narration_text,
             visual_prompt=source_page.visual_prompt,
             image_url=source_page.image_url,
             audio_url=source_page.audio_url,

@@ -28,6 +28,7 @@ export interface VoiceRef {
   display_name?: string | null;
   role_code?: string | null;
   provider_voice_id?: string | null;
+  voice_language?: string | null;
   emotion_type?: string | null;
   role_voice_refs?: VoiceRef[];
 }
@@ -43,7 +44,6 @@ export interface CharacterAppearance {
 export interface DialogueMark {
   speaker_ref: string;
   text: string;
-  narration_text?: string | null;
   start_ms?: number | null;
   end_ms?: number | null;
   sort_order: number;
@@ -68,7 +68,6 @@ export interface PageDraft {
   title?: string | null;
   text_zh?: string | null;
   text_en?: string | null;
-  narration_text?: string | null;
   visual_prompt: string;
   character_appearances: CharacterAppearance[];
   dialogues: DialogueMark[];
@@ -92,7 +91,6 @@ export interface PageDraftPatch {
   title?: string | null;
   text_zh?: string | null;
   text_en?: string | null;
-  narration_text?: string | null;
   visual_prompt: string;
   character_appearances: CharacterAppearance[];
   dialogues: DialogueMark[];
@@ -114,6 +112,11 @@ export interface CreationSession {
   template_id?: number | null;
   idea_prompt?: string | null;
   reference_book_id?: number | null;
+  duplicated_from_session_id?: number | null;
+  title_snapshot?: string | null;
+  display_title: string;
+  saved_book_title?: string | null;
+  saved_book_cover_url?: string | null;
   language: CreationLanguage;
   target_page_count: number;
   age_range_codes: string[];

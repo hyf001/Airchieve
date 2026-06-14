@@ -12,7 +12,6 @@ type StoryboardFormState = {
   title: string;
   textZh: string;
   textEn: string;
-  narrationText: string;
   visualPrompt: string;
 };
 
@@ -45,7 +44,6 @@ const toFormState = (page: PageDraft): StoryboardFormState => ({
   title: page.title ?? "",
   textZh: page.text_zh ?? "",
   textEn: page.text_en ?? "",
-  narrationText: page.narration_text ?? "",
   visualPrompt: page.visual_prompt,
 });
 
@@ -54,7 +52,6 @@ const toPatchPayload = (page: PageDraft, form: StoryboardFormState): PageDraftPa
   title: form.title.trim() || null,
   text_zh: form.textZh.trim() || null,
   text_en: form.textEn.trim() || null,
-  narration_text: form.narrationText.trim() || null,
   visual_prompt: form.visualPrompt.trim(),
   character_appearances: page.character_appearances,
   dialogues: page.dialogues,
@@ -115,7 +112,7 @@ export const StoryboardStep: React.FC<{
   };
 
   return (
-    <StepPanel icon={<Image className="h-5 w-5" />} title="编辑分镜" desc="确认每页标题、正文、朗读文本和画面描述，下一步会按这些分镜生成插图。">
+    <StepPanel icon={<Image className="h-5 w-5" />} title="编辑分镜" desc="确认每页标题、正文和画面描述，下一步会按这些分镜生成插图。">
       <div className="space-y-4">
         <StoryboardControls
           disabled={isGenerating}
@@ -319,14 +316,6 @@ const PageDraftForm: React.FC<{
         onChange={(event) => onChange("textEn", event.target.value)}
       />
     </Field>
-    <Field label="朗读文本">
-      <textarea
-        className="min-h-[80px] w-full rounded-[var(--radius-sm)] border-2 border-[rgba(212,114,92,0.12)] px-3 py-2 text-sm leading-6 outline-none focus:border-[var(--peach)]"
-        maxLength={1600}
-        value={form.narrationText}
-        onChange={(event) => onChange("narrationText", event.target.value)}
-      />
-    </Field>
     <Field label="画面描述">
       <textarea
         className="min-h-[112px] w-full rounded-[var(--radius-sm)] border-2 border-[rgba(212,114,92,0.12)] px-3 py-2 text-sm leading-6 outline-none focus:border-[var(--peach)]"
@@ -363,7 +352,6 @@ const PageDraftPreview: React.FC<{
           <div className="grid gap-4">
             <TextBlock label="正文" value={page.text_zh || page.text_en || "暂无正文"} />
             {page.text_en ? <TextBlock label="英文" value={page.text_en} /> : null}
-            <TextBlock label="朗读" value={page.narration_text || page.text_zh || page.text_en || "默认沿用正文"} />
           </div>
         ) : null}
         {activeTab === "visual" ? (
@@ -452,7 +440,6 @@ const DialogueList: React.FC<{ page: PageDraft }> = ({ page }) => {
             <TimeRange startMs={dialogue.start_ms} endMs={dialogue.end_ms} />
           </div>
           <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--text-mid)]">{dialogue.text}</p>
-          {dialogue.narration_text ? <p className="mt-2 text-xs leading-5 text-[var(--text-light)]">旁白：{dialogue.narration_text}</p> : null}
         </div>
       ))}
     </div>

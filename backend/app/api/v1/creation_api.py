@@ -56,6 +56,15 @@ async def get_session(
     return await creation.get_session(db, user_id, session_id)
 
 
+@router.post("/sessions/{session_id}/duplicate", response_model=CreationSessionRead, status_code=status.HTTP_201_CREATED)
+async def duplicate_session(
+    session_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(current_user_id),
+) -> CreationSessionRead:
+    return await creation.duplicate_session(db, user_id, session_id)
+
+
 @router.patch("/sessions/{session_id}/config", response_model=CreationSessionRead)
 async def update_session_config(
     session_id: int,

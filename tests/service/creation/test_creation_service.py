@@ -17,7 +17,8 @@ from app.model.book import (
 )
 from app.model.asset import ArtStyle, AssetAccessLevel, AssetSourceType, LibraryItemStatus, Voice
 from app.model.creation import CreationPageDraft, CreationSession, CreationSessionStatus, CreationStep, CreationType, PageDraftTaskStatus
-from app.model.generation_task import GenerationTask, GenerationTaskStatus
+from app.model.generation_task import GenerationTask, GenerationTaskStatus, GenerationTaskType
+from app.schema.ai_provider import PageAudioResult, PageLipSyncResult, PageSegmentAudioResult, PictureBookAudioResult, PictureBookLipSyncResult
 
 
 async def _create_test_session(db: AsyncSession, user_id: int = 1, **overrides) -> CreationSession:
@@ -43,7 +44,7 @@ async def _create_test_session(db: AsyncSession, user_id: int = 1, **overrides) 
 class TestGenerateStoryTask:
     """Verify story generation is queued for the worker."""
 
-    @patch("app.service.ai_provider.generate_text", new_callable=AsyncMock)
+    @patch("app.service.ai_provider.draft_story_text_from_prompt", new_callable=AsyncMock)
     async def test_generate_story_returns_queued_task(self, mock_gen, db: AsyncSession):
         session = await _create_test_session(db)
         await db.commit()
@@ -62,26 +63,26 @@ class TestGenerateStoryTask:
 
 
 class TestGenerateImagesAIError:
-    @patch("app.service.ai_provider.generate_image", new_callable=AsyncMock)
+    @patch("app.service.ai_provider.create_picture_book_page_images", new_callable=AsyncMock)
     async def test_generate_images_returns_queued_task(self, mock_gen, db: AsyncSession):
         session = await _create_test_session(db)
         await db.commit()
 
-        from app.schema.creation import GeneratePagesRequest
+        from app.schema.creation import GenerateImagesRequest
         from app.service.creation import generate_images
 
         result = await generate_images(
             db,
             user_id=1,
             session_id=session.id,
-            payload=GeneratePagesRequest(page_ids=None),
+            payload=GenerateImagesRequest(),
         )
         assert result.task.status == GenerationTaskStatus.QUEUED
         mock_gen.assert_not_called()
 
 
 class TestGenerateAudioAIError:
-    @patch("app.service.ai_provider.generate_audio", new_callable=AsyncMock)
+    @patch("app.service.ai_provider.create_picture_book_page_audio", new_callable=AsyncMock)
     async def test_generate_audio_returns_queued_task(self, mock_gen, db: AsyncSession):
         session = await _create_test_session(db)
         await db.commit()
@@ -99,6 +100,66 @@ class TestGenerateAudioAIError:
         mock_gen.assert_not_called()
 
 
+class TestCreationAudioPersistence:
+    @patch("app.service.creation.service.storage_service.save_generated_url", new_callable=AsyncMock)
+    @patch("app.service.creation.service.ai_provider.create_picture_book_page_audio", new_callable=AsyncMock)
+    async def test_run_audio_task_stores_remote_audio_urls_to_oss(self, mock_audio, mock_save, db: AsyncSession):
+        session = await _create_test_session(db, status=CreationSessionStatus.GENERATING, current_step=CreationStep.VOICE)
+        page = CreationPageDraft(
+            session_id=session.id,
+            page_no=1,
+            title="第 1 页",
+            text_zh="旁白文本",
+            visual_prompt="孩子在星空下阅读",
+            playback_segments=[{"sort_order": 1, "segment_type": "narration", "text": "旁白文本"}],
+            audio_status=PageDraftTaskStatus.PENDING,
+        )
+        db.add(page)
+        await db.flush()
+        task = GenerationTask(
+            task_type=GenerationTaskType.AUDIO,
+            owner_type="creation",
+            owner_id=session.id,
+            user_id=session.user_id,
+            status=GenerationTaskStatus.RUNNING,
+            input_payload={"page_ids": [page.id]},
+        )
+        db.add(task)
+        await db.flush()
+        mock_audio.return_value = PictureBookAudioResult(
+            page_results=[
+                PageAudioResult(
+                    page_id=page.id,
+                    audio_url="https://kling.example.com/page-audio.mp3",
+                    segment_results=[
+                        PageSegmentAudioResult(sort_order=1, audio_url="https://kling.example.com/segment-audio.mp3"),
+                    ],
+                )
+            ]
+        )
+        mock_save.side_effect = [
+            type("StoredAsset", (), {"id": 201, "url": "https://oss.example.com/page-audio.mp3"})(),
+            type("StoredAsset", (), {"id": 202, "url": "https://oss.example.com/segment-audio.mp3"})(),
+        ]
+
+        from app.service.creation.service import run_creation_audio_task
+
+        await run_creation_audio_task(db, task)
+
+        assert mock_save.await_count == 2
+        assert [call.kwargs["url"] for call in mock_save.await_args_list] == [
+            "https://kling.example.com/page-audio.mp3",
+            "https://kling.example.com/segment-audio.mp3",
+        ]
+        await db.refresh(page)
+        await db.refresh(task)
+        assert page.audio_url == "https://oss.example.com/page-audio.mp3"
+        assert page.audio_asset_id == 201
+        assert page.playback_segments[0]["audio_url"] == "https://oss.example.com/segment-audio.mp3"
+        assert page.audio_status == PageDraftTaskStatus.READY
+        assert task.status == GenerationTaskStatus.SUCCEEDED
+
+
 class TestUpdateSessionConfigVoiceRef:
     async def test_system_voice_style_code_is_stored_as_provider_voice_id(self, db: AsyncSession):
         session = await _create_test_session(db)
@@ -106,6 +167,7 @@ class TestUpdateSessionConfigVoiceRef:
             owner_user_id=None,
             name="阿里云小云",
             voice_style_code="xiaoyun",
+            voice_language="zh",
             emotion_type="happy",
             access_level=AssetAccessLevel.FREE,
             source_type=AssetSourceType.SYSTEM,
@@ -133,6 +195,7 @@ class TestUpdateSessionConfigVoiceRef:
 
         assert result.voice_ref is not None
         assert result.voice_ref["provider_voice_id"] == "xiaoyun"
+        assert result.voice_ref["voice_language"] == "zh"
         assert result.voice_ref["emotion_type"] == "happy"
         assert result.voice_ref["display_name"] == "阿里云小云"
 
@@ -200,7 +263,7 @@ class TestUpdateSessionConfigArtStyleRef:
 
 
 class TestGenerateLipSync:
-    @patch("app.service.ai_provider.generate_lip_sync", new_callable=AsyncMock)
+    @patch("app.service.ai_provider.create_picture_book_page_lip_sync", new_callable=AsyncMock)
     async def test_generate_lip_sync_applies_page_result(self, mock_gen, db: AsyncSession):
         session = await _create_test_session(db)
         page = CreationPageDraft(
@@ -208,14 +271,17 @@ class TestGenerateLipSync:
             page_no=1,
             title="Page 1",
             text_zh="你好",
-            narration_text="你好",
             visual_prompt="孩子在说话",
             image_url="https://example.com/page.png",
             audio_url="https://example.com/audio.wav",
         )
         db.add(page)
         await db.commit()
-        mock_gen.return_value = {"page_results": [{"page_id": page.id, "lip_sync_url": "https://example.com/lip.mp4"}]}
+        mock_gen.return_value = PictureBookLipSyncResult(
+            page_results=[
+                PageLipSyncResult(page_id=page.id, lip_sync_url="data:video/mp4;base64,AAAA")
+            ]
+        )
 
         from app.schema.creation import GeneratePagesRequest
         from app.service.creation import generate_lip_sync, run_creation_lip_sync_task
@@ -235,7 +301,8 @@ class TestGenerateLipSync:
         refreshed_task = await db.get(GenerationTask, task.id)
         refreshed_page = await db.get(CreationPageDraft, page.id)
         assert refreshed_task.status == GenerationTaskStatus.SUCCEEDED
-        assert refreshed_page.lip_sync_url == "https://example.com/lip.mp4"
+        assert refreshed_page.lip_sync_url is not None
+        assert refreshed_page.lip_sync_url.endswith(".mp4")
 
 
 class TestRegenerateUnsupported:
@@ -280,7 +347,6 @@ class TestSaveBookStateGuard:
             title="第 1 页",
             text_zh="旁白文本",
             text_en="Narration text",
-            narration_text="旁白文本",
             visual_prompt="孩子在星空下阅读",
             image_url="https://example.com/page.png",
             audio_url="https://example.com/narration.wav",
@@ -288,16 +354,23 @@ class TestSaveBookStateGuard:
             image_status=PageDraftTaskStatus.READY,
             audio_status=PageDraftTaskStatus.READY,
             subtitle_config={"position": "top", "position_config": {"x": 12, "y": 24}},
-            dialogues=[
+            playback_segments=[
                 {
+                    "sort_order": 0,
+                    "segment_type": "narration",
+                    "text": "旁白文本",
+                    "audio_url": "https://example.com/narration.wav",
+                },
+                {
+                    "sort_order": 1,
+                    "segment_type": "dialogue",
                     "speaker_ref": "hero",
                     "text": "我们出发吧",
-                    "text_en": "Let's go",
                     "audio_url": "https://example.com/dialogue.wav",
                     "lip_sync_url": "https://example.com/dialogue.mp4",
                     "start_ms": 1000,
                     "end_ms": 2600,
-                }
+                },
             ],
         )
         db.add(page)
@@ -323,9 +396,9 @@ class TestSaveBookStateGuard:
 
         narration_segment = saved_page.playback_segments[0]
         assert narration_segment.segment_type == BookPlaybackSegmentType.NARRATION
-        assert narration_segment.media_mode == BookPlaybackMediaMode.LIP_SYNC
+        assert narration_segment.media_mode == BookPlaybackMediaMode.AUDIO
         assert narration_segment.fallback_mode == BookSegmentFallbackMode.PAGE_IMAGE_AUDIO
-        assert narration_segment.lip_sync_status == BookLipSyncStatus.READY
+        assert narration_segment.lip_sync_status == BookLipSyncStatus.NONE
         assert narration_segment.subtitle_cues[0].text_zh == "旁白文本"
         assert narration_segment.subtitle_cues[0].position == BookSubtitlePosition.TOP
         assert narration_segment.subtitle_cues[0].position_config == {"x": 12, "y": 24}
@@ -345,7 +418,6 @@ class TestSaveBookStateGuard:
             page_no=1,
             title="第 1 页",
             text_zh="旁白文本",
-            narration_text="旁白文本",
             visual_prompt="孩子在星空下阅读",
             image_url="https://example.com/page.png",
             audio_url="https://example.com/narration.wav",

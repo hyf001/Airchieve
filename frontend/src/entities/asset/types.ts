@@ -56,6 +56,7 @@ export interface VoiceSummary {
   owner_user_id: number | null;
   name: string;
   voice_style_code: string | null;
+  voice_language: string | null;
   emotion_type: string | null;
   sample_url: string | null;
   duration_seconds: number | null;

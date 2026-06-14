@@ -1,5 +1,5 @@
 import React from "react";
-import { BookOpen, Clock, Eye, Heart, History, LibraryBig, Palette, Plus, RotateCw, Trash2, UserRound, Volume2, Wand2, X } from "lucide-react";
+import { BookCopy, BookOpen, Clock, Eye, Heart, History, LibraryBig, Palette, Plus, RotateCw, Trash2, UserRound, Volume2, Wand2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -89,6 +89,15 @@ const ProfilesContent: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState<"children" | "content">("children");
   const [accountActivity, setAccountActivity] = React.useState<AccountActivityState>(emptyAccountActivityState);
   const activeDetail = detailProfile ?? currentProfile;
+
+  const handleDuplicateSession = async (sessionId: number) => {
+    const duplicated = await creationApi.duplicateSession(sessionId);
+    setAccountActivity((current) => ({
+      ...current,
+      creationSessions: [duplicated, ...current.creationSessions.filter((session) => session.id !== duplicated.id)],
+    }));
+    window.location.href = creationSessionHref(duplicated.id);
+  };
 
   React.useEffect(() => {
     let ignore = false;
@@ -223,7 +232,7 @@ const ProfilesContent: React.FC = () => {
             </aside>
           </div>
         ) : (
-          <AccountContentPanel activity={accountActivity} />
+          <AccountContentPanel activity={accountActivity} onDuplicateSession={handleDuplicateSession} />
         )}
       </section>
 
@@ -301,7 +310,10 @@ const CurrentProfileSummary: React.FC<{ profile: ChildProfile | null }> = ({ pro
   );
 };
 
-const AccountContentPanel: React.FC<{ activity: AccountActivityState }> = ({ activity }) => {
+const AccountContentPanel: React.FC<{ activity: AccountActivityState; onDuplicateSession: (sessionId: number) => Promise<void> }> = ({
+  activity,
+  onDuplicateSession,
+}) => {
   const [activeContentTab, setActiveContentTab] = React.useState<"books" | "sessions">("books");
 
   return (
@@ -337,7 +349,7 @@ const AccountContentPanel: React.FC<{ activity: AccountActivityState }> = ({ act
         </DetailSection>
       ) : (
         <DetailSection icon={<History className="h-5 w-5" />} title="创作记录">
-          <CreationSessionList sessions={activity.creationSessions} isLoading={activity.isLoading} />
+          <CreationSessionList sessions={activity.creationSessions} isLoading={activity.isLoading} onDuplicateSession={onDuplicateSession} />
         </DetailSection>
       )}
 
@@ -379,7 +391,6 @@ const ProfileDetailPanel: React.FC<{
   const { items: interestItems } = useTaxonomyGroup("interest_tag");
   const { items: educationItems } = useTaxonomyGroup("education_goal");
   const { items: characterItems } = useTaxonomyGroup("asset_category");
-  const { items: voiceStyleItems } = useTaxonomyGroup("voice_style");
 
   React.useEffect(() => {
     let ignore = false;
@@ -410,9 +421,18 @@ const ProfileDetailPanel: React.FC<{
     };
   }, [profile.id]);
 
+  const handleDuplicateSession = async (sessionId: number) => {
+    const duplicated = await creationApi.duplicateSession(sessionId);
+    setActivity((current) => ({
+      ...current,
+      creationSessions: [duplicated, ...current.creationSessions.filter((session) => session.id !== duplicated.id)],
+    }));
+    window.location.href = creationSessionHref(duplicated.id);
+  };
+
   const ageLabel = profile.age_range ? ageLabels[profile.age_range] ?? profile.age_range_label : undefined;
   const characterLabel = characterItems.find((item) => item.code === profile.default_character)?.name ?? profile.default_character;
-  const voiceLabel = voiceStyleItems.find((item) => item.code === profile.default_voice)?.name ?? profile.default_voice;
+  const voiceLabel = profile.default_voice;
   const artStyleLabel = characterItems.find((item) => item.code === profile.default_art_style)?.name ?? profile.default_art_style;
 
   return (
@@ -474,7 +494,7 @@ const ProfileDetailPanel: React.FC<{
             </DetailSection>
 
             <DetailSection icon={<History className="h-5 w-5" />} title="孩子相关创作">
-              <CreationSessionList sessions={activity.creationSessions} isLoading={activity.isLoading} />
+              <CreationSessionList sessions={activity.creationSessions} isLoading={activity.isLoading} onDuplicateSession={handleDuplicateSession} />
             </DetailSection>
             {activity.error ? <p className="text-xs text-[var(--terracotta)]">{activity.error}</p> : null}
           </div>
@@ -581,36 +601,70 @@ const creationStatusLabels: Record<CreationSession["status"], string> = {
   canceled: "已取消",
 };
 
-const CreationSessionList: React.FC<{ sessions: CreationSession[]; isLoading: boolean }> = ({ sessions, isLoading }) => {
+const CreationSessionList: React.FC<{
+  sessions: CreationSession[];
+  isLoading: boolean;
+  onDuplicateSession: (sessionId: number) => Promise<void>;
+}> = ({ sessions, isLoading, onDuplicateSession }) => {
+  const [duplicatingId, setDuplicatingId] = React.useState<number | null>(null);
   if (isLoading) return <LoadingSpinner label="正在加载创作记录" />;
   if (sessions.length === 0) return <EmptyFactState message="还没有创作记录。" />;
+
+  const handleDuplicate = async (event: React.MouseEvent<HTMLButtonElement>, sessionId: number) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDuplicatingId(sessionId);
+    try {
+      await onDuplicateSession(sessionId);
+    } finally {
+      setDuplicatingId(null);
+    }
+  };
 
   return (
     <div className="space-y-2.5">
       {sessions.map((session) => {
         const canViewBook = Boolean(session.saved_book_id);
+        const displayTitle = session.display_title || session.saved_book_title || session.title_snapshot || "我的专属绘本";
+        const primaryHref = canViewBook ? bookDetailHref(session.saved_book_id as number) : creationSessionHref(session.id);
         return (
-          <a
+          <article
             key={session.id}
-            className="group block rounded-[var(--radius-md)] border border-[rgba(212,114,92,0.1)] bg-white p-3 text-inherit no-underline transition hover:border-[rgba(212,114,92,0.24)] hover:shadow-sm"
-            href={canViewBook ? bookDetailHref(session.saved_book_id as number) : creationSessionHref(session.id)}
+            className="group rounded-[var(--radius-md)] border border-[rgba(212,114,92,0.1)] bg-white p-3 transition hover:border-[rgba(212,114,92,0.24)] hover:shadow-sm"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="truncate text-sm font-bold text-[var(--text-dark)]">
-                  {creationTypeLabels[session.creation_type]} · {session.target_page_count} 页
+                  {displayTitle}
                 </p>
-                <p className="mt-1 text-xs text-[var(--text-light)]">更新于 {formatDateTime(session.updated_at)}</p>
-                <span className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-[var(--terracotta)] opacity-90 transition group-hover:opacity-100">
-                  {canViewBook ? <Eye className="h-3.5 w-3.5" /> : <RotateCw className="h-3.5 w-3.5" />}
-                  {canViewBook ? "查看绘本" : "继续创作"}
-                </span>
+                <p className="mt-1 text-xs text-[var(--text-light)]">
+                  {creationTypeLabels[session.creation_type]} · {session.target_page_count} 页
+                  {session.duplicated_from_session_id ? " · 来自副本" : ""} · 更新于 {formatDateTime(session.updated_at)}
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <a
+                    className="inline-flex items-center gap-1 text-xs font-bold text-[var(--terracotta)] no-underline opacity-90 transition hover:text-[var(--terracotta)] group-hover:opacity-100"
+                    href={primaryHref}
+                  >
+                    {canViewBook ? <Eye className="h-3.5 w-3.5" /> : <RotateCw className="h-3.5 w-3.5" />}
+                    {canViewBook ? "查看绘本" : "继续创作"}
+                  </a>
+                  <button
+                    className="inline-flex items-center gap-1 text-xs font-bold text-[var(--sage-deep)] transition hover:text-[var(--terracotta)] disabled:cursor-not-allowed disabled:opacity-60"
+                    type="button"
+                    disabled={duplicatingId === session.id}
+                    onClick={(event) => void handleDuplicate(event, session.id)}
+                  >
+                    <BookCopy className="h-3.5 w-3.5" />
+                    {duplicatingId === session.id ? "复制中" : "复制再创作"}
+                  </button>
+                </div>
               </div>
               <span className="shrink-0 rounded-full bg-[rgba(245,166,35,0.12)] px-2.5 py-1 text-[11px] font-bold text-[#B8751A]">
                 {creationStatusLabels[session.status]}
               </span>
             </div>
-          </a>
+          </article>
         );
       })}
     </div>
@@ -658,7 +712,6 @@ const ProfileFormModal: React.FC<{
   const { items: readingLevelItems } = useTaxonomyGroup("reading_level");
   const { items: interestTagItems } = useTaxonomyGroup("interest_tag");
   const { items: educationGoalItems } = useTaxonomyGroup("education_goal");
-  const { items: voiceStyleItems } = useTaxonomyGroup("voice_style");
 
   React.useEffect(() => {
     setForm(
@@ -818,18 +871,11 @@ const ProfileFormModal: React.FC<{
           </div>
           <div className="block text-[13px] font-bold text-[var(--text-mid)]">
             <span className="mb-2 block">默认声音</span>
-            <select
-              className="h-10 w-full rounded-[var(--radius-sm)] border-[1.5px] border-[rgba(212,114,92,0.15)] bg-white px-3 text-sm text-[var(--text-dark)] outline-none focus:border-[var(--honey)] focus:ring-4 focus:ring-[rgba(245,166,35,0.1)]"
+            <Input
               value={form.default_voice ?? ""}
+              placeholder="声音 ID，可留空"
               onChange={(event) => setForm((current) => ({ ...current, default_voice: (event.target.value || null) as ChildProfilePayload["default_voice"] }))}
-            >
-              <option value="">{voiceStyleItems.length === 0 ? "暂无可选择的声音" : "请选择"}</option>
-              {voiceStyleItems.map((item) => (
-                <option key={item.code} value={item.code}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+            />
           </div>
           <div className="block text-[13px] font-bold text-[var(--text-mid)]">
             <span className="mb-2 block">默认画风</span>

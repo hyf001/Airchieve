@@ -15,7 +15,7 @@ from app.service.ai_provider.providers.gemini import (
     gemini_generate_image,
     gemini_generate_images,
 )
-from app.service.ai_provider.providers.kling_avatar import kling_avatar_generate_lip_sync
+from app.service.ai_provider.providers.kling import kling_generate_audio, kling_generate_lip_sync
 
 __all__ = [
     "aliyun_generate_audio",
@@ -31,5 +31,6 @@ __all__ = [
     "gemini_generate_audio",
     "gemini_generate_image",
     "gemini_generate_images",
-    "kling_avatar_generate_lip_sync",
+    "kling_generate_audio",
+    "kling_generate_lip_sync",
 ]

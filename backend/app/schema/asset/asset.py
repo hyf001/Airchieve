@@ -276,6 +276,7 @@ class VoiceSummary(BaseModel):
     owner_user_id: int | None = None
     name: str
     voice_style_code: str | None = None
+    voice_language: str | None = None
     emotion_type: str | None = None
     sample_url: str | None = None
     duration_seconds: int | None = None
@@ -301,6 +302,7 @@ class VoiceListRead(BaseModel):
 class VoiceCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     voice_style_code: str | None = Field(default=None, max_length=64)
+    voice_language: str | None = Field(default=None, max_length=16)
     emotion_type: str | None = Field(default=None, max_length=64)
     sample_url: str | None = Field(default=None, max_length=500)
     duration_seconds: int | None = Field(default=None, ge=1, le=3600)
@@ -309,6 +311,7 @@ class VoiceCreateRequest(BaseModel):
 class VoiceUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     voice_style_code: str | None = Field(default=None, max_length=64)
+    voice_language: str | None = Field(default=None, max_length=16)
     emotion_type: str | None = Field(default=None, max_length=64)
     sample_url: str | None = Field(default=None, max_length=500)
     duration_seconds: int | None = Field(default=None, ge=1, le=3600)
@@ -317,6 +320,7 @@ class VoiceUpdateRequest(BaseModel):
 class SystemVoiceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     voice_style_code: str | None = Field(default=None, max_length=64)
+    voice_language: str | None = Field(default=None, max_length=16)
     emotion_type: str | None = Field(default=None, max_length=64)
     sample_url: str | None = Field(default=None, max_length=500)
     duration_seconds: int | None = Field(default=None, ge=1, le=3600)
@@ -333,6 +337,7 @@ class SystemVoiceCreate(BaseModel):
 class SystemVoiceUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     voice_style_code: str | None = Field(default=None, max_length=64)
+    voice_language: str | None = Field(default=None, max_length=16)
     emotion_type: str | None = Field(default=None, max_length=64)
     sample_url: str | None = Field(default=None, max_length=500)
     duration_seconds: int | None = Field(default=None, ge=1, le=3600)
@@ -348,7 +353,8 @@ class SystemVoiceUpdate(BaseModel):
 
 class SystemVoiceSampleGenerateRequest(BaseModel):
     voice_id: int | None = None
-    voice_style_code: str = Field(min_length=1, max_length=64)
+    voice_style_code: str = Field(default="", max_length=64)
+    voice_language: str | None = Field(default=None, max_length=16)
     emotion_type: str | None = Field(default=None, max_length=64)
     sample_text: str = Field(min_length=1, max_length=500)
 

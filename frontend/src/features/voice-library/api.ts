@@ -4,6 +4,7 @@ import type { AssetStorageDTO, ListResponse, UploadSessionRead, VoiceSummary } f
 export interface VoiceCreatePayload {
   name: string;
   voice_style_code?: string | null;
+  voice_language?: string | null;
   sample_url?: string | null;
   duration_seconds?: number | null;
 }

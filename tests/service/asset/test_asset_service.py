@@ -39,6 +39,7 @@ from app.schema.asset import (
 from app.schema.privacy import PrivacyTarget, UploadConsentCreate
 from app.service import asset as asset_service
 from app.service import privacy as privacy_service
+from app.service.asset.seed import seed_system_voices
 
 
 # ---------------------------------------------------------------------------
@@ -604,6 +605,7 @@ async def test_admin_system_voice_crud(db: AsyncSession):
         SystemVoiceCreate(
             name="温柔姐姐",
             voice_style_code="gentle_sister",
+            voice_language="zh",
             emotion_type="gentle",
             sample_url="https://example.com/gentle.mp3",
             duration_seconds=32,
@@ -613,6 +615,7 @@ async def test_admin_system_voice_crud(db: AsyncSession):
     assert created.owner_user_id is None
     assert created.source_type == AssetSourceType.SYSTEM
     assert created.voice_style_code == "gentle_sister"
+    assert created.voice_language == "zh"
     assert created.emotion_type == "gentle"
     assert created.access_level == AssetAccessLevel.VIP
 
@@ -633,17 +636,28 @@ async def test_admin_system_voice_crud(db: AsyncSession):
     assert exc.value.status_code == 404
 
 
+async def test_seed_system_voices_adds_kling_voice_library(db: AsyncSession):
+    await seed_system_voices(db)
+
+    result = await asset_service.list_admin_system_voices(db, limit=100)
+    voices_by_code = {(voice.voice_style_code, voice.voice_language): voice for voice in result.items}
+
+    assert voices_by_code[("genshin_vindi2", "zh")].name == "阳光少年"
+    assert voices_by_code[("oversea_male1", "en")].name == "Anchor"
+    assert voices_by_code[("genshin_vindi2", "zh")].source_type == AssetSourceType.SYSTEM
+    assert voices_by_code[("oversea_male1", "en")].status == LibraryItemStatus.ACTIVE
+
+
 async def test_create_system_voice_sample_uses_audio_task(db: AsyncSession):
     created = await asset_service.create_system_voice(
         db,
-        SystemVoiceCreate(name="知妙", voice_style_code="zhimiao_emo", emotion_type="happy"),
+        SystemVoiceCreate(name="知妙", voice_style_code="zhimiao_emo", voice_language="zh", emotion_type="happy"),
     )
 
     task = await asset_service.create_system_voice_sample_task(
         db,
         SystemVoiceSampleGenerateRequest(
             voice_id=created.id,
-            voice_style_code="zhimiao_emo",
             emotion_type="happy",
             sample_text="你好呀",
         ),
@@ -660,7 +674,7 @@ async def test_create_system_voice_sample_uses_audio_task(db: AsyncSession):
 async def test_run_system_voice_sample_task_updates_voice_sample_url(mock_save, mock_generate, db: AsyncSession):
     created = await asset_service.create_system_voice(
         db,
-        SystemVoiceCreate(name="知妙", voice_style_code="zhimiao_emo", emotion_type="happy"),
+        SystemVoiceCreate(name="知妙", voice_style_code="zhimiao_emo", voice_language="zh", emotion_type="happy"),
     )
     task = GenerationTask(
         task_type=GenerationTaskType.AUDIO,
@@ -670,6 +684,7 @@ async def test_run_system_voice_sample_task_updates_voice_sample_url(mock_save, 
         input_payload={
             "voice_id": created.id,
             "voice_style_code": "zhimiao_emo",
+            "voice_language": "zh",
             "emotion_type": "happy",
             "sample_text": "你好呀",
         },
@@ -693,6 +708,53 @@ async def test_run_system_voice_sample_task_updates_voice_sample_url(mock_save, 
         "asset_id": 101,
         "audio_url": "https://cdn.example.com/voice.wav",
         "sample_url": "https://cdn.example.com/voice.wav",
+        "voice_id": created.id,
+    }
+
+
+@patch("app.service.ai_provider.service.settings.AI_PROVIDER_AUDIO", "kling")
+@patch("app.service.ai_provider.service._generate_audio_with_provider", new_callable=AsyncMock)
+@patch("app.service.storage.save_generated_url", new_callable=AsyncMock)
+async def test_run_system_voice_sample_task_stores_remote_audio_url(mock_save, mock_generate, db: AsyncSession):
+    created = await asset_service.create_system_voice(
+        db,
+        SystemVoiceCreate(name="Sunny", voice_style_code="genshin_vindi2", voice_language="en"),
+    )
+    task = GenerationTask(
+        task_type=GenerationTaskType.AUDIO,
+        owner_type="voice",
+        owner_id=created.id,
+        status=GenerationTaskStatus.RUNNING,
+        input_payload={
+            "voice_id": created.id,
+            "voice_style_code": "genshin_vindi2",
+            "voice_language": "en",
+            "sample_text": "Hello there",
+        },
+    )
+    db.add(task)
+    await db.flush()
+    mock_generate.return_value = "https://kling.example.com/generated/audio.mp3"
+    mock_save.return_value.id = 102
+    mock_save.return_value.url = "https://cdn.example.com/kling-voice.mp3"
+
+    await asset_service.run_system_voice_sample_task(db, task)
+
+    mock_generate.assert_awaited_once()
+    mock_save.assert_awaited_once()
+    assert mock_save.await_args.kwargs["url"] == "https://kling.example.com/generated/audio.mp3"
+    assert mock_save.await_args.kwargs["asset_kind"] == AssetKind.AUDIO
+    assert mock_save.await_args.kwargs["visibility"] == AssetVisibility.SYSTEM
+    assert mock_save.await_args.kwargs["path_scope"] == "voice/sample"
+    voice = await db.get(Voice, created.id)
+    await db.refresh(task)
+    assert voice is not None
+    assert voice.sample_url == "https://cdn.example.com/kling-voice.mp3"
+    assert task.status == GenerationTaskStatus.SUCCEEDED
+    assert task.output_payload == {
+        "asset_id": 102,
+        "audio_url": "https://cdn.example.com/kling-voice.mp3",
+        "sample_url": "https://cdn.example.com/kling-voice.mp3",
         "voice_id": created.id,
     }
 

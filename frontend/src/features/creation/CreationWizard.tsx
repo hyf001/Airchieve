@@ -45,6 +45,19 @@ const findArtStyleForSession = (session: CreationSession | null, artStyles: ArtS
   return artStyles.find((style) => (refId !== null && style.id === refId) || (!!refCode && style.code === refCode)) ?? null;
 };
 
+const pageDialogueSegments = (page: CreationSession["page_drafts"][number]) =>
+  page.playback_segments.filter((segment) => segment.segment_type === "dialogue");
+
+const pageHasLipSyncAudio = (page: CreationSession["page_drafts"][number]) => {
+  const dialogueSegments = pageDialogueSegments(page);
+  return dialogueSegments.length > 0 && dialogueSegments.every((segment) => Boolean(segment.audio_url));
+};
+
+const pageHasLipSync = (page: CreationSession["page_drafts"][number]) => {
+  const dialogueSegments = pageDialogueSegments(page);
+  return dialogueSegments.length > 0 && dialogueSegments.every((segment) => Boolean(segment.lip_sync_url));
+};
+
 export const CreationWizard: React.FC = () => {
   const [path, setPath] = useState<WizardPath>("story");
   const [step, setStep] = useState<WizardStep>("source");
@@ -77,6 +90,7 @@ export const CreationWizard: React.FC = () => {
   const [targetPageCount, setTargetPageCount] = useState(8);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [lipSyncGeneratingPageIds, setLipSyncGeneratingPageIds] = useState<number[] | null>(null);
   const ageRanges = useTaxonomyGroup("age_range");
   const themes = useTaxonomyGroup("theme");
   const educationGoals = useTaxonomyGroup("education_goal");
@@ -506,6 +520,7 @@ export const CreationWizard: React.FC = () => {
           voice_id: voice.id,
           display_name: voice.name,
           role_code: roleCode,
+          voice_language: voice.voice_language,
         }
       : { source: "system", display_name: "系统默认声音", role_code: roleCode }
   );
@@ -552,9 +567,34 @@ export const CreationWizard: React.FC = () => {
   const handleGenerateLipSync = () =>
     run(async () => {
       if (!session) return;
-      const response = await creationApi.generateLipSync(session.id);
-      setSession(response.session);
-      setTask(response.task);
+      const pageIds = session.page_drafts
+        .filter((page) => page.image_url && pageHasLipSyncAudio(page) && !pageHasLipSync(page))
+        .map((page) => page.id);
+      if (!pageIds.length) {
+        setMessage("没有待生成的对口型页面");
+        return;
+      }
+      try {
+        setLipSyncGeneratingPageIds(pageIds);
+        const response = await creationApi.generateLipSync(session.id, pageIds);
+        setSession(response.session);
+        setTask(response.task);
+      } finally {
+        setLipSyncGeneratingPageIds(null);
+      }
+    });
+
+  const handleGeneratePageLipSync = (pageId: number) =>
+    run(async () => {
+      if (!session) return;
+      try {
+        setLipSyncGeneratingPageIds([pageId]);
+        const response = await creationApi.generateLipSync(session.id, [pageId]);
+        setSession(response.session);
+        setTask(response.task);
+      } finally {
+        setLipSyncGeneratingPageIds(null);
+      }
     });
 
   const handleSkipLipSync = () => {
@@ -647,7 +687,6 @@ export const CreationWizard: React.FC = () => {
               onSelectAssetCharacter={(character) => {
                 if (!selectedStoryRoleCode) return;
                 setSelectedCharactersByRole((current) => ({ ...current, [selectedStoryRoleCode]: character }));
-                setSession(null);
                 setTask(null);
                 setMessage(null);
               }}
@@ -663,7 +702,6 @@ export const CreationWizard: React.FC = () => {
               onSelectArtStyle={(artStyle) => {
                 setSelectedArtStyle(artStyle);
                 setSelectedCharactersByRole({});
-                setSession(null);
                 setTask(null);
                 setMessage(null);
               }}
@@ -697,7 +735,14 @@ export const CreationWizard: React.FC = () => {
               }}
             />
           ) : null}
-          {step === "lipSync" ? <LipSyncStep session={session} /> : null}
+          {step === "lipSync" ? (
+            <LipSyncStep
+              isGenerating={busy || isTaskActive}
+              generatingPageIds={lipSyncGeneratingPageIds}
+              session={session}
+              onGeneratePage={handleGeneratePageLipSync}
+            />
+          ) : null}
           {step === "preview" ? <PreviewStep previewItems={previewItems} /> : null}
 
           <div className="mt-6 flex flex-wrap justify-between gap-3">
@@ -729,7 +774,7 @@ export const CreationWizard: React.FC = () => {
                   跳过对口型
                 </Button>
                 <Button disabled={busy || isTaskActive || !storybookMediaReady} onClick={handleGenerateLipSync}>
-                  生成对口型
+                  生成全部待处理
                 </Button>
                 <Button type="button" variant="secondary" disabled={busy || isTaskActive} onClick={() => setStep("preview")}>
                   下一步：预览

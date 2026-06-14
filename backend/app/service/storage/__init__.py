@@ -5,6 +5,7 @@ from app.service.storage.service import (
     get_file_url,
     save_base64_asset,
     save_generated_data_url,
+    save_generated_url,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "get_file_url",
     "save_base64_asset",
     "save_generated_data_url",
+    "save_generated_url",
 ]

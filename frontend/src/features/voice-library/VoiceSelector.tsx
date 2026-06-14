@@ -17,7 +17,7 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({ voices, selectedId
       <AssetCard
         key={voice.id}
         title={voice.name}
-        subtitle={[voice.voice_style_code, voice.duration_seconds ? `${voice.duration_seconds} 秒` : null].filter(Boolean).join(" · ")}
+        subtitle={[voice.voice_style_code, voice.voice_language?.toUpperCase(), voice.duration_seconds ? `${voice.duration_seconds} 秒` : null].filter(Boolean).join(" · ")}
         icon={<Mic2 />}
         accessLevel={voice.access_level}
         selected={selectedId === voice.id}

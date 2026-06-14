@@ -3,9 +3,10 @@ import base64
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import PurePosixPath
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 from uuid import uuid4
 
+import httpx
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +25,8 @@ MAX_UPLOAD_BYTES: dict[UploadPurpose, int] = {
     UploadPurpose.EXPORT: 200 * 1024 * 1024,
     UploadPurpose.TASK_RESULT: 200 * 1024 * 1024,
 }
+
+GENERATED_URL_DOWNLOAD_TIMEOUT_SECONDS = 60
 
 
 @lru_cache
@@ -223,6 +226,30 @@ async def save_generated_data_url(
     )
 
 
+async def save_generated_url(
+    db: AsyncSession,
+    user_id: int | None,
+    *,
+    url: str,
+    asset_kind: AssetKind,
+    filename_extension: str | None = None,
+    visibility: AssetVisibility = AssetVisibility.PRIVATE,
+    path_scope: str | None = None,
+) -> AssetStorageDTO:
+    content, mime_type = await _download_generated_url(url, asset_kind=asset_kind)
+    extension = filename_extension or _extension_from_mime_type(mime_type, asset_kind=asset_kind) or _extension_from_url(url) or ".bin"
+    return await save_base64_asset(
+        db,
+        user_id,
+        base64_data=base64.b64encode(content).decode("ascii"),
+        mime_type=mime_type,
+        asset_kind=asset_kind,
+        filename=f"generated{extension}",
+        visibility=visibility,
+        path_scope=path_scope,
+    )
+
+
 async def save_base64_asset(
     db: AsyncSession,
     user_id: int | None,
@@ -262,6 +289,81 @@ async def save_base64_asset(
         mime_type=asset.mime_type,
         byte_size=asset.byte_size,
     )
+
+
+async def _download_generated_url(url: str, *, asset_kind: AssetKind) -> tuple[bytes, str]:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="生成结果不是有效远程 URL")
+    try:
+        async with httpx.AsyncClient(timeout=GENERATED_URL_DOWNLOAD_TIMEOUT_SECONDS, follow_redirects=True) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="生成结果下载失败，无法转存到 OSS") from exc
+    mime_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if not mime_type or not _mime_type_matches_asset_kind(mime_type, asset_kind):
+        mime_type = _fallback_mime_type(asset_kind)
+    return response.content, mime_type
+
+
+def _mime_type_matches_asset_kind(mime_type: str, asset_kind: AssetKind) -> bool:
+    if asset_kind == AssetKind.IMAGE:
+        return mime_type.startswith("image/")
+    if asset_kind == AssetKind.AUDIO:
+        return mime_type.startswith("audio/")
+    if asset_kind == AssetKind.VIDEO:
+        return mime_type.startswith("video/")
+    if asset_kind == AssetKind.PDF:
+        return mime_type == "application/pdf"
+    return True
+
+
+def _fallback_mime_type(asset_kind: AssetKind) -> str:
+    if asset_kind == AssetKind.IMAGE:
+        return "image/png"
+    if asset_kind == AssetKind.AUDIO:
+        return "audio/mpeg"
+    if asset_kind == AssetKind.VIDEO:
+        return "video/mp4"
+    if asset_kind == AssetKind.PDF:
+        return "application/pdf"
+    return "application/octet-stream"
+
+
+def _extension_from_mime_type(mime_type: str, *, asset_kind: AssetKind) -> str | None:
+    extension_by_mime = {
+        "audio/mpeg": ".mp3",
+        "audio/mp3": ".mp3",
+        "audio/wav": ".wav",
+        "audio/x-wav": ".wav",
+        "audio/l16": ".pcm",
+        "audio/pcm": ".pcm",
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/webp": ".webp",
+        "video/mp4": ".mp4",
+        "video/mpeg": ".mpeg",
+        "video/quicktime": ".mov",
+        "video/webm": ".webm",
+        "application/pdf": ".pdf",
+    }
+    extension = extension_by_mime.get(mime_type.lower())
+    if extension is not None:
+        return extension
+    return {
+        AssetKind.IMAGE: ".png",
+        AssetKind.AUDIO: ".mp3",
+        AssetKind.VIDEO: ".mp4",
+        AssetKind.PDF: ".pdf",
+    }.get(asset_kind)
+
+
+def _extension_from_url(url: str) -> str | None:
+    suffix = PurePosixPath(urlparse(url).path).suffix.lower()
+    if suffix and len(suffix) <= 10:
+        return suffix
+    return None
 
 
 async def _get_uploaded_object_size(storage_key: str) -> int | None:
